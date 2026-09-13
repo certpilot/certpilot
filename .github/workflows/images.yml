@@ -164,8 +164,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The quickstart pulls published images now, which would make this job
+      # test the last release rather than this pull request — the one
+      # end-to-end check in the repository, proving nothing about the change it
+      # is gating.
+      #
+      # So the images it would pull are built here from this checkout and
+      # tagged with the version the compose file is then told to use. Compose
+      # does not pull an image it can already see locally, so the stack comes up
+      # on this branch's core and frontend.
+      #
+      # The gateway is genuinely external and is genuinely pulled. That is the
+      # point of it living in another repository, and testing against its
+      # released image is the honest thing to do.
+      - name: Build this branch's images under the tag the quickstart asks for
+        run: |
+          set -euo pipefail
+          docker build -f deploy/docker/core.Dockerfile -t ghcr.io/certpilot/core:ci .
+          docker build -f deploy/docker/frontend.Dockerfile -t ghcr.io/certpilot/frontend:ci .
+
       - name: Bring it up
-        run: docker compose -f deploy/docker-compose.quickstart.yml up -d --build
+        env:
+          CERTPILOT_VERSION: ci
+        run: docker compose -f deploy/docker-compose.quickstart.yml up -d
 
       - name: The core answers
         run: |
