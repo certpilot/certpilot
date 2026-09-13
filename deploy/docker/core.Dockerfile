@@ -16,13 +16,18 @@ COPY . .
 ARG TARGETOS
 ARG TARGETARCH
 
+# The version this build reports. Left empty for an ordinary build, which then
+# keeps the -dev default compiled into the source — an unstamped build saying so
+# is better than one claiming to be the release it was branched from.
+ARG VERSION=
+
 # CGO off: the runtime stage is alpine and a cgo-linked binary would pick up a
 # glibc dependency the image does not have. -trimpath keeps the build machine's
 # paths out of the binary.
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" \
+    go build -trimpath -ldflags="-s -w ${VERSION:+-X main.version=$VERSION}" \
       -o /out/certpilot-core ./core/cmd/
 
 FROM alpine:3.20

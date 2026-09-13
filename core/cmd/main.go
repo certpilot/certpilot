@@ -27,7 +27,20 @@ import (
 	"github.com/certpilot/certpilot/pkg/secrets"
 )
 
+// version is what this build reports. Stamped at release:
+//
+//	-ldflags "-X main.version=1.2.3"
+//
+// The -dev default is deliberate. An unstamped build is a development build,
+// and saying so beats claiming to be the release it was branched from.
+//
+// Deliberately not wired into posture.ToolVersion, which carries its own
+// reasoning for staying a constant: a CBOM is a compliance artefact, and one
+// built without ldflags must not record its provenance as "dev".
+var version = "0.1.0-dev"
+
 func main() {
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	configPath := flag.String("config", "config.dev.yaml", "path to configuration YAML file")
 	dbURLFlag := flag.String("db", "", "PostgreSQL database connection URL (or CERTPILOT_DB_URL env var)")
 	generateKEK := flag.Bool("generate-kek", false,
@@ -39,6 +52,13 @@ func main() {
 	migrationsDir := flag.String("migrations", "migrations",
 		"directory holding the numbered .sql migration files")
 	flag.Parse()
+
+	// Before everything, including the setup subcommands: asking a binary what
+	// it is must work on a machine where nothing else about it does.
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	// Setup subcommands run before anything else is initialized, so they work
 	// on a machine with no config and no database.
