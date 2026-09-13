@@ -12,11 +12,20 @@
 # Migrations are not applied on startup — see the `migrate` profile at the
 # bottom. A schema change should be something an operator runs, not a side
 # effect of a replica restarting.
+#
+# Every image is pulled rather than built. This file used to build the core and
+# the frontend from the checkout beside it, which meant a deployment was running
+# whatever happened to be in somebody's working copy — including uncommitted
+# changes — and needed a Go toolchain on the host to come up at all. Pin with
+# CERTPILOT_VERSION and GATEWAY_VERSION; the defaults follow `latest`, which is
+# the right default for evaluating and the wrong one for anything you depend on.
+#
+# deploy/docker-compose.quickstart.yml still builds the core from source, on
+# purpose: it exists to evaluate the code you just cloned, so building it is the
+# point rather than the cost.
 services:
   core:
-    build:
-      context: ..
-      dockerfile: deploy/docker/core.Dockerfile
+    image: ghcr.io/certpilot/core:${CERTPILOT_VERSION:-latest}
     container_name: certpilot-core
     restart: unless-stopped
     ports:
@@ -114,9 +123,7 @@ services:
       - "--tls-ca=/app/pki/ca.pem"
 
   frontend:
-    build:
-      context: ..
-      dockerfile: deploy/docker/frontend.Dockerfile
+    image: ghcr.io/certpilot/frontend:${CERTPILOT_VERSION:-latest}
     container_name: certpilot-frontend
     restart: unless-stopped
     ports:
@@ -129,9 +136,7 @@ services:
   #   docker compose -f deploy/docker-compose.yml --profile migrate run --rm migrate
   migrate:
     profiles: ["migrate"]
-    build:
-      context: ..
-      dockerfile: deploy/docker/core.Dockerfile
+    image: ghcr.io/certpilot/core:${CERTPILOT_VERSION:-latest}
     environment:
       CERTPILOT_DB_URL: ${CERTPILOT_DB_URL:?set CERTPILOT_DB_URL}
     command: ["--migrate", "--migrations=/app/migrations"]

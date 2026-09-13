@@ -6,7 +6,7 @@
 # of this file used `COPY ../deploy/docker/nginx.conf`, which cannot work: COPY
 # resolves inside the build context and refuses to climb out of it. That one
 # line is why this image had never been built.
-FROM node:22-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 WORKDIR /app
 
