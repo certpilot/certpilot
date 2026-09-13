@@ -412,19 +412,47 @@ func mustModuleDir(modPath string) string {
 	if dir, ok := moduleDirs[modPath]; ok {
 		return dir
 	}
-	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", modPath)
-	cmd.Dir = "core"
-	out, err := cmd.Output()
-	if err != nil {
-		fatal("could not locate the source of %s. It is a dependency now rather than a "+
-			"directory in this tree; `cd core && go mod download` usually fixes this: %v", modPath, err)
-	}
-	dir := strings.TrimSpace(string(out))
+	dir := listModuleDir(modPath)
 	if dir == "" {
-		fatal("go list found no directory for %s", modPath)
+		// `go list -m -f {{.Dir}}` answers with an empty string, not an error,
+		// for a module that is required but not yet in the cache. That is the
+		// normal state of a fresh checkout, so downloading is part of resolving
+		// rather than an error path — the first CI run after the SDKs moved out
+		// failed here, on a clean runner, having worked on a laptop that had
+		// already downloaded them.
+		out, err := runInCore("go", "mod", "download", modPath)
+		if err != nil {
+			fatal("could not download %s, which holds source this generator reads: %v\n%s",
+				modPath, err, out)
+		}
+		dir = listModuleDir(modPath)
+	}
+	if dir == "" {
+		fatal("go list still reports no directory for %s after downloading it", modPath)
 	}
 	moduleDirs[modPath] = dir
 	return dir
+}
+
+// listModuleDir asks where a module's source is, returning "" when the answer
+// is "nowhere yet".
+func listModuleDir(modPath string) string {
+	out, err := runInCore("go", "list", "-m", "-f", "{{.Dir}}", modPath)
+	if err != nil {
+		fatal("could not locate the source of %s, which is a dependency now rather than "+
+			"a directory in this tree: %v\n%s", modPath, err, out)
+	}
+	return strings.TrimSpace(out)
+}
+
+// runInCore runs a go command from core/, the module that requires both SDKs.
+// Running from the repository root would ask a go.work-rooted question and get
+// a different answer, or none.
+func runInCore(name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = "core"
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 // inTreeDir resolves an import path to a directory on disk, or reports that it
