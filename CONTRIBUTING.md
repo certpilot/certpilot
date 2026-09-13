@@ -83,8 +83,33 @@ what we are after; the diff already says that.
 ## Adding a gateway
 
 A gateway is its own process speaking one gRPC contract, in any language, and
-adding one does not touch the core. [docs/writing-a-gateway.md](docs/writing-a-gateway.md)
-walks through it.
+adding one does not touch this repository at all — **including not needing a
+pull request here.** The contract is published:
+
+```bash
+go get github.com/certpilot/certpilot-gateway-sdk
+```
+
+[docs/writing-a-gateway.md](docs/writing-a-gateway.md) walks through it, and
+names the four things that have been got wrong at least once each.
+
+Check it against the contract rather than hoping:
+
+```bash
+go run github.com/certpilot/certpilot-gateway-sdk/cmd/conformance@latest \
+    -addr localhost:9443 -insecure -domain test.example.com
+```
+
+The three gateways this project maintains run that same probe in their own CI.
+The check worth reading first is `IssueCertificate (honours csr_pem)`: it asks
+you to sign a CSR it generated and compares the public key in what you return
+against the key it asked you to sign. A gateway that generates its own key
+instead passes every test its author is likely to write, and fails much later as
+a certificate that does not match its private key.
+
+Name it `certpilot-gateway-<ca>`. That prefix is what makes one findable on a
+GitHub search, and what lets this project point at community gateways without
+vouching for them.
 
 The ones that do not exist yet and would be welcome: Google Cloud CAS, AWS
 Private CA, DigiCert, Sectigo.

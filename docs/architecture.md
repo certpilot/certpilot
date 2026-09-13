@@ -370,17 +370,31 @@ wrong about something that is working perfectly.
 
 ## Modules
 
-A Go workspace with six modules:
+A Go workspace with three modules:
 
 ```
-pkg/                shared: config, crypto, x509util, secrets, grpckit,
-                    agentapi, agentauth, webhooksig, generated protobuf
+pkg/                shared, and only what is genuinely shared:
+                    config, secrets, passwords, revocation, webhooksig
 core/               the control plane
 agent/              the host agent
 ```
 
 `go build ./...` from the repository root does not work — it is a workspace,
 not a module. Build from inside a module, or use the `make` targets.
+
+`pkg/` used to hold `crypto`, `x509util`, `grpckit`, the generated protobuf,
+`agentapi` and `agentauth` as well. Those were never "shared code" — they were
+two contracts wearing the same name as a utility drawer, and both are now
+published separately:
+
+| | |
+|:---|:---|
+| [`certpilot-gateway-sdk`](https://github.com/certpilot/certpilot-gateway-sdk) | `provider.v1`, `grpckit`, `x509util`, `crypto`, and the `.proto` they are generated from |
+| [`certpilot-agent-sdk`](https://github.com/certpilot/certpilot-agent-sdk) | `agentapi`, `agentauth`, and `SIGNING.md` — the signing scheme specified independently of the Go |
+
+The core depends on both as ordinary modules, with no `replace` directive, which
+is the property that proves they were published rather than copied. The three
+gateways do the same from their own repositories.
 
 The split is not ceremony. `agent` must be able to build and ship without the
 core's dependency tree: it runs on other people's servers, and every dependency
