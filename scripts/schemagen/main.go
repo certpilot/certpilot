@@ -38,12 +38,7 @@ const (
 	apiDir    = "core/api"
 	storeDir  = "core/store"
 	routerGo  = "core/api/router.go"
-	agentAuth = "pkg/agentauth/agentauth.go"
-
-	// Request types live in four packages and counting, so the import list of
-	// the file that binds them is what says where to look. Anything outside
-	// the module cannot be followed and is reported rather than skipped.
-	modulePrefix = "github.com/certpilot/certpilot/"
+	agentAuth = "pkg/agentsdk/agentauth/agentauth.go"
 )
 
 // ── Output shapes ─────────────────────────────────────────────────────────
@@ -368,6 +363,34 @@ func importMap(f *ast.File) map[string]string {
 	return out
 }
 
+// inTreeModules maps a module path to where that module's source sits in this
+// tree, for the modules this repository builds.
+//
+// There used to be one prefix and a `strings.TrimPrefix`. #42 split pkg into
+// three modules whose paths are the repositories they will live in rather than
+// the directories they sit in, so the mapping is no longer a trim — and a type
+// that moved to an SDK reported as "outside this module", which is true of the
+// path and false of the source.
+//
+// Request types live in five packages and counting, so the import list of the
+// file that binds them is what says where to look. Anything genuinely outside
+// is reported rather than skipped.
+var inTreeModules = map[string]string{
+	"github.com/certpilot/certpilot/":             "",
+	"github.com/certpilot/certpilot-gateway-sdk/": "pkg/gatewaysdk/",
+	"github.com/certpilot/certpilot-agent-sdk/":   "pkg/agentsdk/",
+}
+
+// inTreeDir resolves an import path to a directory, or reports that it cannot.
+func inTreeDir(path string) (string, bool) {
+	for prefix, dir := range inTreeModules {
+		if strings.HasPrefix(path, prefix) {
+			return dir + strings.TrimPrefix(path, prefix), true
+		}
+	}
+	return "", false
+}
+
 // resolveStruct follows `fleet.Request` to the package that declares it, using
 // the import list of the file that referred to it.
 func (ix *index) resolveStruct(typeName string, imports map[string]string) (*structDef, string) {
@@ -388,10 +411,12 @@ func (ix *index) resolveStruct(typeName string, imports map[string]string) (*str
 	if !ok {
 		return nil, fmt.Sprintf("package %q is not imported by the file that binds %s", pkg, typeName)
 	}
-	if !strings.HasPrefix(path, modulePrefix) {
-		return nil, fmt.Sprintf("%s comes from %s, which is outside this module", typeName, path)
+	dir, ok := inTreeDir(path)
+	if !ok {
+		return nil, fmt.Sprintf(
+			"%s comes from %s, which is not a module this repository builds", typeName, path)
 	}
-	ix.loadDir(strings.TrimPrefix(path, modulePrefix))
+	ix.loadDir(dir)
 	def, ok := ix.structs[pkg+"."+name]
 	if !ok {
 		return nil, fmt.Sprintf("%s was not found in %s", typeName, path)
