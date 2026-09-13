@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes all build build-core build-agent test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes verify-profiles all build build-core build-agent test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -99,6 +99,20 @@ routes:
 ## the real recipe with the generator rigged to fail, five different ways.
 test-routes:
 	./scripts/test-routes-atomicity.sh
+
+## Prove every platform profile against the real service. Starts each one in a
+## container, installs a certificate through the agent's own installer, and
+## completes a TLS handshake to check the service is serving it after its own
+## reload — so a profile in the catalogue is a thing somebody ran, not a thing
+## somebody wrote down.
+##
+## Needs a container runtime. Nothing else in this Makefile does, which is why
+## this is its own target and not part of `make test`.
+##
+##   make verify-profiles              all of them
+##   make verify-profiles PROFILE=nginx
+verify-profiles:
+	./scripts/verify-profiles.sh $(PROFILE)
 
 run-core:
 	$(GO) run ./core/cmd/ --config=config.dev.yaml
@@ -247,6 +261,7 @@ help:
 	@echo "Docs"
 	@echo "  make routes                  Regenerate docs/routes.json from the router"
 	@echo "  make test-routes             Prove a failed regeneration damages nothing"
+	@echo "  make verify-profiles         Install to every platform, in containers"
 	@echo ""
 	@echo "Check"
 	@echo "  make test                    Run all tests"

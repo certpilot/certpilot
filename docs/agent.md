@@ -189,6 +189,73 @@ When to renew comes from `renew_after` in the grant's response.
 Getting a certificate is not the point. Putting it where nginx, HAProxy or
 Postgres actually reads it, and reloading, is the point.
 
+### Name the platform, not the four fields
+
+The machinery to serve a platform is a path, a format, a command that validates
+the configuration, and a command that reloads the service. Four fields — and
+until there was a catalogue of them, an operator evaluating this for a Tomcat
+estate read "there is an agent" and had to work out for themselves whether it
+applied, where the honest answer was "yes, if you write the spec by hand".
+
+So a destination can name a platform instead:
+
+```json
+{
+  "destinations": [
+    { "name": "web", "certificate": "web-01.example.com", "profile": "nginx" }
+  ]
+}
+```
+
+That fills in the paths, the modes, `nginx -t` and `nginx -s reload`.
+`certpilot-agent profiles` lists every platform; `certpilot-agent profiles
+nginx` prints exactly what one fills in and what it cannot do for you.
+
+**A profile is a default, not a lock.** Estates move paths. Every field a
+profile supplies is one you may write down yourself, and yours wins — including
+`"reload": []`, which says this destination reloads by some other means and is
+left alone rather than filled back in. A profile that could not be overridden
+would be worse than no profile, because it would look supported while writing
+to somewhere nothing reads.
+
+`{{ .Certificate }}` in any path is replaced with the certificate's name, in
+your own paths as well as a profile's. It is the only placeholder, and anything
+else in braces is refused when the file is read — a file called
+`{{ .Name }}.crt` is not something to discover from a failed handshake.
+
+| Profile | Platform | Verified against |
+|:---|:---|:---|
+| `nginx` | nginx | nginx 1.27.5 |
+| `apache` | Apache httpd | Apache 2.4.68, Debian package |
+| `haproxy` | HAProxy | HAProxy 2.6.12, Debian package |
+| `caddy` | Caddy | Caddy 2.11.4 |
+| `tomcat` | Apache Tomcat | Tomcat 10.1.59 on JDK 21 |
+| `postgresql` | PostgreSQL | PostgreSQL 16.15 |
+| `mariadb` | MariaDB and MySQL | MariaDB 10.11.18, Debian package |
+| `postfix` | Postfix | Postfix 3.7.11, Debian package |
+| `dovecot` | Dovecot | Dovecot 2.3.19.1, Debian package |
+
+"Verified against" means something specific here. `make verify-profiles` starts
+that service in a container, hands it a **different** certificate to boot with,
+installs through this agent's own `install --offline`, runs the profile's own
+check and reload, and then completes a TLS handshake from outside to confirm
+the service is serving the installed certificate and sending its chain. A
+profile that has not done that is not in the table.
+
+### Detection is a prompt, not a decision
+
+```bash
+certpilot-agent profiles --detect
+```
+
+reports which of those platforms look installed here. Read that literally: it
+means a configuration file exists where that platform usually keeps one. It
+does **not** mean the profile's paths are the ones your service reads — your
+configuration decides that, and nothing in the agent has looked at it. The
+agent never acts on detection; it prints it for a person to check.
+
+### Or write it out in full
+
 `/etc/certpilot/installs.json`:
 
 ```json
@@ -228,6 +295,13 @@ Elasticsearch estate was invisible to this agent until it could write one.
   "reload": ["/bin/systemctl", "reload", "tomcat"]
 }
 ```
+
+**`check` and `reload` run with `PATH` and nothing else.** The agent clears the
+environment before running either, so that a command named in this file cannot
+read whatever put the agent's own environment together — an enrolment token, a
+server address. It costs one thing worth knowing: a command that needs a
+variable must set it itself, which is why `catalina.sh` called directly needs
+`JAVA_HOME` and the same command through `systemctl` does not.
 
 `cert_path` is the keystore, and `key_path` must be omitted — the key is inside
 it, and naming a second path would write it to disk in the clear as well.
