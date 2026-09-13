@@ -9313,7 +9313,7 @@
       "path": "/api/v1/policies",
       "request": {
         "name": "PolicyInput",
-        "doc": "PolicyInput is what a caller may set on a policy. Narrow rather than binding store.Policy, which is what both handlers used to do. That accepted id, created_by, created_at and updated_at from the request body — so a caller could choose a policy's identifier and assert when it was written, and Create handed whatever arrived straight to the store. The binding tags carry the CHECK constraints that migration 001 put on this table. Without them an unknown rule_type reaches PostgreSQL and comes back as a raw SQLSTATE 23514, which tells an operator nothing about which of six values they should have sent.",
+        "doc": "PolicyInput is what a caller may set on a policy. Narrow rather than binding store.Policy, which is what both handlers used to do. That accepted id, created_by, created_at and updated_at from the request body — so a caller could choose a policy's identifier and assert when it was written, and Create handed whatever arrived straight to the store. The binding tags carry the CHECK constraints that migration 001 put on this table. Without them an unknown rule_type reaches PostgreSQL and comes back as a raw SQLSTATE 23514, which tells an operator nothing about which of the values they should have sent. rule_type is deliberately narrower than the CHECK constraint. The column still permits approval_required, because rows using it may already exist and a migration that deleted somebody's policy would be worse than one that refuses new ones. Nothing can approve or reject a request in this build, so accepting a new policy that claims to gate on approval would be promising a control that does not exist. The engine reports any surviving row rather than passing it.",
         "fields": [
           {
             "name": "name",
@@ -9339,7 +9339,7 @@
             "type": "string",
             "go_type": "string",
             "required": true,
-            "constraint": "one of key_size, key_type, ca_restriction, max_lifetime, naming, approval_required"
+            "constraint": "one of key_size, key_type, ca_restriction, max_lifetime, naming"
           },
           {
             "name": "rule_config",
@@ -9444,7 +9444,7 @@
       ],
       "request": {
         "name": "PolicyInput",
-        "doc": "PolicyInput is what a caller may set on a policy. Narrow rather than binding store.Policy, which is what both handlers used to do. That accepted id, created_by, created_at and updated_at from the request body — so a caller could choose a policy's identifier and assert when it was written, and Create handed whatever arrived straight to the store. The binding tags carry the CHECK constraints that migration 001 put on this table. Without them an unknown rule_type reaches PostgreSQL and comes back as a raw SQLSTATE 23514, which tells an operator nothing about which of six values they should have sent.",
+        "doc": "PolicyInput is what a caller may set on a policy. Narrow rather than binding store.Policy, which is what both handlers used to do. That accepted id, created_by, created_at and updated_at from the request body — so a caller could choose a policy's identifier and assert when it was written, and Create handed whatever arrived straight to the store. The binding tags carry the CHECK constraints that migration 001 put on this table. Without them an unknown rule_type reaches PostgreSQL and comes back as a raw SQLSTATE 23514, which tells an operator nothing about which of the values they should have sent. rule_type is deliberately narrower than the CHECK constraint. The column still permits approval_required, because rows using it may already exist and a migration that deleted somebody's policy would be worse than one that refuses new ones. Nothing can approve or reject a request in this build, so accepting a new policy that claims to gate on approval would be promising a control that does not exist. The engine reports any surviving row rather than passing it.",
         "fields": [
           {
             "name": "name",
@@ -9470,7 +9470,7 @@
             "type": "string",
             "go_type": "string",
             "required": true,
-            "constraint": "one of key_size, key_type, ca_restriction, max_lifetime, naming, approval_required"
+            "constraint": "one of key_size, key_type, ca_restriction, max_lifetime, naming"
           },
           {
             "name": "rule_config",
