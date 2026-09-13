@@ -5964,7 +5964,7 @@
             "type": "string",
             "go_type": "string",
             "required": false,
-            "doc": "CommonName is required unless CSRPEM is supplied, in which case the names come from the request itself. Validated below rather than by a binding tag, which cannot express \"one of these two\"."
+            "doc": "CommonName is required unless CSRPEM is supplied, in which case the names come from the request itself. Checked by the resolver rather than by a binding tag, which cannot express \"one of these two\"."
           },
           {
             "name": "sans",
@@ -5973,10 +5973,18 @@
             "required": false
           },
           {
+            "name": "template_id",
+            "type": "string",
+            "go_type": "string",
+            "required": false,
+            "doc": "TemplateID names the certificate template to issue under, by slug or by uuid. A slug is what a pipeline should carry: it survives a rename. Optional, for now. A request without one resolves to the default template for CAAccountID, which constrains nothing — so every caller written before templates existed behaves exactly as it did. Requiring it is the third stage of #25 and is a decision for an operator, not a migration."
+          },
+          {
             "name": "ca_account_id",
             "type": "string",
             "go_type": "string",
-            "required": true
+            "required": false,
+            "doc": "CAAccountID is only consulted when TemplateID is absent. A template pins its own issuer, so naming both is naming the same thing twice — and when they disagree the template wins, because a requester who could choose an issuer could choose the cheapest, the least logged, or the one with the widest trust. No longer `binding:\"required\"`: one of the two has to be present, which a binding tag cannot express. The resolver says which is missing."
           },
           {
             "name": "csr_pem",
@@ -6061,24 +6069,7 @@
           ]
         },
         {
-          "status": 400,
-          "errors": [
-            "common_name is required when no csr_pem is supplied"
-          ]
-        },
-        {
-          "status": 403,
-          "shape": "object",
-          "keys": [
-            {
-              "name": "violations",
-              "type": "any",
-              "required": false
-            }
-          ],
-          "errors": [
-            "Certificate request blocked by security policy"
-          ]
+          "status": 400
         },
         {
           "status": 500

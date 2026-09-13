@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/certpilot/certpilot/core/engine/issuance"
 	"github.com/certpilot/certpilot/core/engine/policy"
 	"github.com/certpilot/certpilot/core/engine/renewal"
 	"github.com/certpilot/certpilot/core/events"
@@ -25,8 +26,12 @@ type CertificateHandler struct {
 	executor  *renewal.Executor
 	renewals  *renewal.Scheduler
 	policyEng *policy.Engine
-	keyring   *secrets.Keyring
-	broker    *events.Broker
+	// resolver decides what may be issued. policyEng stays because other
+	// handlers on this type report policy findings against certificates that
+	// already exist, which is a different question from what may be issued.
+	resolver *issuance.Resolver
+	keyring  *secrets.Keyring
+	broker   *events.Broker
 }
 
 // NewCertificateHandler creates a new handler.
@@ -37,6 +42,7 @@ func NewCertificateHandler(s store.Store, pm *pluginmgr.Manager, exec *renewal.E
 		executor:  exec,
 		renewals:  sched,
 		policyEng: pe,
+		resolver:  issuance.NewResolver(s, pe),
 		keyring:   kr,
 		broker:    broker,
 	}
@@ -95,11 +101,30 @@ func (h *CertificateHandler) Get(c *gin.Context) {
 // RequestCertificateInput defines the payload to request a new certificate.
 type RequestCertificateInput struct {
 	// CommonName is required unless CSRPEM is supplied, in which case the names
-	// come from the request itself. Validated below rather than by a binding
-	// tag, which cannot express "one of these two".
-	CommonName  string   `json:"common_name"`
-	SANs        []string `json:"sans"`
-	CAAccountID string   `json:"ca_account_id" binding:"required"`
+	// come from the request itself. Checked by the resolver rather than by a
+	// binding tag, which cannot express "one of these two".
+	CommonName string   `json:"common_name"`
+	SANs       []string `json:"sans"`
+
+	// TemplateID names the certificate template to issue under, by slug or by
+	// uuid. A slug is what a pipeline should carry: it survives a rename.
+	//
+	// Optional, for now. A request without one resolves to the default
+	// template for CAAccountID, which constrains nothing — so every caller
+	// written before templates existed behaves exactly as it did. Requiring it
+	// is the third stage of #25 and is a decision for an operator, not a
+	// migration.
+	TemplateID string `json:"template_id"`
+
+	// CAAccountID is only consulted when TemplateID is absent. A template pins
+	// its own issuer, so naming both is naming the same thing twice — and when
+	// they disagree the template wins, because a requester who could choose an
+	// issuer could choose the cheapest, the least logged, or the one with the
+	// widest trust.
+	//
+	// No longer `binding:"required"`: one of the two has to be present, which
+	// a binding tag cannot express. The resolver says which is missing.
+	CAAccountID string `json:"ca_account_id"`
 
 	// CSRPEM is a certificate signing request whose private key was generated
 	// somewhere else and never sent here.
@@ -157,13 +182,6 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 		input.KeySize = csrInfo.KeySize
 	}
 
-	if input.CommonName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "common_name is required when no csr_pem is supplied",
-		})
-		return
-	}
-
 	// Required fields are enforced here and only here: at the moment somebody
 	// asks for a certificate, which is when the organisation gets to insist on
 	// a cost centre or a change ticket.
@@ -178,64 +196,44 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 		return
 	}
 
-	if input.KeyType == "" {
-		input.KeyType = "RSA"
-	}
-	if input.KeySize <= 0 {
-		input.KeySize = 2048
-	}
-	if input.ValidityDays <= 0 {
-		input.ValidityDays = 90
-	}
-	if input.RenewalLeadDays <= 0 {
-		input.RenewalLeadDays = 30
-	}
-
-	// Deduplicated, case-insensitively.
+	// 1. Decide what may be issued.
 	//
-	// CAB Forum rules require the common name to also appear as a SAN, so
-	// nearly every client sends it in both fields — and the certificate came
-	// back listing the same name twice, which the inventory then reported as
-	// "one extra name". Harmless in the certificate, wrong on every screen
-	// that counts them.
-	allDomains := dedupeNames(append([]string{input.CommonName}, input.SANs...))
-
-	// 1. Fetch CA account
-	caAccount, err := h.store.GetCAAccount(c.Request.Context(), input.CAAccountID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid ca_account_id: %v", err)})
-		return
-	}
-
-	// 2. Evaluate Policy.
-	// A policy engine that cannot be consulted must block the request. Treating
-	// an evaluation failure as "no violations" means a database blip silently
-	// disables every security policy at once.
-	violations, err := h.policyEng.EvaluateRequest(c.Request.Context(), policy.Request{
-		CommonName: input.CommonName,
-		Domains:    allDomains,
-		// Already replaced with the CSR's own values above when one was
-		// supplied, so a policy judges the key that will exist rather than the
-		// key the body claimed.
-		KeyType:        input.KeyType,
-		KeySize:        input.KeySize,
-		ValidityDays:   input.ValidityDays,
-		CAProviderType: caAccount.ProviderType,
+	// One call, six rungs, and the same call every other issuance path will
+	// make. What used to be here — a common name check, four hardcoded
+	// defaults, a dedupe, a CA lookup and a policy evaluation — was written
+	// once for this path and never repeated on the other two, which is how an
+	// agent came to be able to ask for anything the policy engine forbids.
+	decision, err := h.resolver.Resolve(c.Request.Context(), issuance.Request{
+		TemplateRef:  input.TemplateID,
+		CAAccountID:  input.CAAccountID,
+		CommonName:   input.CommonName,
+		SANs:         input.SANs,
+		CSR:          csrInfo,
+		KeyType:      input.KeyType,
+		KeySize:      input.KeySize,
+		ValidityDays: input.ValidityDays,
+		Environment:  input.Environment,
+		Team:         input.Team,
+		MetadataKeys: keysOf(cleanedMetadata),
+		KeyCustody:   custodyFor(csrInfo),
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": fmt.Sprintf("could not evaluate security policy, refusing to issue: %v", err),
-		})
+		writeResolveFailure(c, err)
 		return
 	}
-	for _, v := range violations {
-		if v.Severity == "BLOCK" {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error":      "Certificate request blocked by security policy",
-				"violations": violations,
-			})
-			return
-		}
+
+	caAccount := decision.Account
+	allDomains := decision.Domains
+	input.CommonName = decision.CommonName
+	input.KeyType = decision.KeyType
+	input.KeySize = decision.KeySize
+	input.ValidityDays = decision.ValidityDays
+	input.Environment = decision.Environment
+	input.Team = decision.Team
+	violations := decision.Violations
+
+	if input.RenewalLeadDays <= 0 {
+		input.RenewalLeadDays = decision.RenewBeforeDays
 	}
 
 	// 3. Find Gateway
@@ -320,6 +318,14 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 	}
 
 	certPEM := string(resp.Certificate.CertificatePem)
+	// The account the template pinned, not the one the request named — which
+	// may be a different account, or none at all when a template was named
+	// instead. Read from the decision rather than from the request, because
+	// the request's copy is empty in exactly the case templates were added
+	// for, and an empty string reaches a uuid column as `invalid input syntax
+	// for type uuid` — after the CA has already signed.
+	caAccountID := caAccount.ID
+
 	notBefore, notAfter := info.NotBefore, info.NotAfter
 
 	keyCustody := store.KeyCustodyExternal
@@ -341,7 +347,7 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 		Status:              "ISSUED",
 		AutoRenew:           input.AutoRenew,
 		RenewalLeadDays:     input.RenewalLeadDays,
-		CAAccountID:         &input.CAAccountID,
+		CAAccountID:         &caAccountID,
 		PrivateKeyEncrypted: privateKey,
 		CertificatePEM:      &certPEM,
 		ChainPEM:            chainPEM,
@@ -722,4 +728,57 @@ func decryptCAConfig(kr *secrets.Keyring, acc *store.CAAccount) (string, error) 
 		return "", fmt.Errorf("failed to decrypt the configuration for CA account %q: %w", acc.Name, err)
 	}
 	return plaintext, nil
+}
+
+// keysOf is which metadata fields a request answered, for the template's own
+// required list. The values have already been validated; this is about
+// presence.
+func keysOf(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+// custodyFor says where the private key will live.
+//
+// A request carrying a CSR keeps its key: the requester generated it and it
+// never reaches here, which is EXTERNAL from this side. Everything else is
+// generated by the gateway and sealed here.
+func custodyFor(csr *x509util.CSRInfo) string {
+	if csr != nil {
+		return store.KeyCustodyExternal
+	}
+	return store.KeyCustodyCertPilot
+}
+
+// writeResolveFailure turns a resolver error into the right status.
+//
+// The distinction is the point: a malformed request is the caller's to fix and
+// a refused one is an operator's. Reporting both as 400 tells somebody to
+// correct a request that was already correct, and reporting both as 403 sends
+// them to an administrator over a typo.
+func writeResolveFailure(c *gin.Context, err error) {
+	refusal, ok := issuance.AsRefusal(err)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	switch refusal.Rung {
+	case issuance.RungRequest:
+		c.JSON(http.StatusBadRequest, gin.H{"error": refusal.Message})
+	case issuance.RungPolicy:
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":      "Certificate request blocked by security policy",
+			"detail":     refusal.Message,
+			"violations": refusal.Violations,
+		})
+	default:
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":  "Certificate request refused by its template",
+			"detail": refusal.Message,
+		})
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
 	"net"
@@ -20,14 +21,24 @@ type CSRInfo struct {
 	// IPAddresses and EmailAddresses are reported so a caller can tell the
 	// requester they were dropped, rather than silently issuing a certificate
 	// that does not cover what was asked for.
-	IPAddresses        []string `json:"ip_addresses,omitempty"`
-	EmailAddresses     []string `json:"email_addresses,omitempty"`
-	SubjectDN          string   `json:"subject_dn"`
-	KeyType            string   `json:"key_type"`
-	KeySize            int      `json:"key_size"`
-	Curve              string   `json:"curve,omitempty"`
-	SignatureAlgorithm string   `json:"signature_algorithm"`
-	PublicKeyAlgorithm string   `json:"public_key_algorithm"`
+	IPAddresses    []string `json:"ip_addresses,omitempty"`
+	EmailAddresses []string `json:"email_addresses,omitempty"`
+	SubjectDN      string   `json:"subject_dn"`
+	// Subject carries the structured components of the subject, keyed by the
+	// short attribute names a policy or a template names them by: O, OU, C, L,
+	// ST. SubjectDN above is a display string in RFC 2253 form, and comparing
+	// an organisation against one means parsing it — which is how a rule about
+	// the subject ends up matching a substring of somebody's locality.
+	//
+	// An attribute with several values is joined with ", ". A template supplies
+	// one value per attribute, so a multi-valued request differs from it, which
+	// is the right answer rather than a lossy one.
+	Subject            map[string]string `json:"subject,omitempty"`
+	KeyType            string            `json:"key_type"`
+	KeySize            int               `json:"key_size"`
+	Curve              string            `json:"curve,omitempty"`
+	SignatureAlgorithm string            `json:"signature_algorithm"`
+	PublicKeyAlgorithm string            `json:"public_key_algorithm"`
 }
 
 // Names returns the certificate's requested names, common name first.
@@ -97,6 +108,7 @@ func ParseCSRPEM(csrPEM []byte) (*CSRInfo, error) {
 		DNSNames:           append([]string(nil), csr.DNSNames...),
 		EmailAddresses:     append([]string(nil), csr.EmailAddresses...),
 		SubjectDN:          csr.Subject.String(),
+		Subject:            subjectComponents(csr.Subject),
 		SignatureAlgorithm: csr.SignatureAlgorithm.String(),
 		PublicKeyAlgorithm: csr.PublicKeyAlgorithm.String(),
 	}
@@ -143,4 +155,27 @@ func (c *CSRInfo) DroppedNames() []string {
 		dropped = append(dropped, "email:"+email)
 	}
 	return dropped
+}
+
+// subjectComponents pulls out the attributes a template can supply.
+//
+// Only the ones a template names. The rest of a subject is carried through to
+// the CA in the request itself and is not something this codebase decides.
+func subjectComponents(name pkix.Name) map[string]string {
+	out := map[string]string{}
+	for key, values := range map[string][]string{
+		"O":  name.Organization,
+		"OU": name.OrganizationalUnit,
+		"C":  name.Country,
+		"L":  name.Locality,
+		"ST": name.Province,
+	} {
+		if len(values) > 0 {
+			out[key] = strings.Join(values, ", ")
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
