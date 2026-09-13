@@ -1,8 +1,19 @@
 # CertPilot in one command, for deciding whether it is interesting.
 #
-#   docker compose -f deploy/docker-compose.quickstart.yml up -d --build
-#   docker compose -f deploy/docker-compose.quickstart.yml logs core | grep -i password
+# No clone and no Go toolchain. Two files into an empty directory:
+#
+#   base=https://raw.githubusercontent.com/certpilot/certpilot/v0.1.0/deploy
+#   curl -O $base/docker-compose.quickstart.yml -O $base/config.quickstart.yaml
+#   docker compose -f docker-compose.quickstart.yml up -d
+#   docker compose -f docker-compose.quickstart.yml logs core | grep -i password
 #   open http://localhost:3000
+#
+# From a clone, the same file works with `-f deploy/docker-compose.quickstart.yml`.
+#
+# Every image is pulled. This built the core and the frontend from ../ until
+# there were published images to pull, which meant the one-command evaluation
+# needed a clone and a five-minute Go build first — and the command above, which
+# is what the release notes hand somebody, could not work at all.
 #
 # This is NOT deploy/docker-compose.yml, and the difference is the point. That
 # file deliberately has no database: CertPilot stores certificate private keys
@@ -53,17 +64,13 @@ services:
   # that code already lives — there is no second implementation to keep honest,
   # and the quickstart needs no Go toolchain on the host to get it.
   certs:
-    build:
-      context: ..
-      dockerfile: deploy/docker/core.Dockerfile
+    image: ghcr.io/certpilot/core:${CERTPILOT_VERSION:-0.1.0}
     command: ["--generate-dev-certs=/app/pki"]
     volumes:
       - pki:/app/pki
 
   migrate:
-    build:
-      context: ..
-      dockerfile: deploy/docker/core.Dockerfile
+    image: ghcr.io/certpilot/core:${CERTPILOT_VERSION:-0.1.0}
     depends_on:
       postgres:
         condition: service_healthy
@@ -97,9 +104,7 @@ services:
       retries: 30
 
   core:
-    build:
-      context: ..
-      dockerfile: deploy/docker/core.Dockerfile
+    image: ghcr.io/certpilot/core:${CERTPILOT_VERSION:-0.1.0}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -126,9 +131,7 @@ services:
       retries: 20
 
   frontend:
-    build:
-      context: ..
-      dockerfile: deploy/docker/frontend.Dockerfile
+    image: ghcr.io/certpilot/frontend:${CERTPILOT_VERSION:-0.1.0}
     ports:
       - "3000:80"
     depends_on:
