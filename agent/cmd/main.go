@@ -51,6 +51,8 @@ func main() {
 		err = runRequest(ctx, os.Args[2:])
 	case "install":
 		err = runInstall(ctx, os.Args[2:])
+	case "profiles":
+		err = runProfiles(os.Args[2:])
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -82,6 +84,7 @@ func usage() {
   certpilot-agent scan   [--path=DIR ...]      what this host would report
   certpilot-agent request --name=HOST [--name=...] [--key-type=ECDSA]
   certpilot-agent install [--installs=FILE] [--force] [--offline]
+  certpilot-agent profiles [NAME] [--detect]   which platforms are covered
   certpilot-agent status [--state-dir=DIR]
   certpilot-agent version
 

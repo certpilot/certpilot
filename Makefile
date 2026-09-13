@@ -1,4 +1,4 @@
-.PHONY: test-store all build build-core build-agent test test-frontend test-coverage lint routes \
+.PHONY: test-store verify-profiles all build build-core build-agent test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -83,6 +83,20 @@ seed:
 routes:
 	python3 scripts/extract-routes.py docs/routes.json
 	$(GO) run scripts/schemagen/main.go docs/routes.json
+
+## Prove every platform profile against the real service. Starts each one in a
+## container, installs a certificate through the agent's own installer, and
+## completes a TLS handshake to check the service is serving it after its own
+## reload — so a profile in the catalogue is a thing somebody ran, not a thing
+## somebody wrote down.
+##
+## Needs a container runtime. Nothing else in this Makefile does, which is why
+## this is its own target and not part of `make test`.
+##
+##   make verify-profiles              all of them
+##   make verify-profiles PROFILE=nginx
+verify-profiles:
+	./scripts/verify-profiles.sh $(PROFILE)
 
 run-core:
 	$(GO) run ./core/cmd/ --config=config.dev.yaml
@@ -230,6 +244,7 @@ help:
 	@echo ""
 	@echo "Docs"
 	@echo "  make routes                  Regenerate docs/routes.json from the router"
+	@echo "  make verify-profiles         Install to every platform, in containers"
 	@echo ""
 	@echo "Check"
 	@echo "  make test                    Run all tests"
