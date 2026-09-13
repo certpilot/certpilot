@@ -83,6 +83,7 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 	auditHandler := NewAuditHandler(deps.Store)
 	discHandler := NewDiscoveryHandler(deps.Store, deps.Scanner)
 	policyHandler := NewPolicyHandler(deps.Store)
+	templateHandler := NewTemplateHandler(deps.Store, deps.PolicyEngine)
 	eventsHandler := NewEventsHandler(deps.Store, deps.Broker)
 	displayHandler := NewDisplayTokenHandler(deps.Store)
 	notifHandler := NewNotificationHandler(deps.Store, deps.Keyring, deps.Dispatcher)
@@ -429,5 +430,18 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 		v1.POST("/policies", middleware.RequireRole(middleware.RoleOperator), policyHandler.Create)
 		v1.PUT("/policies/:id", middleware.RequireRole(middleware.RoleOperator), policyHandler.Update)
 		v1.DELETE("/policies/:id", middleware.RequireRole(middleware.RoleAdmin), policyHandler.Delete)
+
+		// ── Certificate templates ──
+		//
+		// Writes are admin-only, where a policy is operator-writable. A policy
+		// can only ever refuse more than it did; a template also supplies
+		// values and decides whether the requester may set the subject, and
+		// that last one is the difference between a template and a way to get
+		// a certificate for somebody else's name.
+		v1.GET("/certificate-templates", templateHandler.List)
+		v1.GET("/certificate-templates/:id", templateHandler.Get)
+		v1.POST("/certificate-templates", middleware.RequireRole(middleware.RoleAdmin), templateHandler.Create)
+		v1.PUT("/certificate-templates/:id", middleware.RequireRole(middleware.RoleAdmin), templateHandler.Update)
+		v1.DELETE("/certificate-templates/:id", middleware.RequireRole(middleware.RoleAdmin), templateHandler.Delete)
 	}
 }

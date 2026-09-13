@@ -378,6 +378,129 @@ type Policy struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
+// Subject dispositions for CertificateTemplate.SubjectMode.
+//
+// There is deliberately no third value meaning "anything goes". That is
+// SubjectModeConstrained with no constraints written, and it should look as
+// empty as it is rather than carry a name that sounds deliberate.
+const (
+	// SubjectModeSupplied means the template provides the subject and the
+	// requester may not set it. The default, and the safe one: AD CS calls the
+	// alternative "Supply in the request", and combining it with broad
+	// enrolment rights is ESC1.
+	SubjectModeSupplied = "SUPPLIED"
+	// SubjectModeConstrained means the requester provides the subject and it is
+	// validated against the template.
+	SubjectModeConstrained = "CONSTRAINED"
+)
+
+// KeyCustodyAny leaves custody to the request. The other three values are the
+// KeyCustody* constants, asserted by a template about a class of certificate.
+const KeyCustodyAny = "ANY"
+
+// CommonNameRule constrains the certificate's common name.
+//
+// Required is a pointer because absent and false are different answers. A
+// template that has never mentioned the common name has not decided it is
+// optional, and a Go zero value would quietly make that decision.
+type CommonNameRule struct {
+	Required          *bool    `json:"required,omitempty"`
+	Suffixes          []string `json:"suffixes,omitempty"`
+	ForbiddenPatterns []string `json:"forbidden_patterns,omitempty"`
+}
+
+// SANRules constrains the subject alternative names.
+type SANRules struct {
+	// Types permitted: DNS, IP, email, URI. Empty means the template does not
+	// restrict them.
+	Types    []string `json:"types,omitempty"`
+	Suffixes []string `json:"suffixes,omitempty"`
+	// AllowWildcards is a pointer for the same reason Required is: a template
+	// that never mentioned wildcards has not permitted or forbidden them.
+	AllowWildcards *bool `json:"allow_wildcards,omitempty"`
+	MaxNames       int   `json:"max_names,omitempty"`
+}
+
+// CertificateTemplate is what a kind of certificate looks like.
+//
+// Policies are the floor the whole estate must clear. A template is one use
+// case above it — an internal mTLS certificate for a service mesh and a public
+// TLS certificate for a marketing site share almost nothing, and a single list
+// of rules true of both can only contain what they share.
+//
+// Unlike a policy, a template can do three things to a field rather than one:
+// supply it, constrain it, or pass it through. That third axis is why this
+// exists and is what Engine.EvaluateRequest cannot express.
+//
+// Every numeric bound here treats zero as "not constrained by this template".
+// A default of 2048 would look safe and would be a rule nobody wrote.
+type CertificateTemplate struct {
+	ID string `json:"id"`
+	// Slug is the stable machine name an agent or a CI job refers to. It
+	// survives a rename; Name does not.
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	// Version is bumped whenever a rule changes, never by a rename.
+	// Certificates record the version they were issued under, so "this
+	// certificate violates its template" can be answered alongside "... which
+	// has been edited twice since".
+	Version   int  `json:"version"`
+	IsEnabled bool `json:"is_enabled"`
+
+	// CAAccountID is part of the template rather than the request: a requester
+	// who could pick its own issuer could pick the cheapest, the least logged,
+	// or the one with the widest trust.
+	CAAccountID string `json:"ca_account_id"`
+	// CAProfile names the CA's own template when it has one — a Vault role, an
+	// ACME profile, an AWS Private CA template ARN. Nothing reads it yet.
+	CAProfile string `json:"ca_profile,omitempty"`
+
+	SubjectMode     string            `json:"subject_mode"`
+	SubjectDefaults map[string]string `json:"subject_defaults"`
+	CommonNameRule  CommonNameRule    `json:"common_name_rule"`
+	SANRules        SANRules          `json:"san_rules"`
+
+	AllowedKeyTypes []string `json:"allowed_key_types"`
+	RSAMinBits      int      `json:"rsa_min_bits"`
+	RSAMaxBits      int      `json:"rsa_max_bits"`
+	// ECDSACurves names curves rather than counting bits. An RSA modulus and an
+	// ECDSA curve order are not comparable numbers, and one column meaning both
+	// is how "at least 2048" ends up rejecting P-384.
+	ECDSACurves []string `json:"ecdsa_curves"`
+	// CSRRequired means the requester must bring its own key. CertPilot never
+	// holds one for a certificate issued under this template.
+	CSRRequired bool `json:"csr_required"`
+	// KeyCustodyRequired is ANY, or one of the KeyCustody* values asserted
+	// about every certificate this template issues.
+	KeyCustodyRequired string `json:"key_custody_required"`
+
+	// ValidityDays is supplied: the requester does not choose.
+	// MaxValidityDays is the ceiling for when they may. Zero means neither.
+	ValidityDays    int  `json:"validity_days"`
+	MaxValidityDays int  `json:"max_validity_days"`
+	RenewBeforeDays int  `json:"renew_before_days"`
+	AutoRenew       bool `json:"auto_renew"`
+
+	// RequireMetadata names MetadataField keys a request must answer. Separate
+	// from MetadataField.IsRequired, which is estate-wide: a change ticket may
+	// be required for a production certificate and meaningless for a
+	// short-lived test one, and that is a property of the template.
+	RequireMetadata    []string `json:"require_metadata"`
+	DefaultEnvironment string   `json:"default_environment,omitempty"`
+	DefaultTeam        string   `json:"default_team,omitempty"`
+	DefaultTags        []string `json:"default_tags"`
+
+	CreatedBy *string   `json:"created_by,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Live reports whether this template may issue anything right now.
+func (t *CertificateTemplate) Live() bool {
+	return t != nil && t.IsEnabled
+}
+
 // AuditLog represents an immutable audit log entry.
 type AuditLog struct {
 	ID         string    `json:"id"`

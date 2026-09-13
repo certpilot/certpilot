@@ -174,6 +174,20 @@ type Store interface {
 	UpdatePolicy(ctx context.Context, p *Policy) error
 	DeletePolicy(ctx context.Context, id string) error
 
+	// ── Certificate templates ───────────────────────────────
+	ListCertificateTemplates(ctx context.Context) ([]*CertificateTemplate, error)
+	GetCertificateTemplate(ctx context.Context, id string) (*CertificateTemplate, error)
+	// GetCertificateTemplateBySlug resolves the stable machine name. This is
+	// how an agent or a CI job names a template; the id is not something a
+	// pipeline should have to carry.
+	GetCertificateTemplateBySlug(ctx context.Context, slug string) (*CertificateTemplate, error)
+	CreateCertificateTemplate(ctx context.Context, t *CertificateTemplate) error
+	// UpdateCertificateTemplate writes the record and bumps Version when a rule
+	// changed. Name and description are not rules, so renaming does not
+	// invalidate the certificates issued under it.
+	UpdateCertificateTemplate(ctx context.Context, t *CertificateTemplate) error
+	DeleteCertificateTemplate(ctx context.Context, id string) error
+
 	// ── Display Tokens ──────────────────────────────────────
 	ListDisplayTokens(ctx context.Context) ([]*DisplayToken, error)
 	// GetDisplayTokenByHash resolves a presented token. It returns the record

@@ -63,8 +63,10 @@ type MemoryStore struct {
 	enrolTokens    map[string]*AgentEnrolToken
 	agentCerts     []*AgentCertificate
 	agentGrants    map[string]*AgentGrant
-	agentInstalls  []*AgentInstallation
-	tlsPosture     map[string]*EndpointTLSPosture
+
+	certificateTemplates map[string]*CertificateTemplate
+	agentInstalls        []*AgentInstallation
+	tlsPosture           map[string]*EndpointTLSPosture
 }
 
 // clone returns a shallow copy of a stored record.
@@ -263,7 +265,9 @@ func NewMemoryStore() *MemoryStore {
 		agents:      make(map[string]*Agent),
 		enrolTokens: make(map[string]*AgentEnrolToken),
 		agentGrants: make(map[string]*AgentGrant),
-		tlsPosture:  make(map[string]*EndpointTLSPosture),
+
+		certificateTemplates: make(map[string]*CertificateTemplate),
+		tlsPosture:           make(map[string]*EndpointTLSPosture),
 	}
 }
 
