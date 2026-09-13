@@ -48,13 +48,19 @@ So CertPilot watches authorities first and certificates second.
 
 ## Why
 
-Certificate validity is collapsing. The CA/Browser Forum schedule
-([ballot SC-081v3](https://cabforum.org/2025/04/11/ballot-sc081v3-introduce-schedule-of-reducing-validity-and-data-reuse-periods/))
-takes maximum TLS certificate lifetime to **200 days in March 2026, 100 days in
-March 2027, and 47 days in March 2029**, with domain validation reuse falling to
-10 days on the same schedule. At 47 days, ten thousand certificates means
-roughly 670 renewals a day, continuously. Spreadsheet-and-calendar tracking is
-already broken.
+Certificate validity is collapsing, on a schedule that has already started. The
+CA/Browser Forum's [ballot SC-081v3][sc081] took the maximum lifetime of a
+public TLS certificate to **200 days in March 2026** — that one has happened —
+and takes it to **100 days in March 2027** and **47 days in March 2029**, with
+domain validation reuse falling to 10 days alongside it.
+
+The number that matters is not 47. It is what 47 does to a process: eight
+renewals a year for every certificate, so an estate of ten thousand is over two
+hundred renewals every day, continuously, forever. A 398-day certificate is
+something a competent team renews by hand with a calendar reminder. A 47-day
+certificate is not, and the date that makes it not is already fixed.
+
+[sc081]: https://cabforum.org/2025/04/11/ballot-sc081v3-introduce-schedule-of-reducing-validity-and-data-reuse-periods/
 
 The open-source ecosystem is good at *getting* a certificate — certbot, lego,
 cert-manager and step-ca all do it well. What is missing is everything around

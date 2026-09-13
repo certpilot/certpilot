@@ -3,6 +3,13 @@
 An open-source PKI and certificate lifecycle manager, built for the central PKI
 team inside an organisation.
 
+Public TLS certificates are capped at 200 days as of March 2026, 100 days from
+March 2027 and 47 days from March 2029 — the schedule the CA/Browser Forum
+adopted in [ballot SC-081v3][sc081]. At 47 days that is eight renewals a year
+per certificate. These pages are about doing that without a person in the loop.
+
+[sc081]: https://cabforum.org/2025/04/11/ballot-sc081v3-introduce-schedule-of-reducing-validity-and-data-reuse-periods/
+
 ## Start here
 
 | | |
