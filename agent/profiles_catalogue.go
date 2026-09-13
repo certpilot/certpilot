@@ -14,8 +14,9 @@ package agent
 // choice, not a platform's: Apache is `apache2` on Debian and `httpd` on Red
 // Hat, and a profile that guessed would be wrong for half the hosts that used
 // it. The platform's own reload command is the same everywhere, and on a
-// systemd host it is *literally what the unit file runs* — Debian's nginx unit
-// has `ExecReload=/usr/sbin/nginx -s reload`.
+// systemd host it is the same operation the unit performs — Debian's nginx unit
+// reloads with `ExecReload=/usr/sbin/nginx -g '...' -s reload`, and its apache2
+// unit with `ExecReload=/usr/sbin/apachectl graceful`, verbatim.
 //
 // So: the platform's own command wherever one exists, systemctl only where none
 // does, and a note saying so on the ones where it does not.
@@ -62,9 +63,13 @@ var catalogue = []Profile{
 				"from a cache and no fresh client does.",
 			"nginx reloads by starting new workers and letting the old ones finish, " +
 				"so no connection is dropped and no request sees a half-written file.",
-			"The key is written 0640. nginx's workers drop privileges but its master " +
-				"process reads the key as root at startup, so the key does not need to " +
-				"be readable by the worker user.",
+			"The key is written 0640 with no group, which on a root-owned file is the " +
+				"same as 0600 — nginx's master reads the key as root before the workers " +
+				"drop privileges, so the worker user never needs it. The mode is 0640 " +
+				"rather than 0600 so that adding `\"group\": \"ssl-cert\"` is the only " +
+				"change needed on a host that shares the key with something else, " +
+				"rather than two changes where forgetting the second one silently does " +
+				"nothing.",
 		},
 		Verified: "nginx 1.27.5",
 	},
@@ -81,14 +86,19 @@ var catalogue = []Profile{
 		FullChainPath: profileDir + "/" + certificatePlaceholder + "/fullchain.pem",
 		KeyMode:       "0640",
 		Check:         []string{"/usr/sbin/apachectl", "configtest"},
-		Reload:        []string{"/usr/sbin/apachectl", "-k", "graceful"},
+		Reload:        []string{"/usr/sbin/apachectl", "graceful"},
 		Notes: []string{
 			"SSLCertificateFile should name fullchain.pem. Apache 2.4.8 and later read " +
 				"the intermediates out of that same file; SSLCertificateChainFile is " +
 				"deprecated and is not needed.",
+			"`apachectl configtest` opens the certificate — a missing or empty file " +
+				"fails the check, which is more than most of the catalogue manages. It " +
+				"does not pair the certificate with the key, so a mismatched pair " +
+				"passes and fails the handshake. Checked against 2.4.68, not assumed.",
 			"apachectl rather than systemctl, because the unit is apache2 on Debian " +
-				"and httpd on Red Hat. `apachectl -k graceful` is the same operation on " +
-				"both and is what either unit file runs.",
+				"and httpd on Red Hat. This is the command Debian's unit runs verbatim " +
+				"— ExecReload=/usr/sbin/apachectl graceful — and it is the same on Red " +
+				"Hat, where the unit name is not.",
 		},
 		Verified: "Apache 2.4.68 (Debian package)",
 	},
@@ -276,10 +286,13 @@ var catalogue = []Profile{
 				"my.cnf the root account reads, never on this command line, where they " +
 				"would be visible to `ps` for every account on the machine.",
 			"The key must be owned by the account the server runs as, which is why " +
-				"this profile sets owner and group to mysql. MariaDB does not refuse " +
-				"to start when it cannot read the key: it starts, disables TLS, and " +
-				"logs it — so every client connects in the clear and nothing looks " +
-				"broken.",
+				"this profile sets owner and group to mysql. Get it wrong and MariaDB " +
+				"**refuses to start** — \"Failed to setup SSL … Aborting\", checked " +
+				"against 10.11 rather than assumed. That is the safe failure and it is " +
+				"still an outage, so the ownership here is not cosmetic: a destination " +
+				"that writes this key as root is one that takes the database down at " +
+				"the next restart, which may be weeks after the rotation that caused " +
+				"it.",
 		},
 		Verified: "MariaDB 10.11.18 (Debian package)",
 	},
