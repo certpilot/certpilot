@@ -1941,6 +1941,195 @@
         }
       ]
     },
+    "CertificateTemplate": {
+      "name": "CertificateTemplate",
+      "doc": "CertificateTemplate is what a kind of certificate looks like. Policies are the floor the whole estate must clear. A template is one use case above it — an internal mTLS certificate for a service mesh and a public TLS certificate for a marketing site share almost nothing, and a single list of rules true of both can only contain what they share. Unlike a policy, a template can do three things to a field rather than one: supply it, constrain it, or pass it through. That third axis is why this exists and is what Engine.EvaluateRequest cannot express. Every numeric bound here treats zero as \"not constrained by this template\". A default of 2048 would look safe and would be a rule nobody wrote.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "go_type": "string",
+          "required": false
+        },
+        {
+          "name": "slug",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "Slug is the stable machine name an agent or a CI job refers to. It survives a rename; Name does not."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "go_type": "string",
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "go_type": "string",
+          "required": false
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "go_type": "int",
+          "required": false,
+          "doc": "Version is bumped whenever a rule changes, never by a rename. Certificates record the version they were issued under, so \"this certificate violates its template\" can be answered alongside \"... which has been edited twice since\"."
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "go_type": "bool",
+          "required": false
+        },
+        {
+          "name": "ca_account_id",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "CAAccountID is part of the template rather than the request: a requester who could pick its own issuer could pick the cheapest, the least logged, or the one with the widest trust."
+        },
+        {
+          "name": "ca_profile",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "CAProfile names the CA's own template when it has one — a Vault role, an ACME profile, an AWS Private CA template ARN. Nothing reads it yet."
+        },
+        {
+          "name": "subject_mode",
+          "type": "string",
+          "go_type": "string",
+          "required": false
+        },
+        {
+          "name": "subject_defaults",
+          "type": "object",
+          "go_type": "map[string]string",
+          "required": false
+        },
+        {
+          "name": "common_name_rule",
+          "type": "CommonNameRule",
+          "go_type": "CommonNameRule",
+          "required": false
+        },
+        {
+          "name": "san_rules",
+          "type": "SANRules",
+          "go_type": "SANRules",
+          "required": false
+        },
+        {
+          "name": "allowed_key_types",
+          "type": "string[]",
+          "go_type": "[]string",
+          "required": false
+        },
+        {
+          "name": "rsa_min_bits",
+          "type": "integer",
+          "go_type": "int",
+          "required": false
+        },
+        {
+          "name": "rsa_max_bits",
+          "type": "integer",
+          "go_type": "int",
+          "required": false
+        },
+        {
+          "name": "ecdsa_curves",
+          "type": "string[]",
+          "go_type": "[]string",
+          "required": false,
+          "doc": "ECDSACurves names curves rather than counting bits. An RSA modulus and an ECDSA curve order are not comparable numbers, and one column meaning both is how \"at least 2048\" ends up rejecting P-384."
+        },
+        {
+          "name": "csr_required",
+          "type": "boolean",
+          "go_type": "bool",
+          "required": false,
+          "doc": "CSRRequired means the requester must bring its own key. CertPilot never holds one for a certificate issued under this template."
+        },
+        {
+          "name": "key_custody_required",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "KeyCustodyRequired is ANY, or one of the KeyCustody* values asserted about every certificate this template issues."
+        },
+        {
+          "name": "validity_days",
+          "type": "integer",
+          "go_type": "int",
+          "required": false,
+          "doc": "ValidityDays is supplied: the requester does not choose. MaxValidityDays is the ceiling for when they may. Zero means neither."
+        },
+        {
+          "name": "max_validity_days",
+          "type": "integer",
+          "go_type": "int",
+          "required": false
+        },
+        {
+          "name": "renew_before_days",
+          "type": "integer",
+          "go_type": "int",
+          "required": false
+        },
+        {
+          "name": "auto_renew",
+          "type": "boolean",
+          "go_type": "bool",
+          "required": false
+        },
+        {
+          "name": "require_metadata",
+          "type": "string[]",
+          "go_type": "[]string",
+          "required": false,
+          "doc": "RequireMetadata names MetadataField keys a request must answer. Separate from MetadataField.IsRequired, which is estate-wide: a change ticket may be required for a production certificate and meaningless for a short-lived test one, and that is a property of the template."
+        },
+        {
+          "name": "default_environment",
+          "type": "string",
+          "go_type": "string",
+          "required": false
+        },
+        {
+          "name": "default_team",
+          "type": "string",
+          "go_type": "string",
+          "required": false
+        },
+        {
+          "name": "default_tags",
+          "type": "string[]",
+          "go_type": "[]string",
+          "required": false
+        },
+        {
+          "name": "created_by",
+          "type": "string",
+          "go_type": "*string",
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "go_type": "time.Time",
+          "required": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "go_type": "time.Time",
+          "required": false
+        }
+      ]
+    },
     "CloudCertificate": {
       "name": "CloudCertificate",
       "doc": "CloudCertificate is one certificate found sitting in a cloud store.",
@@ -3548,7 +3737,7 @@
     "operator",
     "admin"
   ],
-  "route_count": 121,
+  "route_count": 126,
   "routes": [
     {
       "auth": "bearer",
@@ -3616,7 +3805,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 361
+      "source_line": 362
     },
     {
       "auth": "bearer",
@@ -3653,7 +3842,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 379
+      "source_line": 380
     },
     {
       "auth": "bearer",
@@ -3728,7 +3917,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 380
+      "source_line": 381
     },
     {
       "auth": "bearer",
@@ -3759,7 +3948,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 381
+      "source_line": 382
     },
     {
       "auth": "bearer",
@@ -3797,7 +3986,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 372
+      "source_line": 373
     },
     {
       "auth": "bearer",
@@ -3897,7 +4086,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 373
+      "source_line": 374
     },
     {
       "auth": "bearer",
@@ -3928,7 +4117,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 374
+      "source_line": 375
     },
     {
       "auth": "bearer",
@@ -3987,7 +4176,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 366
+      "source_line": 367
     },
     {
       "auth": "agent-signature",
@@ -4056,7 +4245,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 143
+      "source_line": 144
     },
     {
       "auth": "agent-signature",
@@ -4086,7 +4275,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 152
+      "source_line": 153
     },
     {
       "auth": "agent-signature",
@@ -4173,7 +4362,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 153
+      "source_line": 154
     },
     {
       "auth": "agent-enrolment-token",
@@ -4283,7 +4472,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 132
+      "source_line": 133
     },
     {
       "auth": "agent-signature",
@@ -4347,7 +4536,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 135
+      "source_line": 136
     },
     {
       "auth": "agent-signature",
@@ -4422,7 +4611,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 147
+      "source_line": 148
     },
     {
       "auth": "agent-signature",
@@ -4504,7 +4693,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 139
+      "source_line": 140
     },
     {
       "auth": "bearer",
@@ -4563,7 +4752,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 351
+      "source_line": 352
     },
     {
       "auth": "bearer",
@@ -4602,7 +4791,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 355
+      "source_line": 356
     },
     {
       "auth": "bearer",
@@ -4638,7 +4827,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 352
+      "source_line": 353
     },
     {
       "auth": "bearer",
@@ -4671,7 +4860,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 354
+      "source_line": 355
     },
     {
       "auth": "bearer",
@@ -4706,7 +4895,7 @@
         }
       ],
       "section": "Audit record integrity",
-      "source_line": 196
+      "source_line": 197
     },
     {
       "auth": "none",
@@ -4792,7 +4981,7 @@
         }
       ],
       "section": "Sign-in discovery",
-      "source_line": 117
+      "source_line": 118
     },
     {
       "auth": "none",
@@ -4810,7 +4999,7 @@
         }
       ],
       "section": "Sign-in discovery",
-      "source_line": 103
+      "source_line": 104
     },
     {
       "auth": "none",
@@ -4861,7 +5050,7 @@
         }
       ],
       "section": "Sign-in discovery",
-      "source_line": 109
+      "source_line": 110
     },
     {
       "auth": "bearer",
@@ -4886,7 +5075,7 @@
         }
       ],
       "section": "The caller's own identity",
-      "source_line": 180
+      "source_line": 181
     },
     {
       "auth": "bearer",
@@ -4950,7 +5139,7 @@
         }
       ],
       "section": "The caller's own identity",
-      "source_line": 184
+      "source_line": 185
     },
     {
       "auth": "bearer",
@@ -4983,7 +5172,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 237
+      "source_line": 238
     },
     {
       "auth": "bearer",
@@ -5102,7 +5291,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 238
+      "source_line": 239
     },
     {
       "auth": "bearer",
@@ -5133,7 +5322,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 240
+      "source_line": 241
     },
     {
       "auth": "bearer",
@@ -5176,7 +5365,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 239
+      "source_line": 240
     },
     {
       "auth": "bearer",
@@ -5242,7 +5431,464 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 243
+      "source_line": 244
+    },
+    {
+      "auth": "bearer",
+      "display_token": true,
+      "handler": "templateHandler.List",
+      "method": "GET",
+      "min_role": "viewer",
+      "note": "Writes are admin-only, where a policy is operator-writable. A policy can only ever refuse more than it did; a template also supplies values and decides whether the requester may set the subject, and that last one is the difference between a template and a way to get a certificate for somebody else's name.",
+      "path": "/api/v1/certificate-templates",
+      "responses": [
+        {
+          "status": 200,
+          "shape": "object",
+          "keys": [
+            {
+              "name": "data",
+              "type": "CertificateTemplate[]",
+              "go_type": "[]*CertificateTemplate",
+              "required": false
+            },
+            {
+              "name": "total",
+              "type": "any",
+              "required": false
+            }
+          ]
+        },
+        {
+          "status": 500
+        }
+      ],
+      "section": "Certificate templates",
+      "source_line": 441
+    },
+    {
+      "auth": "bearer",
+      "display_token": false,
+      "handler": "templateHandler.Create",
+      "method": "POST",
+      "min_role": "admin",
+      "note": "",
+      "path": "/api/v1/certificate-templates",
+      "request": {
+        "name": "TemplateInput",
+        "doc": "TemplateInput is what a caller may set on a certificate template. Narrow, rather than binding store.CertificateTemplate. Binding the model is what let a caller choose a policy's identifier and assert when it was written, and it is the same mistake here with twenty-eight columns instead of eight. Identity, authorship, timestamps and the version counter are not the caller's to set. The binding tags carry the CHECK constraints migration 036 put on the table. Without them an unknown subject_mode reaches PostgreSQL and comes back as a raw SQLSTATE 23514, which tells an operator nothing about which value they should have sent.",
+        "fields": [
+          {
+            "name": "slug",
+            "type": "string",
+            "go_type": "string",
+            "required": true,
+            "constraint": "maximum 63"
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "go_type": "string",
+            "required": true
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
+            "name": "is_enabled",
+            "type": "boolean",
+            "go_type": "*bool",
+            "required": false,
+            "doc": "IsEnabled is a pointer so omitting it leaves the column's default of true, rather than a Go zero value quietly creating every template disabled."
+          },
+          {
+            "name": "ca_account_id",
+            "type": "string",
+            "go_type": "string",
+            "required": true
+          },
+          {
+            "name": "ca_profile",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
+            "name": "subject_mode",
+            "type": "string",
+            "go_type": "string",
+            "required": false,
+            "constraint": "one of SUPPLIED, CONSTRAINED"
+          },
+          {
+            "name": "subject_defaults",
+            "type": "object",
+            "go_type": "map[string]string",
+            "required": false
+          },
+          {
+            "name": "common_name_rule",
+            "type": "CommonNameRule",
+            "go_type": "store.CommonNameRule",
+            "required": false
+          },
+          {
+            "name": "san_rules",
+            "type": "SANRules",
+            "go_type": "store.SANRules",
+            "required": false
+          },
+          {
+            "name": "allowed_key_types",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          },
+          {
+            "name": "rsa_min_bits",
+            "type": "integer",
+            "go_type": "int",
+            "required": false,
+            "constraint": "minimum 0"
+          },
+          {
+            "name": "rsa_max_bits",
+            "type": "integer",
+            "go_type": "int",
+            "required": false,
+            "constraint": "minimum 0"
+          },
+          {
+            "name": "ecdsa_curves",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          },
+          {
+            "name": "csr_required",
+            "type": "boolean",
+            "go_type": "bool",
+            "required": false
+          },
+          {
+            "name": "key_custody_required",
+            "type": "string",
+            "go_type": "string",
+            "required": false,
+            "constraint": "one of ANY, CERTPILOT, AGENT, EXTERNAL"
+          },
+          {
+            "name": "validity_days",
+            "type": "integer",
+            "go_type": "int",
+            "required": false,
+            "constraint": "minimum 0"
+          },
+          {
+            "name": "max_validity_days",
+            "type": "integer",
+            "go_type": "int",
+            "required": false,
+            "constraint": "minimum 0"
+          },
+          {
+            "name": "renew_before_days",
+            "type": "integer",
+            "go_type": "int",
+            "required": false,
+            "constraint": "minimum 1"
+          },
+          {
+            "name": "auto_renew",
+            "type": "boolean",
+            "go_type": "*bool",
+            "required": false
+          },
+          {
+            "name": "require_metadata",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          },
+          {
+            "name": "default_environment",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
+            "name": "default_team",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
+            "name": "default_tags",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          }
+        ]
+      },
+      "responses": [
+        {
+          "status": 201
+        },
+        {
+          "status": 400
+        },
+        {
+          "status": 500
+        }
+      ],
+      "section": "Certificate templates",
+      "source_line": 443
+    },
+    {
+      "auth": "bearer",
+      "display_token": false,
+      "handler": "templateHandler.Delete",
+      "method": "DELETE",
+      "min_role": "admin",
+      "note": "",
+      "path": "/api/v1/certificate-templates/:id",
+      "path_params": [
+        "id"
+      ],
+      "responses": [
+        {
+          "status": 200,
+          "shape": "object",
+          "keys": [
+            {
+              "name": "message",
+              "type": "string",
+              "required": false,
+              "value": "certificate template deleted"
+            }
+          ]
+        },
+        {
+          "status": 404
+        },
+        {
+          "status": 500
+        }
+      ],
+      "section": "Certificate templates",
+      "source_line": 445
+    },
+    {
+      "auth": "bearer",
+      "display_token": true,
+      "handler": "templateHandler.Get",
+      "method": "GET",
+      "min_role": "viewer",
+      "note": "",
+      "path": "/api/v1/certificate-templates/:id",
+      "path_params": [
+        "id"
+      ],
+      "responses": [
+        {
+          "status": 200
+        },
+        {
+          "status": 404
+        }
+      ],
+      "section": "Certificate templates",
+      "source_line": 442
+    },
+    {
+      "auth": "bearer",
+      "display_token": false,
+      "handler": "templateHandler.Update",
+      "method": "PUT",
+      "min_role": "admin",
+      "note": "",
+      "path": "/api/v1/certificate-templates/:id",
+      "path_params": [
+        "id"
+      ],
+      "request": {
+        "name": "TemplateInput",
+        "doc": "TemplateInput is what a caller may set on a certificate template. Narrow, rather than binding store.CertificateTemplate. Binding the model is what let a caller choose a policy's identifier and assert when it was written, and it is the same mistake here with twenty-eight columns instead of eight. Identity, authorship, timestamps and the version counter are not the caller's to set. The binding tags carry the CHECK constraints migration 036 put on the table. Without them an unknown subject_mode reaches PostgreSQL and comes back as a raw SQLSTATE 23514, which tells an operator nothing about which value they should have sent.",
+        "fields": [
+          {
+            "name": "slug",
+            "type": "string",
+            "go_type": "string",
+            "required": true,
+            "constraint": "maximum 63"
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "go_type": "string",
+            "required": true
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
+            "name": "is_enabled",
+            "type": "boolean",
+            "go_type": "*bool",
+            "required": false,
+            "doc": "IsEnabled is a pointer so omitting it leaves the column's default of true, rather than a Go zero value quietly creating every template disabled."
+          },
+          {
+            "name": "ca_account_id",
+            "type": "string",
+            "go_type": "string",
+            "required": true
+          },
+          {
+            "name": "ca_profile",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
+            "name": "subject_mode",
+            "type": "string",
+            "go_type": "string",
+            "required": false,
+            "constraint": "one of SUPPLIED, CONSTRAINED"
+          },
+          {
+            "name": "subject_defaults",
+            "type": "object",
+            "go_type": "map[string]string",
+            "required": false
+          },
+          {
+            "name": "common_name_rule",
+            "type": "CommonNameRule",
+            "go_type": "store.CommonNameRule",
+            "required": false
+          },
+          {
+            "name": "san_rules",
+            "type": "SANRules",
+            "go_type": "store.SANRules",
+            "required": false
+          },
+          {
+            "name": "allowed_key_types",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          },
+          {
+            "name": "rsa_min_bits",
+            "type": "integer",
+            "go_type": "int",
+            "required": false,
+            "constraint": "minimum 0"
+          },
+          {
+            "name": "rsa_max_bits",
+            "type": "integer",
+            "go_type": "int",
+            "required": false,
+            "constraint": "minimum 0"
+          },
+          {
+            "name": "ecdsa_curves",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          },
+          {
+            "name": "csr_required",
+            "type": "boolean",
+            "go_type": "bool",
+            "required": false
+          },
+          {
+            "name": "key_custody_required",
+            "type": "string",
+            "go_type": "string",
+            "required": false,
+            "constraint": "one of ANY, CERTPILOT, AGENT, EXTERNAL"
+          },
+          {
+            "name": "validity_days",
+            "type": "integer",
+            "go_type": "int",
+            "required": false,
+            "constraint": "minimum 0"
+          },
+          {
+            "name": "max_validity_days",
+            "type": "integer",
+            "go_type": "int",
+            "required": false,
+            "constraint": "minimum 0"
+          },
+          {
+            "name": "renew_before_days",
+            "type": "integer",
+            "go_type": "int",
+            "required": false,
+            "constraint": "minimum 1"
+          },
+          {
+            "name": "auto_renew",
+            "type": "boolean",
+            "go_type": "*bool",
+            "required": false
+          },
+          {
+            "name": "require_metadata",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          },
+          {
+            "name": "default_environment",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
+            "name": "default_team",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
+            "name": "default_tags",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          }
+        ]
+      },
+      "responses": [
+        {
+          "status": 200
+        },
+        {
+          "status": 400
+        },
+        {
+          "status": 404
+        },
+        {
+          "status": 500
+        }
+      ],
+      "section": "Certificate templates",
+      "source_line": 444
     },
     {
       "auth": "bearer",
@@ -5299,7 +5945,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 199
+      "source_line": 200
     },
     {
       "auth": "bearer",
@@ -5445,7 +6091,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 200
+      "source_line": 201
     },
     {
       "auth": "bearer",
@@ -5498,7 +6144,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 214
+      "source_line": 215
     },
     {
       "auth": "bearer",
@@ -5522,7 +6168,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 201
+      "source_line": 202
     },
     {
       "auth": "bearer",
@@ -5582,7 +6228,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 204
+      "source_line": 205
     },
     {
       "auth": "bearer",
@@ -5631,7 +6277,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 333
+      "source_line": 334
     },
     {
       "auth": "bearer",
@@ -5672,7 +6318,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 213
+      "source_line": 214
     },
     {
       "auth": "bearer",
@@ -5715,7 +6361,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 205
+      "source_line": 206
     },
     {
       "auth": "bearer",
@@ -5760,7 +6406,7 @@
         }
       ],
       "section": "Renewal queue",
-      "source_line": 304
+      "source_line": 305
     },
     {
       "auth": "bearer",
@@ -5837,7 +6483,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 212
+      "source_line": 213
     },
     {
       "auth": "bearer",
@@ -5881,7 +6527,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 326
+      "source_line": 327
     },
     {
       "auth": "bearer",
@@ -5953,7 +6599,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 327
+      "source_line": 328
     },
     {
       "auth": "bearer",
@@ -5990,7 +6636,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 328
+      "source_line": 329
     },
     {
       "auth": "bearer",
@@ -6056,7 +6702,7 @@
         }
       ],
       "section": "Renewal queue",
-      "source_line": 306
+      "source_line": 307
     },
     {
       "auth": "bearer",
@@ -6121,7 +6767,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 290
+      "source_line": 291
     },
     {
       "auth": "bearer",
@@ -6174,7 +6820,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 283
+      "source_line": 284
     },
     {
       "auth": "bearer",
@@ -6247,7 +6893,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 284
+      "source_line": 285
     },
     {
       "auth": "bearer",
@@ -6280,7 +6926,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 286
+      "source_line": 287
     },
     {
       "auth": "bearer",
@@ -6353,7 +6999,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 285
+      "source_line": 286
     },
     {
       "auth": "bearer",
@@ -6426,7 +7072,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 289
+      "source_line": 290
     },
     {
       "auth": "bearer",
@@ -6514,7 +7160,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 291
+      "source_line": 292
     },
     {
       "auth": "bearer",
@@ -6568,7 +7214,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 277
+      "source_line": 278
     },
     {
       "auth": "bearer",
@@ -6616,7 +7262,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 272
+      "source_line": 273
     },
     {
       "auth": "bearer",
@@ -6682,7 +7328,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 273
+      "source_line": 274
     },
     {
       "auth": "bearer",
@@ -6715,7 +7361,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 275
+      "source_line": 276
     },
     {
       "auth": "bearer",
@@ -6782,7 +7428,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 274
+      "source_line": 275
     },
     {
       "auth": "bearer",
@@ -6850,7 +7496,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 276
+      "source_line": 277
     },
     {
       "auth": "bearer",
@@ -6909,7 +7555,7 @@
         }
       ],
       "section": "Dashboard",
-      "source_line": 189
+      "source_line": 190
     },
     {
       "auth": "bearer",
@@ -6942,7 +7588,7 @@
         }
       ],
       "section": "Dashboard",
-      "source_line": 188
+      "source_line": 189
     },
     {
       "auth": "bearer",
@@ -6963,7 +7609,7 @@
         }
       ],
       "section": "Dashboard",
-      "source_line": 187
+      "source_line": 188
     },
     {
       "auth": "bearer",
@@ -7006,7 +7652,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 316
+      "source_line": 317
     },
     {
       "auth": "bearer",
@@ -7079,7 +7725,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 317
+      "source_line": 318
     },
     {
       "auth": "bearer",
@@ -7112,7 +7758,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 322
+      "source_line": 323
     },
     {
       "auth": "bearer",
@@ -7194,7 +7840,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 318
+      "source_line": 319
     },
     {
       "auth": "bearer",
@@ -7268,7 +7914,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 343
+      "source_line": 344
     },
     {
       "auth": "bearer",
@@ -7302,7 +7948,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 345
+      "source_line": 346
     },
     {
       "auth": "bearer",
@@ -7333,7 +7979,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 344
+      "source_line": 345
     },
     {
       "auth": "bearer",
@@ -7443,7 +8089,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 251
+      "source_line": 252
     },
     {
       "auth": "bearer",
@@ -7512,7 +8158,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 259
+      "source_line": 260
     },
     {
       "auth": "bearer",
@@ -7635,7 +8281,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 250
+      "source_line": 251
     },
     {
       "auth": "bearer",
@@ -7679,7 +8325,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 254
+      "source_line": 255
     },
     {
       "auth": "bearer",
@@ -7743,7 +8389,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 255
+      "source_line": 256
     },
     {
       "auth": "bearer",
@@ -7779,7 +8425,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 258
+      "source_line": 259
     },
     {
       "auth": "bearer",
@@ -7817,7 +8463,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 263
+      "source_line": 264
     },
     {
       "auth": "bearer",
@@ -7890,7 +8536,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 264
+      "source_line": 265
     },
     {
       "auth": "bearer",
@@ -7923,7 +8569,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 266
+      "source_line": 267
     },
     {
       "auth": "bearer",
@@ -7997,7 +8643,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 265
+      "source_line": 266
     },
     {
       "auth": "bearer",
@@ -8048,7 +8694,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 267
+      "source_line": 268
     },
     {
       "auth": "bearer",
@@ -8080,7 +8726,7 @@
         }
       ],
       "section": "Display Tokens",
-      "source_line": 399
+      "source_line": 400
     },
     {
       "auth": "bearer",
@@ -8142,7 +8788,7 @@
         }
       ],
       "section": "Display Tokens",
-      "source_line": 400
+      "source_line": 401
     },
     {
       "auth": "bearer",
@@ -8173,7 +8819,7 @@
         }
       ],
       "section": "Display Tokens",
-      "source_line": 401
+      "source_line": 402
     },
     {
       "auth": "bearer",
@@ -8192,7 +8838,7 @@
         }
       ],
       "section": "Live event stream",
-      "source_line": 173
+      "source_line": 174
     },
     {
       "auth": "bearer",
@@ -8221,7 +8867,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 244
+      "source_line": 245
     },
     {
       "auth": "bearer",
@@ -8239,7 +8885,7 @@
         }
       ],
       "section": "The caller's own identity",
-      "source_line": 179
+      "source_line": 180
     },
     {
       "auth": "bearer",
@@ -8277,7 +8923,7 @@
         }
       ],
       "section": "Custom metadata fields",
-      "source_line": 421
+      "source_line": 422
     },
     {
       "auth": "bearer",
@@ -8356,7 +9002,7 @@
         }
       ],
       "section": "Custom metadata fields",
-      "source_line": 422
+      "source_line": 423
     },
     {
       "auth": "bearer",
@@ -8395,7 +9041,7 @@
         }
       ],
       "section": "Custom metadata fields",
-      "source_line": 424
+      "source_line": 425
     },
     {
       "auth": "bearer",
@@ -8477,7 +9123,7 @@
         }
       ],
       "section": "Custom metadata fields",
-      "source_line": 423
+      "source_line": 424
     },
     {
       "auth": "bearer",
@@ -8520,7 +9166,7 @@
         }
       ],
       "section": "Notification channels",
-      "source_line": 408
+      "source_line": 409
     },
     {
       "auth": "bearer",
@@ -8600,7 +9246,7 @@
         }
       ],
       "section": "Notification channels",
-      "source_line": 409
+      "source_line": 410
     },
     {
       "auth": "bearer",
@@ -8634,7 +9280,7 @@
         }
       ],
       "section": "Notification channels",
-      "source_line": 411
+      "source_line": 412
     },
     {
       "auth": "bearer",
@@ -8714,7 +9360,7 @@
         }
       ],
       "section": "Notification channels",
-      "source_line": 410
+      "source_line": 411
     },
     {
       "auth": "bearer",
@@ -8760,7 +9406,7 @@
         }
       ],
       "section": "Notification channels",
-      "source_line": 414
+      "source_line": 415
     },
     {
       "auth": "bearer",
@@ -8810,7 +9456,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 217
+      "source_line": 218
     },
     {
       "auth": "bearer",
@@ -8882,7 +9528,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 218
+      "source_line": 219
     },
     {
       "auth": "bearer",
@@ -8913,7 +9559,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 227
+      "source_line": 228
     },
     {
       "auth": "bearer",
@@ -8937,7 +9583,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 224
+      "source_line": 225
     },
     {
       "auth": "bearer",
@@ -8974,7 +9620,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 232
+      "source_line": 233
     },
     {
       "auth": "bearer",
@@ -9042,7 +9688,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 231
+      "source_line": 232
     },
     {
       "auth": "bearer",
@@ -9078,7 +9724,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 233
+      "source_line": 234
     },
     {
       "auth": "bearer",
@@ -9109,7 +9755,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 225
+      "source_line": 226
     },
     {
       "auth": "bearer",
@@ -9136,7 +9782,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 226
+      "source_line": 227
     },
     {
       "auth": "bearer",
@@ -9191,7 +9837,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 234
+      "source_line": 235
     },
     {
       "auth": "bearer",
@@ -9241,7 +9887,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 223
+      "source_line": 224
     },
     {
       "auth": "bearer",
@@ -9268,7 +9914,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 228
+      "source_line": 229
     },
     {
       "auth": "bearer",
@@ -9301,7 +9947,7 @@
         }
       ],
       "section": "Policies",
-      "source_line": 427
+      "source_line": 428
     },
     {
       "auth": "bearer",
@@ -9374,7 +10020,7 @@
         }
       ],
       "section": "Policies",
-      "source_line": 429
+      "source_line": 430
     },
     {
       "auth": "bearer",
@@ -9405,7 +10051,7 @@
         }
       ],
       "section": "Policies",
-      "source_line": 431
+      "source_line": 432
     },
     {
       "auth": "bearer",
@@ -9429,7 +10075,7 @@
         }
       ],
       "section": "Policies",
-      "source_line": 428
+      "source_line": 429
     },
     {
       "auth": "bearer",
@@ -9505,7 +10151,7 @@
         }
       ],
       "section": "Policies",
-      "source_line": 430
+      "source_line": 431
     },
     {
       "auth": "bearer",
@@ -9537,7 +10183,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 337
+      "source_line": 338
     },
     {
       "auth": "bearer",
@@ -9556,7 +10202,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 341
+      "source_line": 342
     },
     {
       "auth": "bearer",
@@ -9607,7 +10253,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 338
+      "source_line": 339
     },
     {
       "auth": "bearer",
@@ -9674,7 +10320,7 @@
         }
       ],
       "section": "Renewal queue",
-      "source_line": 296
+      "source_line": 297
     },
     {
       "auth": "bearer",
@@ -9708,7 +10354,7 @@
         }
       ],
       "section": "Renewal queue",
-      "source_line": 301
+      "source_line": 302
     },
     {
       "auth": "bearer",
@@ -9744,7 +10390,7 @@
         }
       ],
       "section": "Renewal queue",
-      "source_line": 297
+      "source_line": 298
     },
     {
       "auth": "bearer",
@@ -9777,7 +10423,7 @@
         }
       ],
       "section": "Accounts",
-      "source_line": 388
+      "source_line": 389
     },
     {
       "auth": "bearer",
@@ -9860,7 +10506,7 @@
         }
       ],
       "section": "Accounts",
-      "source_line": 389
+      "source_line": 390
     },
     {
       "auth": "bearer",
@@ -9925,7 +10571,7 @@
         }
       ],
       "section": "Accounts",
-      "source_line": 390
+      "source_line": 391
     },
     {
       "auth": "bearer",
@@ -9969,7 +10615,7 @@
         }
       ],
       "section": "Accounts",
-      "source_line": 393
+      "source_line": 394
     },
     {
       "auth": "none",
