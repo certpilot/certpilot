@@ -61,6 +61,13 @@ CI checks it for staleness — so **run `make routes` after adding a route**.
 Only the second pass writes the file, so a failed run damages nothing.
 `docs/api-reference.md` stays here as the deeper per-resource guide.
 
+**That site vendors the pages in `docs/` too**, and is told to re-sync by
+`.github/workflows/docs-sync.yml` whenever one changes on `main` — so a page
+edited here is published within minutes rather than on the site's weekly cron.
+Adding a *new* page needs one line in the site's `PAGES` list and one in its
+sidebar; its sync fails loudly and names the file until both exist, which is
+the fix for eleven pages that sat unpublished because nothing checked.
+
 `core/engine/` holds the ten background engines: `pki` (CA health and issuer
 import), `renewal`, `discovery`, `ctlog`, `cloudsync`, `deploy`, `fleet`,
 `notifications`, `policy`, `posture`. They are started by `core/server` and
