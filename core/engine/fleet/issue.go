@@ -210,6 +210,9 @@ func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.Te
 	certPEM := string(resp.Certificate.CertificatePem)
 	holder := agent.ID
 	accountID := decision.Account.ID
+	templateID := decision.Template.ID
+	templateVersion := decision.Template.Version
+	grantID := grant.ID
 
 	cert := &store.Certificate{
 		FingerprintSHA256: info.FingerprintSHA256,
@@ -226,9 +229,13 @@ func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.Te
 		// The core does not renew this one. The host holds the key, so only the
 		// host can rotate it, and a sweep that tried would fail on every
 		// attempt forever.
-		AutoRenew:        false,
-		RenewalLeadDays:  decision.RenewBeforeDays,
-		CAAccountID:      &accountID,
+		AutoRenew:       false,
+		RenewalLeadDays: decision.RenewBeforeDays,
+		CAAccountID:     &accountID,
+		TemplateID:      &templateID,
+		TemplateVersion: &templateVersion,
+		// Which binding permitted it, which the human path has no equivalent of yet.
+		GrantID:          &grantID,
 		CertificatePEM:   &certPEM,
 		DiscoveredVia:    "AGENT",
 		KeyCustody:       store.KeyCustodyAgent,

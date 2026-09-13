@@ -306,6 +306,35 @@ func TestAnUpdateKeepsEveryFieldItWasGiven(t *testing.T) {
 		cert.Tags = []string{"one", "two"}
 		cert.KeyCustody = KeyCustodyAgent
 
+		// Provenance, which renewal reloads to ask whether the rules a
+		// certificate was issued under still hold. The UPDATE COALESCEs these,
+		// so a writer passing nil must preserve them rather than erase them —
+		// asserted below after this round trip.
+		// Real rows, because PostgreSQL has foreign keys on two of the three
+		// and a fabricated uuid is refused. The in-memory store would have
+		// accepted one, which is the divergence this suite exists to find.
+		accountID := caAccountFor(t, s, "provenance CA")
+		template := fullTemplate("provenance", accountID)
+		if err := s.CreateCertificateTemplate(ctx, template); err != nil {
+			t.Fatal(err)
+		}
+		agentID := sampleAgentFor(t, s, "provenance-host")
+		grant := &TemplateGrant{
+			Name: "provenance grant", TemplateID: template.ID,
+			SubjectKind: GrantSubjectAgent, AgentID: &agentID,
+			Names: []string{"changed.example.com"}, IsEnabled: true,
+		}
+		if err := s.CreateTemplateGrant(ctx, grant); err != nil {
+			t.Fatal(err)
+		}
+
+		templateID := template.ID
+		templateVersion := template.Version
+		grantID := grant.ID
+		cert.TemplateID = &templateID
+		cert.TemplateVersion = &templateVersion
+		cert.GrantID = &grantID
+
 		if err := s.UpdateCertificate(ctx, cert); err != nil {
 			t.Fatalf("update: %v", err)
 		}
@@ -340,6 +369,44 @@ func TestAnUpdateKeepsEveryFieldItWasGiven(t *testing.T) {
 		}
 		if got.NotAfter == nil || !got.NotAfter.UTC().Truncate(time.Second).Equal(later) {
 			t.Errorf("not_after was dropped by the update: wrote %v, read back %v", later, got.NotAfter)
+		}
+
+		for _, field := range []struct {
+			name string
+			want string
+			have *string
+		}{
+			{"template_id", templateID, got.TemplateID},
+			{"grant_id", grantID, got.GrantID},
+		} {
+			if field.have == nil || *field.have != field.want {
+				t.Errorf("%s was dropped by the update: wrote %v, read back %v",
+					field.name, field.want, field.have)
+			}
+		}
+		if got.TemplateVersion == nil || *got.TemplateVersion != templateVersion {
+			t.Errorf("template_version was dropped by the update: wrote %d, read back %v",
+				templateVersion, got.TemplateVersion)
+		}
+
+		// And a writer that carries no provenance must not erase it. Renewal
+		// builds its record from a gateway response; verification from a probe.
+		// Either one assigning nil here would lose which rules a certificate
+		// was issued under, which is the one field whose purpose is to still be
+		// true later.
+		cert.TemplateID, cert.TemplateVersion, cert.GrantID = nil, nil, nil
+		if err := s.UpdateCertificate(ctx, cert); err != nil {
+			t.Fatalf("partial update: %v", err)
+		}
+		got, err = s.GetCertificate(ctx, cert.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.TemplateID == nil || *got.TemplateID != templateID {
+			t.Errorf("an update carrying no template_id erased the stored one: %v", got.TemplateID)
+		}
+		if got.TemplateVersion == nil || *got.TemplateVersion != templateVersion {
+			t.Errorf("an update carrying no template_version erased the stored one: %v", got.TemplateVersion)
 		}
 	})
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/certpilot/certpilot/core/engine/deploy"
+	"github.com/certpilot/certpilot/core/engine/policy"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/store"
@@ -22,16 +23,24 @@ type Executor struct {
 	pluginMgr *pluginmgr.Manager
 	keyring   *secrets.Keyring
 	broker    *events.Broker
+	// policyEng is what makes a rule change reach certificates that already
+	// exist. This is the only component that touches every managed certificate
+	// on a timer; without it, tightening a policy governs only certificates
+	// that have not been issued yet. May be nil, in which case renewal behaves
+	// as it did before and says so.
+	policyEng *policy.Engine
 }
 
 // NewExecutor creates a new renewal executor. The broker may be nil, in which
 // case no events are published.
-func NewExecutor(s store.Store, pm *pluginmgr.Manager, kr *secrets.Keyring, broker *events.Broker) *Executor {
+func NewExecutor(s store.Store, pm *pluginmgr.Manager, kr *secrets.Keyring, broker *events.Broker,
+	policyEng *policy.Engine) *Executor {
 	return &Executor{
 		store:     s,
 		pluginMgr: pm,
 		keyring:   kr,
 		broker:    broker,
+		policyEng: policyEng,
 	}
 }
 
@@ -104,12 +113,30 @@ func (e *Executor) RenewCertificate(ctx context.Context, certID string) (*store.
 	// expected to stop serving.
 	previousFingerprint := cert.FingerprintSHA256
 
+	// What the rules in force *today* say this should be, rather than what the
+	// row happens to hold. Before this, renewal re-signed whatever a
+	// certificate already was: an RSA-1024 certificate imported in 2023 renewed
+	// as RSA-1024 in 2031, on schedule, quietly, showing green.
+	//
+	// Renewal generates the key — RenewCertificateRequest carries no CSR — so
+	// raising a key floor is something it can actually act on rather than only
+	// report.
+	shape := e.conformance(ctx, cert)
+	// A renewal is an issuance, so the record moves to the version that
+	// governed it. Only when there was a template to judge against: nil here
+	// must not erase what is stored, which is what the UPDATE's COALESCE is for.
+	if shape.TemplateVersion != nil {
+		cert.TemplateVersion = shape.TemplateVersion
+	}
+
 	renewReq := &providerv1.RenewCertificateRequest{
 		ProviderCertificateId: cert.SerialNumber,
-		Domains:               append([]string{cert.CommonName}, cert.SANs...),
-		KeyType:               cert.KeyType,
-		KeySize:               int32(cert.KeySize),
-		ProviderConfig:        providerConfig,
+		// Deduplicated: an issued certificate carries its common name as a SAN
+		// too, and sending both produced a certificate listing the same name twice.
+		Domains:        shape.Domains,
+		KeyType:        shape.KeyType,
+		KeySize:        int32(shape.KeySize),
+		ProviderConfig: providerConfig,
 	}
 	if cert.CertificatePEM != nil {
 		renewReq.CurrentCertificatePem = []byte(*cert.CertificatePEM)

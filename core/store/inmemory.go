@@ -393,9 +393,24 @@ func (m *MemoryStore) UpdateCertificate(ctx context.Context, cert *Certificate) 
 	// replaces the stored one, an absent key leaves it alone. No read path
 	// populates this field, so without the second half every ordinary update
 	// would destroy the key.
-	if stored.PrivateKeyEncrypted == nil {
-		if prev, ok := m.certificates[cert.ID]; ok {
+	if prev, ok := m.certificates[cert.ID]; ok {
+		if stored.PrivateKeyEncrypted == nil {
 			stored.PrivateKeyEncrypted = prev.PrivateKeyEncrypted
+		}
+		// The same rule for provenance, and for the same reason: renewal builds
+		// its record from a gateway response and verification from a probe, so
+		// neither carries which rules the certificate was issued under. Without
+		// this the in-memory store forgets on the first renewal and PostgreSQL
+		// does not — the exact kind of divergence the conformance suite exists
+		// to find, and it found this one.
+		if stored.TemplateID == nil {
+			stored.TemplateID = prev.TemplateID
+		}
+		if stored.TemplateVersion == nil {
+			stored.TemplateVersion = prev.TemplateVersion
+		}
+		if stored.GrantID == nil {
+			stored.GrantID = prev.GrantID
 		}
 	}
 	m.certificates[cert.ID] = stored

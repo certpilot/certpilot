@@ -229,6 +229,22 @@ type Certificate struct {
 	// KeyHolderAgentID is which host, when the answer is AGENT.
 	KeyHolderAgentID *string `json:"key_holder_agent_id,omitempty"`
 
+	// TemplateID and TemplateVersion are the rules this was issued under.
+	//
+	// Renewal reloads the template and asks whether they still hold, which is
+	// the only way a policy change reaches certificates that already exist. The
+	// version is recorded separately because a template's rules change and the
+	// record of which version governed a particular issuance must not: "this
+	// certificate violates its template" is unanswerable without "... which has
+	// been edited twice since".
+	//
+	// Null on anything discovered, imported, or issued before templates
+	// existed, which is most of an inventory. That is a fact rather than a gap.
+	TemplateID      *string `json:"template_id,omitempty"`
+	TemplateVersion *int    `json:"template_version,omitempty"`
+	// GrantID is which binding permitted it, when one did.
+	GrantID *string `json:"grant_id,omitempty"`
+
 	// RenewalScheduledAt is when this certificate should next be renewed,
 	// whoever decided it. Nil means nobody has been told anything and the lead
 	// time applies.

@@ -137,7 +137,12 @@ func NewServer(ctx context.Context, cfg *config.CoreConfig, dbConnStr string) (*
 	// pasted its certificate in by hand.
 	caImporter := pki.NewImporter(st, pm, keyring, broker)
 	chainResolver := pki.NewChainResolver(st)
-	renewalExec := renewal.NewExecutor(st, pm, keyring, broker)
+	// Declared here rather than further down because renewal needs it. That is
+	// the point of this change: the sweep is the only component that touches
+	// every managed certificate on a timer, so it is the only place a policy
+	// change can reach an estate that already exists.
+	policyEng := policy.NewEngine(st)
+	renewalExec := renewal.NewExecutor(st, pm, keyring, broker, policyEng)
 	// The sweep finds what is due and enqueues it; the queue runs it. Both
 	// safe on every replica: enqueues collide on a partial unique index and
 	// claims use FOR UPDATE SKIP LOCKED, so nothing here needs a leader — and
@@ -149,7 +154,6 @@ func NewServer(ctx context.Context, cfg *config.CoreConfig, dbConnStr string) (*
 	// notices when a CA pulls a window forward, which during a mass revocation
 	// is the only automated warning anybody gets.
 	ariPoller := renewal.NewARIPoller(st, pm, keyring, broker)
-	policyEng := policy.NewEngine(st)
 	// The scanner publishes progress so a range scan is visible while it runs,
 	// not only once it is over.
 	scanner := discovery.NewScanner(st, discovery.WithBroker(broker))

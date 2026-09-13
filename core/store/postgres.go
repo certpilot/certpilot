@@ -106,7 +106,8 @@ const certificateColumns = `id, fingerprint_sha256, common_name,
 		coalesce(posture_verdict, ''), coalesce(posture_summary, ''),
 		coalesce(posture_requirements, '[]'::jsonb),
 		quantum_readiness_score, quantum_assessed_at,
-	revoked_at, revocation_reason, coalesce(revoked_by, '')`
+	revoked_at, revocation_reason, coalesce(revoked_by, ''),
+		template_id, template_version, grant_id`
 
 // scanCertificate reads one row of certificateColumns.
 func scanCertificate(row pgx.Row) (*Certificate, error) {
@@ -128,6 +129,7 @@ func scanCertificate(row pgx.Row) (*Certificate, error) {
 		&cert.PostureVerdict, &cert.PostureSummary, &postureJSON,
 		&cert.QuantumReadinessScore, &cert.QuantumAssessedAt,
 		&cert.RevokedAt, &cert.RevocationReason, &cert.RevokedBy,
+		&cert.TemplateID, &cert.TemplateVersion, &cert.GrantID,
 	)
 	if err != nil {
 		return nil, err
@@ -274,10 +276,11 @@ func (s *PostgresStore) CreateCertificate(ctx context.Context, cert *Certificate
 			deployment_target_id, private_key_encrypted, certificate_pem, chain_pem,
 			discovered_via, environment, team, tags, created_by,
 			key_custody, key_holder_agent_id, metadata,
-			revoked_at, revocation_reason, revoked_by
+			revoked_at, revocation_reason, revoked_by,
+			template_id, template_version, grant_id
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-			$25, $26, $27, $28, $29, $30
+			$25, $26, $27, $28, $29, $30, $31, $32, $33
 		) RETURNING id, created_at, updated_at
 	`
 	// The revocation columns are written here even though revocation itself
@@ -299,6 +302,7 @@ func (s *PostgresStore) CreateCertificate(ctx context.Context, cert *Certificate
 		cert.DiscoveredVia, nullIfEmpty(cert.Environment), cert.Team, tagsJSON, cert.CreatedBy,
 		custodyOrDefault(cert), cert.KeyHolderAgentID, metadataJSON(cert.Metadata),
 		cert.RevokedAt, cert.RevocationReason, cert.RevokedBy,
+		cert.TemplateID, cert.TemplateVersion, cert.GrantID,
 	).Scan(&cert.ID, &cert.CreatedAt, &cert.UpdatedAt)
 }
 
@@ -364,7 +368,17 @@ func (s *PostgresStore) UpdateCertificate(ctx context.Context, cert *Certificate
 			certificate_pem = $21, chain_pem = $22, environment = $23, team = $24, tags = $25,
 			private_key_encrypted = COALESCE($26::text, private_key_encrypted),
 			key_custody = $27, key_holder_agent_id = $28,
-			metadata = COALESCE($29::jsonb, metadata), updated_at = now()
+			metadata = COALESCE($29::jsonb, metadata),
+			-- COALESCE for the same reason as the two above. Provenance is set
+			-- once, at issuance, and every other writer builds a partial record:
+			-- renewal from a gateway response, verification from a probe, the
+			-- ARI poller from a CA's advice. Any of them assigning nil here
+			-- would erase which rules a certificate was issued under, and that
+			-- is the one field whose whole purpose is to still be true later.
+			template_id = COALESCE($30::uuid, template_id),
+			template_version = COALESCE($31::integer, template_version),
+			grant_id = COALESCE($32::uuid, grant_id),
+			updated_at = now()
 		WHERE id = $1
 	`
 	// COALESCE, because both directions were wrong before.
@@ -391,6 +405,7 @@ func (s *PostgresStore) UpdateCertificate(ctx context.Context, cert *Certificate
 		// unconditionally would wipe an operator's cost centre every time a
 		// certificate renewed itself.
 		nullableMetadata(cert.Metadata),
+		cert.TemplateID, cert.TemplateVersion, cert.GrantID,
 	)
 	return err
 }

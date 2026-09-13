@@ -1556,9 +1556,12 @@ in front of a person's request and a host's. Grants stopped carrying
 certificate shape and went back to being permission, which closed the bypass
 that let an agent obtain what a `BLOCK` policy would have refused a person.
 
-Left: the renewal sweep, which still consults nothing, and a console view —
-`agent_grants` has been API-only since migration 020, and a control nobody can
-see is a control nobody reviews.
+Renewal re-evaluates too, which is what makes a rule change reach an estate
+that already exists rather than only governing certificates that do not exist
+yet.
+
+Left: a console view. `agent_grants` has been API-only since migration 020, and
+a control nobody can see is a control nobody reviews.
 
 ### Phase 13 — X.509 shape and CA profiles
 
@@ -1681,10 +1684,12 @@ Tracked honestly rather than quietly:
   PostgreSQL-only change the schema carries no external-platform coupling
   either: all 38 migrations apply to a stock PostgreSQL 17 server with no
   prelude, and `TestNoMigrationDependsOnSupabase` keeps it that way
-- Policy is evaluated on issuance, not renewal. The renewal sweep re-signs
-  whatever a certificate already is, from the row, and consults neither a policy
-  nor a template — so tightening a rule changes what may be requested tomorrow
-  and nothing about the estate already issued
+- ~~Policy is evaluated on issuance, not renewal~~ — **closed.** The sweep
+  reloads the template and the floor, and renews *into* conformance where it can:
+  a certificate issued at RSA-2048 under a floor since raised to 4096 comes back
+  at 4096. What renewal cannot fix — a name outside a narrowed suffix rule
+  cannot be dropped — is reported rather than refused, because an expired
+  certificate is a worse outcome than a non-conforming one
 - The conformance suite covers the store's constraint, round-trip and queue
   behaviour against both implementations, and the two classes only PostgreSQL
   can exhibit. It does not yet cover discovery, CT, cloud sync or the
