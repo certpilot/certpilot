@@ -3,7 +3,6 @@ package store
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -1904,16 +1903,41 @@ const (
 	KeyCustodyExternal = "EXTERNAL"
 )
 
-// AgentGrant is what a host is allowed to ask for.
+// Subject kinds for TemplateGrant.SubjectKind.
+const (
+	// GrantSubjectAgent is a host, by id or by the labels its enrolment token
+	// carried. What every grant was before grants covered anyone else.
+	GrantSubjectAgent = "AGENT"
+	GrantSubjectRole  = "ROLE"
+	GrantSubjectTeam  = "TEAM"
+	GrantSubjectUser  = "USER"
+)
+
+// TemplateGrant is permission to use a certificate template, and nothing else.
 //
-// The security question that matters, and getting it wrong is worse than not
-// having an agent at all. A credential that can request any name is a way to
-// obtain a certificate for the payroll system from a compromised web server,
-// signed by the organisation's own CA, looking exactly like every other
-// issuance in the log.
-type AgentGrant struct {
+// It used to be both halves of the problem. The top of this struct is *who may
+// ask*; everything about what the certificate looks like now lives on the
+// template it names — because a second, narrower rulebook reachable only by
+// agents is how a host came to be able to obtain a certificate the policy
+// engine would have refused a person.
+//
+// A grant narrows and never widens. Names here are a subset of what the
+// template permits, not an exception to it.
+//
+// Getting the name list wrong is worse than not having an agent at all: a
+// credential that can request any name is a way to obtain a certificate for the
+// payroll system from a compromised web server, signed by the organisation's
+// own CA, looking exactly like every other issuance in the log.
+type TemplateGrant struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+
+	// TemplateID is what this grant is permission for. Required: a grant that
+	// named no template would be permission for nothing in particular.
+	TemplateID string `json:"template_id"`
+
+	// SubjectKind says which of the four fields below identifies the holder.
+	SubjectKind string `json:"subject_kind"`
 
 	// AgentID targets one host. LabelSelector targets every agent carrying
 	// these labels — which come from the enrolment token rather than from the
@@ -1921,18 +1945,16 @@ type AgentGrant struct {
 	AgentID       *string           `json:"agent_id,omitempty"`
 	LabelSelector map[string]string `json:"label_selector,omitempty"`
 
+	// Role, Team and UserID are the human subjects. Before these existed, a
+	// person's request was bounded by the estate-wide floor and nothing else:
+	// any operator could request anything any policy permitted, from any CA
+	// account, for any name.
+	Role   *string `json:"role,omitempty"`
+	Team   *string `json:"team,omitempty"`
+	UserID *string `json:"user_id,omitempty"`
+
 	// Names permitted, as exact hostnames or single-level wildcards.
 	Names []string `json:"names"`
-
-	// CAAccountID is part of the grant rather than chosen by the agent: one
-	// that could pick its own issuer could pick the cheapest, the least logged,
-	// or the one with the widest trust.
-	CAAccountID string `json:"ca_account_id"`
-
-	MinKeySize      int      `json:"min_key_size"`
-	AllowedKeyTypes []string `json:"allowed_key_types"`
-	ValidityDays    int      `json:"validity_days"`
-	RenewBeforeDays int      `json:"renew_before_days"`
 
 	IsEnabled bool       `json:"is_enabled"`
 	RevokedAt *time.Time `json:"revoked_at,omitempty"`
@@ -1943,7 +1965,7 @@ type AgentGrant struct {
 }
 
 // Live reports whether this grant is currently permission for anything.
-func (g *AgentGrant) Live() bool {
+func (g *TemplateGrant) Live() bool {
 	return g != nil && g.IsEnabled && g.RevokedAt == nil
 }
 
@@ -1953,7 +1975,7 @@ func (g *AgentGrant) Live() bool {
 // on a grant with no agent cannot happen — the schema refuses it — because a
 // grant matching nothing would sit in the list looking like permission somebody
 // had given.
-func (g *AgentGrant) AppliesTo(agent *Agent) bool {
+func (g *TemplateGrant) AppliesTo(agent *Agent) bool {
 	if g == nil || agent == nil || !g.Live() {
 		return false
 	}
@@ -1977,7 +1999,7 @@ func (g *AgentGrant) AppliesTo(agent *Agent) bool {
 // `*.example.com` covers `a.example.com`, and deliberately covers neither
 // `a.b.example.com` nor `example.com`. Following the same rule certificates
 // follow is what makes a grant mean what the person who wrote it thinks.
-func (g *AgentGrant) Covers(name string) bool {
+func (g *TemplateGrant) Covers(name string) bool {
 	if g == nil || name == "" {
 		return false
 	}
@@ -2009,58 +2031,6 @@ func (g *AgentGrant) Covers(name string) bool {
 // is larger, so there is nothing for a grant to tighten here — which is
 // fortunate, because a grant cannot express a curve.
 const MinEllipticBits = 256
-
-// AllowsKey reports whether a key is of a permitted type and strong enough.
-//
-// The type is checked first, and MinKeySize is applied only to RSA. **Key sizes
-// are not comparable across algorithms**: a P-256 key is considerably stronger
-// than RSA-2048, and the integer 256 is smaller than 2048. One number compared
-// against both refuses the stronger key for being the smaller number, which is
-// how this was first written and what a test caught.
-//
-// So a grant's MinKeySize means RSA bits, elliptic keys are floored at the
-// smallest curve worth using, and a grant that wants to require P-384
-// specifically cannot say so — recorded as a known gap rather than papered over
-// with a number that means two different things.
-func (g *AgentGrant) AllowsKey(keyType string, keySize int) (bool, string) {
-	if g == nil {
-		return false, "no grant"
-	}
-
-	if len(g.AllowedKeyTypes) > 0 {
-		permitted := false
-		for _, allowed := range g.AllowedKeyTypes {
-			if strings.EqualFold(allowed, keyType) {
-				permitted = true
-				break
-			}
-		}
-		if !permitted {
-			return false, fmt.Sprintf("this grant permits %s and the request carries %s",
-				strings.Join(g.AllowedKeyTypes, ", "), keyType)
-		}
-	}
-
-	switch strings.ToUpper(keyType) {
-	case "RSA":
-		floor := g.MinKeySize
-		if floor < 2048 {
-			// Nothing below this is worth signing, whatever a grant written
-			// years ago happens to say.
-			floor = 2048
-		}
-		if keySize < floor {
-			return false, fmt.Sprintf("this grant requires at least %d-bit RSA and the request carries %d",
-				floor, keySize)
-		}
-	default:
-		if keySize < MinEllipticBits {
-			return false, fmt.Sprintf("an elliptic key must be at least %d bits and the request carries %d",
-				MinEllipticBits, keySize)
-		}
-	}
-	return true, ""
-}
 
 // ── Custom metadata ────────────────────────────────────────
 

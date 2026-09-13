@@ -15,6 +15,7 @@ import (
 
 	"github.com/certpilot/certpilot/core/engine/deploy"
 	"github.com/certpilot/certpilot/core/engine/fleet"
+	"github.com/certpilot/certpilot/core/engine/policy"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/server/middleware"
@@ -41,16 +42,8 @@ const (
 	// a quarter of an hour, rare enough that a thousand agents are twelve
 	// requests a second between them.
 	defaultHeartbeatSeconds = 300
-	// defaultMinKeySize is the floor a grant applies when its author did not
-	// pick one. 256 is a P-256 key; the same number would be indefensible for
-	// RSA, which is why AllowsKey compares against what the request actually
-	// carries rather than against a single global minimum.
-	defaultMinKeySize = 256
-	// defaultRenewBeforeDays is how much life must remain before a host may ask
-	// for a replacement.
-	defaultRenewBeforeDays = 30
-	minHeartbeatSeconds    = 30
-	maxHeartbeatSeconds    = 3600
+	minHeartbeatSeconds     = 30
+	maxHeartbeatSeconds     = 3600
 )
 
 // AgentHandler manages agents, the tokens that enrol them, and what they
@@ -71,12 +64,12 @@ type AgentHandler struct {
 
 // NewAgentHandler creates the handler.
 func NewAgentHandler(s store.Store, pm *pluginmgr.Manager, kr *secrets.Keyring,
-	broker *events.Broker, deployQueue *deploy.Queue) *AgentHandler {
+	broker *events.Broker, deployQueue *deploy.Queue, pe *policy.Engine) *AgentHandler {
 	return &AgentHandler{
 		store:       s,
 		broker:      broker,
 		inventory:   fleet.NewInventory(s, broker),
-		issuer:      fleet.NewIssuer(s, pm, kr, broker),
+		issuer:      fleet.NewIssuer(s, pm, kr, broker, pe),
 		installs:    fleet.NewInstalls(s, broker),
 		deployQueue: deployQueue,
 	}
@@ -764,7 +757,7 @@ func capitalise(s string) string {
 
 // ListGrants handles GET /api/v1/agent-grants.
 func (h *AgentHandler) ListGrants(c *gin.Context) {
-	grants, err := h.store.ListAgentGrants(c.Request.Context())
+	grants, err := h.store.ListTemplateGrants(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -780,16 +773,26 @@ func (h *AgentHandler) ListGrants(c *gin.Context) {
 }
 
 type grantRequest struct {
-	Name          string            `json:"name" binding:"required"`
+	Name string `json:"name" binding:"required"`
+
+	// TemplateID is what this grant is permission for, by slug or by uuid.
+	//
+	// Everything a grant used to carry about the certificate itself —
+	// ca_account_id, min_key_size, allowed_key_types, validity_days,
+	// renew_before_days — lives on the template now. A second rulebook
+	// reachable only by agents is how a host came to be able to obtain a
+	// certificate the policy engine would have refused a person.
+	TemplateID string `json:"template_id" binding:"required"`
+
+	// SubjectKind defaults to AGENT, which is what every grant was.
+	SubjectKind   string            `json:"subject_kind" binding:"omitempty,oneof=AGENT ROLE TEAM USER"`
 	AgentID       string            `json:"agent_id"`
 	LabelSelector map[string]string `json:"label_selector"`
-	Names         []string          `json:"names" binding:"required"`
-	CAAccountID   string            `json:"ca_account_id" binding:"required"`
+	Role          string            `json:"role"`
+	Team          string            `json:"team"`
+	UserID        string            `json:"user_id"`
 
-	MinKeySize      int      `json:"min_key_size"`
-	AllowedKeyTypes []string `json:"allowed_key_types"`
-	ValidityDays    int      `json:"validity_days"`
-	RenewBeforeDays int      `json:"renew_before_days"`
+	Names []string `json:"names" binding:"required"`
 }
 
 // CreateGrant handles POST /api/v1/agent-grants.
@@ -804,10 +807,12 @@ func (h *AgentHandler) CreateGrant(c *gin.Context) {
 		return
 	}
 
-	if req.AgentID == "" && len(req.LabelSelector) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "a grant needs either agent_id or label_selector — one that targets nothing would sit in the list looking like permission somebody had given",
-		})
+	kind := req.SubjectKind
+	if kind == "" {
+		kind = store.GrantSubjectAgent
+	}
+	if err := grantNamesASubject(kind, req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -839,7 +844,10 @@ func (h *AgentHandler) CreateGrant(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.store.GetCAAccount(c.Request.Context(), req.CAAccountID); err != nil {
+	// Resolved rather than trusted, and by slug as well as by id, because a
+	// pipeline naming `internal-mtls` should not have to carry a uuid.
+	template, err := h.resolveTemplate(c.Request.Context(), req.TemplateID)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -850,34 +858,31 @@ func (h *AgentHandler) CreateGrant(c *gin.Context) {
 		}
 	}
 
-	grant := &store.AgentGrant{
-		Name:            strings.TrimSpace(req.Name),
-		LabelSelector:   req.LabelSelector,
-		Names:           names,
-		CAAccountID:     req.CAAccountID,
-		MinKeySize:      req.MinKeySize,
-		AllowedKeyTypes: req.AllowedKeyTypes,
-		ValidityDays:    req.ValidityDays,
-		RenewBeforeDays: req.RenewBeforeDays,
-		IsEnabled:       true,
+	grant := &store.TemplateGrant{
+		Name:          strings.TrimSpace(req.Name),
+		TemplateID:    template.ID,
+		SubjectKind:   kind,
+		LabelSelector: req.LabelSelector,
+		Names:         names,
+		IsEnabled:     true,
 	}
 	if req.AgentID != "" {
 		grant.AgentID = &req.AgentID
 	}
-	if grant.MinKeySize <= 0 {
-		grant.MinKeySize = defaultMinKeySize
+	if v := strings.TrimSpace(req.Role); v != "" {
+		grant.Role = &v
 	}
-	if len(grant.AllowedKeyTypes) == 0 {
-		grant.AllowedKeyTypes = []string{"ECDSA", "RSA", "Ed25519"}
+	if v := strings.TrimSpace(req.Team); v != "" {
+		grant.Team = &v
 	}
-	if grant.RenewBeforeDays <= 0 {
-		grant.RenewBeforeDays = defaultRenewBeforeDays
+	if req.UserID != "" {
+		grant.UserID = &req.UserID
 	}
 
 	actor, _ := actorOf(c)
 	grant.CreatedBy = actor
 
-	if err := h.store.CreateAgentGrant(c.Request.Context(), grant); err != nil {
+	if err := h.store.CreateTemplateGrant(c.Request.Context(), grant); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -892,7 +897,7 @@ func (h *AgentHandler) CreateGrant(c *gin.Context) {
 }
 
 // grantMessage says what was just permitted, in the terms it will be used in.
-func grantMessage(grant *store.AgentGrant) string {
+func grantMessage(grant *store.TemplateGrant) string {
 	// Rendered rather than printed. Go's map formatting produced
 	// "map[env:prod tier:web]" in a sentence meant for a person.
 	who := "every agent labelled " + labelText(grant.LabelSelector)
@@ -907,7 +912,7 @@ func grantMessage(grant *store.AgentGrant) string {
 // RevokeGrant handles DELETE /api/v1/agent-grants/:id.
 func (h *AgentHandler) RevokeGrant(c *gin.Context) {
 	actor, _ := actorOf(c)
-	if err := h.store.RevokeAgentGrant(c.Request.Context(), c.Param("id"), actor); err != nil {
+	if err := h.store.RevokeTemplateGrant(c.Request.Context(), c.Param("id"), actor); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
@@ -959,4 +964,48 @@ func (h *AgentHandler) RequestCertificate(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"data": issued})
+}
+
+// grantNamesASubject refuses a grant that targets nothing.
+//
+// One that matched nothing would sit in the list looking like permission
+// somebody had given, which is the same defect whichever kind of subject it
+// claims to name. The schema enforces this too; refusing here means an operator
+// gets a sentence rather than a constraint name.
+func grantNamesASubject(kind string, req grantRequest) error {
+	switch kind {
+	case store.GrantSubjectAgent:
+		if req.AgentID == "" && len(req.LabelSelector) == 0 {
+			return fmt.Errorf(
+				"an AGENT grant needs either agent_id or label_selector — one that targets " +
+					"nothing would sit in the list looking like permission somebody had given")
+		}
+	case store.GrantSubjectRole:
+		if strings.TrimSpace(req.Role) == "" {
+			return fmt.Errorf("a ROLE grant needs a role")
+		}
+	case store.GrantSubjectTeam:
+		if strings.TrimSpace(req.Team) == "" {
+			return fmt.Errorf("a TEAM grant needs a team")
+		}
+	case store.GrantSubjectUser:
+		if req.UserID == "" {
+			return fmt.Errorf("a USER grant needs a user_id")
+		}
+	default:
+		return fmt.Errorf("subject_kind %q is not one of AGENT, ROLE, TEAM, USER", kind)
+	}
+	return nil
+}
+
+// resolveTemplate accepts a slug or a uuid.
+func (h *AgentHandler) resolveTemplate(ctx context.Context, ref string) (*store.CertificateTemplate, error) {
+	if t, err := h.store.GetCertificateTemplate(ctx, ref); err == nil {
+		return t, nil
+	}
+	t, err := h.store.GetCertificateTemplateBySlug(ctx, ref)
+	if err != nil {
+		return nil, fmt.Errorf("no certificate template named %q for this grant to permit", ref)
+	}
+	return t, nil
 }

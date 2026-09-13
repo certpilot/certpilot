@@ -8,8 +8,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
-	"net"
-	"strings"
 	"testing"
 
 	"github.com/certpilot/certpilot/core/store"
@@ -60,13 +58,17 @@ func TestARequestMustBeSignedByTheKeyItContains(t *testing.T) {
 	}
 }
 
-// TestARequestToBecomeAnAuthorityIsRefused.
+// TestARequestToBecomeAnAuthorityIsVisibleToTheCaller.
 //
-// A correct CA ignores CSR extensions and builds its own template — which is
-// what the gateways here do. But "the code downstream is careful" is a hope
-// about code that may be a third-party gateway next year, not a control. So a
-// request asking for CA:TRUE is refused rather than silently stripped.
-func TestARequestToBecomeAnAuthorityIsRefused(t *testing.T) {
+// The refusal moved. It used to live in this package and applied to agents
+// only, so the identical CSR submitted by a person through the API reached the
+// gateway unchecked — a control in one of two places, which is the shape of
+// defect this whole line of work exists to remove. It is in the resolver now,
+// and every issuance path goes through that.
+//
+// What is still this package's business is that parsing surfaces the ask at
+// all, because a decision cannot refuse what it cannot see.
+func TestARequestToBecomeAnAuthorityIsVisibleToTheCaller(t *testing.T) {
 	basicConstraints, err := asn1.Marshal(struct {
 		IsCA       bool `asn1:"optional"`
 		MaxPathLen int  `asn1:"optional,default:-1"`
@@ -74,16 +76,14 @@ func TestARequestToBecomeAnAuthorityIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	csr := csrFor(t, "site.example.com", []string{"site.example.com"}, []pkix.Extension{
-		{Id: oidBasicConstraints, Critical: true, Value: basicConstraints},
-	})
-
-	_, err = parseCSR(csr)
-	if err == nil {
-		t.Fatal("a request for a CA certificate must be refused")
+	csr, err := parseCSR(csrFor(t, "site.example.com", []string{"site.example.com"}, []pkix.Extension{
+		{Id: asn1.ObjectIdentifier{2, 5, 29, 19}, Critical: true, Value: basicConstraints},
+	}))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
 	}
-	if !strings.Contains(err.Error(), "never an authority") {
-		t.Fatalf("the refusal should say why: %v", err)
+	if !csr.RequestsCA {
+		t.Error("a request for basicConstraints CA:TRUE was parsed without noticing")
 	}
 
 	// keyCertSign, which is the same ask by another route.
@@ -91,11 +91,14 @@ func TestARequestToBecomeAnAuthorityIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	csr = csrFor(t, "site.example.com", []string{"site.example.com"}, []pkix.Extension{
-		{Id: oidKeyUsage, Critical: true, Value: usage},
-	})
-	if _, err := parseCSR(csr); err == nil {
-		t.Fatal("a request for keyCertSign must be refused")
+	csr, err = parseCSR(csrFor(t, "site.example.com", []string{"site.example.com"}, []pkix.Extension{
+		{Id: asn1.ObjectIdentifier{2, 5, 29, 15}, Critical: true, Value: usage},
+	}))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !csr.RequestsKeyCertSign {
+		t.Error("a request for keyCertSign was parsed without noticing")
 	}
 }
 
@@ -122,31 +125,10 @@ func TestTheCommonNameIsAuthorisedToo(t *testing.T) {
 	}
 }
 
-// TestOnlyDNSNamesAreIssuedToAgents. IP, email, and URI names are validated
-// differently, and a grant has no way to express them.
-func TestOnlyDNSNamesAreIssuedToAgents(t *testing.T) {
-	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	der, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
-		Subject:     pkix.Name{CommonName: "site.example.com"},
-		DNSNames:    []string{"site.example.com"},
-		IPAddresses: []net.IP{net.ParseIP("10.0.0.1")},
-	}, key)
-	if err != nil {
-		t.Fatalf("csr: %v", err)
-	}
-	csr, err := x509.ParseCertificateRequest(der)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if _, err := requestedNames(csr); err == nil {
-		t.Fatal("an IP name must be refused")
-	}
-}
-
 // TestAGrantCoversWhatItSays — wildcard semantics matching certificates', so a
 // grant means what the person who wrote it thinks it means.
 func TestAGrantCoversWhatItSays(t *testing.T) {
-	grant := &store.AgentGrant{
+	grant := &store.TemplateGrant{
 		IsEnabled: true,
 		Names:     []string{"exact.example.com", "*.web.example.com"},
 	}
@@ -178,18 +160,18 @@ func TestAGrantOnlyAppliesToTheHostsItNames(t *testing.T) {
 	web := &store.Agent{ID: "agent-1", Status: store.AgentActive, Labels: map[string]string{"tier": "web", "env": "prod"}}
 	db := &store.Agent{ID: "agent-2", Status: store.AgentActive, Labels: map[string]string{"tier": "db", "env": "prod"}}
 
-	byID := &store.AgentGrant{IsEnabled: true, AgentID: &id}
+	byID := &store.TemplateGrant{IsEnabled: true, AgentID: &id}
 	if !byID.AppliesTo(web) || byID.AppliesTo(db) {
 		t.Fatal("an agent-targeted grant applies to exactly that agent")
 	}
 
-	byLabel := &store.AgentGrant{IsEnabled: true, LabelSelector: map[string]string{"tier": "web", "env": "prod"}}
+	byLabel := &store.TemplateGrant{IsEnabled: true, LabelSelector: map[string]string{"tier": "web", "env": "prod"}}
 	if !byLabel.AppliesTo(web) || byLabel.AppliesTo(db) {
 		t.Fatal("a label selector matches only agents carrying every label")
 	}
 
 	// Every key must match, not any.
-	partial := &store.AgentGrant{IsEnabled: true, LabelSelector: map[string]string{"tier": "web", "env": "staging"}}
+	partial := &store.TemplateGrant{IsEnabled: true, LabelSelector: map[string]string{"tier": "web", "env": "staging"}}
 	if partial.AppliesTo(web) {
 		t.Fatal("a selector with one wrong label must not match")
 	}
@@ -198,45 +180,5 @@ func TestAGrantOnlyAppliesToTheHostsItNames(t *testing.T) {
 	byID.IsEnabled = false
 	if byID.AppliesTo(web) {
 		t.Fatal("a disabled grant must apply to nothing")
-	}
-}
-
-// TestAGrantEnforcesAKeyFloorWithinAnAlgorithm.
-//
-// Key sizes are not comparable across algorithms: P-256 is considerably
-// stronger than RSA-2048 and the integer 256 is smaller than 2048. Comparing
-// one number against both refuses the stronger key for being the smaller
-// number, which is how this was first written.
-func TestAGrantEnforcesAKeyFloorWithinAnAlgorithm(t *testing.T) {
-	rsaOnly := &store.AgentGrant{
-		IsEnabled: true, MinKeySize: 2048, AllowedKeyTypes: []string{"RSA"},
-	}
-	if ok, _ := rsaOnly.AllowsKey("RSA", 4096); !ok {
-		t.Fatal("a 4096-bit RSA key should be allowed")
-	}
-	if ok, why := rsaOnly.AllowsKey("RSA", 1024); ok {
-		t.Fatal("a 1024-bit RSA key must be refused")
-	} else if !strings.Contains(why, "2048") {
-		t.Fatalf("the refusal should name the floor: %s", why)
-	}
-	// Type is checked before size, so the reason given is the real one.
-	if ok, why := rsaOnly.AllowsKey("ECDSA", 256); ok {
-		t.Fatal("a key type this grant does not permit must be refused")
-	} else if !strings.Contains(why, "permits RSA") {
-		t.Fatalf("the refusal should name what is permitted: %s", why)
-	}
-
-	// The case that mattered: an RSA-shaped floor must not refuse a curve.
-	both := &store.AgentGrant{
-		IsEnabled: true, MinKeySize: 2048, AllowedKeyTypes: []string{"RSA", "ECDSA"},
-	}
-	if ok, why := both.AllowsKey("ECDSA", 256); !ok {
-		t.Fatalf("P-256 is stronger than RSA-2048 and must not be refused for being 256: %s", why)
-	}
-
-	// And a grant cannot lower the RSA floor below what is worth signing.
-	sloppy := &store.AgentGrant{IsEnabled: true, MinKeySize: 512, AllowedKeyTypes: []string{"RSA"}}
-	if ok, _ := sloppy.AllowsKey("RSA", 1024); ok {
-		t.Fatal("no grant may permit a 1024-bit RSA key")
 	}
 }

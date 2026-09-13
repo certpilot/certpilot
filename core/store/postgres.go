@@ -4391,19 +4391,17 @@ func orEmptyFindings(v []Finding) []Finding {
 
 // ── What a host may ask for ─────────────────────────────────
 
-const agentGrantColumns = `id, name, agent_id, coalesce(label_selector, '{}'::jsonb),
-		coalesce(names, '[]'::jsonb), ca_account_id,
-		coalesce(min_key_size, 256), coalesce(allowed_key_types, '[]'::jsonb),
-		coalesce(validity_days, 0), coalesce(renew_before_days, 30),
+const templateGrantColumns = `id, name, template_id, subject_kind,
+		agent_id, coalesce(label_selector, '{}'::jsonb), role, team, user_id,
+		coalesce(names, '[]'::jsonb),
 		coalesce(is_enabled, true), revoked_at, revoked_by, created_by, created_at, updated_at`
 
-func scanAgentGrant(row pgx.Row) (*AgentGrant, error) {
-	g := &AgentGrant{}
-	var selectorJSON, namesJSON, keyTypesJSON []byte
-	err := row.Scan(&g.ID, &g.Name, &g.AgentID, &selectorJSON,
-		&namesJSON, &g.CAAccountID,
-		&g.MinKeySize, &keyTypesJSON,
-		&g.ValidityDays, &g.RenewBeforeDays,
+func scanTemplateGrant(row pgx.Row) (*TemplateGrant, error) {
+	g := &TemplateGrant{}
+	var selectorJSON, namesJSON []byte
+	err := row.Scan(&g.ID, &g.Name, &g.TemplateID, &g.SubjectKind,
+		&g.AgentID, &selectorJSON, &g.Role, &g.Team, &g.UserID,
+		&namesJSON,
 		&g.IsEnabled, &g.RevokedAt, &g.RevokedBy, &g.CreatedBy, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -4414,23 +4412,21 @@ func scanAgentGrant(row pgx.Row) (*AgentGrant, error) {
 	if len(namesJSON) > 0 {
 		_ = json.Unmarshal(namesJSON, &g.Names)
 	}
-	if len(keyTypesJSON) > 0 {
-		_ = json.Unmarshal(keyTypesJSON, &g.AllowedKeyTypes)
-	}
+	g.Names = orEmptyStrings(g.Names)
 	return g, nil
 }
 
-func (s *PostgresStore) ListAgentGrants(ctx context.Context) ([]*AgentGrant, error) {
+func (s *PostgresStore) ListTemplateGrants(ctx context.Context) ([]*TemplateGrant, error) {
 	rows, err := s.pool.Query(ctx,
-		"SELECT "+agentGrantColumns+" FROM public.agent_grants ORDER BY created_at DESC")
+		"SELECT "+templateGrantColumns+" FROM public.template_grants ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	out := []*AgentGrant{}
+	out := []*TemplateGrant{}
 	for rows.Next() {
-		g, err := scanAgentGrant(rows)
+		g, err := scanTemplateGrant(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -4439,16 +4435,16 @@ func (s *PostgresStore) ListAgentGrants(ctx context.Context) ([]*AgentGrant, err
 	return out, rows.Err()
 }
 
-func (s *PostgresStore) GetAgentGrant(ctx context.Context, id string) (*AgentGrant, error) {
-	g, err := scanAgentGrant(s.pool.QueryRow(ctx,
-		"SELECT "+agentGrantColumns+" FROM public.agent_grants WHERE id = $1", id))
+func (s *PostgresStore) GetTemplateGrant(ctx context.Context, id string) (*TemplateGrant, error) {
+	g, err := scanTemplateGrant(s.pool.QueryRow(ctx,
+		"SELECT "+templateGrantColumns+" FROM public.template_grants WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("grant %s not found", id)
 	}
 	return g, err
 }
 
-func (s *PostgresStore) CreateAgentGrant(ctx context.Context, g *AgentGrant) error {
+func (s *PostgresStore) CreateTemplateGrant(ctx context.Context, g *TemplateGrant) error {
 	selectorJSON, err := json.Marshal(orEmptyMap(g.LabelSelector))
 	if err != nil {
 		return err
@@ -4457,24 +4453,22 @@ func (s *PostgresStore) CreateAgentGrant(ctx context.Context, g *AgentGrant) err
 	if err != nil {
 		return err
 	}
-	keyTypesJSON, err := json.Marshal(orEmptyStrings(g.AllowedKeyTypes))
-	if err != nil {
-		return err
-	}
 	return s.pool.QueryRow(ctx, `
-		INSERT INTO public.agent_grants
-			(name, agent_id, label_selector, names, ca_account_id,
-			 min_key_size, allowed_key_types, validity_days, renew_before_days, is_enabled, created_by)
+		INSERT INTO public.template_grants
+			(name, template_id, subject_kind,
+			 agent_id, label_selector, role, team, user_id,
+			 names, is_enabled, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at, updated_at`,
-		g.Name, g.AgentID, selectorJSON, namesJSON, g.CAAccountID,
-		g.MinKeySize, keyTypesJSON, g.ValidityDays, g.RenewBeforeDays, g.IsEnabled, g.CreatedBy,
+		g.Name, g.TemplateID, g.SubjectKind,
+		g.AgentID, selectorJSON, g.Role, g.Team, g.UserID,
+		namesJSON, g.IsEnabled, g.CreatedBy,
 	).Scan(&g.ID, &g.CreatedAt, &g.UpdatedAt)
 }
 
-func (s *PostgresStore) RevokeAgentGrant(ctx context.Context, id string, revokedBy *string) error {
+func (s *PostgresStore) RevokeTemplateGrant(ctx context.Context, id string, revokedBy *string) error {
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE public.agent_grants
+		UPDATE public.template_grants
 		SET revoked_at = now(), revoked_by = $2, is_enabled = false, updated_at = now()
 		WHERE id = $1 AND revoked_at IS NULL`, id, revokedBy)
 	if err != nil {
@@ -4493,9 +4487,9 @@ func (s *PostgresStore) RevokeAgentGrant(ctx context.Context, id string, revoked
 // than by loading every grant and filtering in Go means an estate with a
 // thousand grants costs one indexed query per request rather than a thousand
 // comparisons.
-func (s *PostgresStore) GetGrantsForAgent(ctx context.Context, agentID string) ([]*AgentGrant, error) {
+func (s *PostgresStore) GetGrantsForAgent(ctx context.Context, agentID string) ([]*TemplateGrant, error) {
 	rows, err := s.pool.Query(ctx,
-		"SELECT "+agentGrantColumns+` FROM public.agent_grants g
+		"SELECT "+templateGrantColumns+` FROM public.template_grants g
 		 WHERE g.revoked_at IS NULL AND g.is_enabled
 		   AND (
 		     g.agent_id = $1
@@ -4513,9 +4507,9 @@ func (s *PostgresStore) GetGrantsForAgent(ctx context.Context, agentID string) (
 	}
 	defer rows.Close()
 
-	out := []*AgentGrant{}
+	out := []*TemplateGrant{}
 	for rows.Next() {
-		g, err := scanAgentGrant(rows)
+		g, err := scanTemplateGrant(rows)
 		if err != nil {
 			return nil, err
 		}

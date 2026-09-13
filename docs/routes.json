@@ -459,111 +459,6 @@
         }
       ]
     },
-    "AgentGrant": {
-      "name": "AgentGrant",
-      "doc": "AgentGrant is what a host is allowed to ask for. The security question that matters, and getting it wrong is worse than not having an agent at all. A credential that can request any name is a way to obtain a certificate for the payroll system from a compromised web server, signed by the organisation's own CA, looking exactly like every other issuance in the log.",
-      "fields": [
-        {
-          "name": "id",
-          "type": "string",
-          "go_type": "string",
-          "required": false
-        },
-        {
-          "name": "name",
-          "type": "string",
-          "go_type": "string",
-          "required": false
-        },
-        {
-          "name": "agent_id",
-          "type": "string",
-          "go_type": "*string",
-          "required": false,
-          "doc": "AgentID targets one host. LabelSelector targets every agent carrying these labels — which come from the enrolment token rather than from the agent, so a host cannot label itself into somebody else's grant."
-        },
-        {
-          "name": "label_selector",
-          "type": "object",
-          "go_type": "map[string]string",
-          "required": false
-        },
-        {
-          "name": "names",
-          "type": "string[]",
-          "go_type": "[]string",
-          "required": false,
-          "doc": "Names permitted, as exact hostnames or single-level wildcards."
-        },
-        {
-          "name": "ca_account_id",
-          "type": "string",
-          "go_type": "string",
-          "required": false,
-          "doc": "CAAccountID is part of the grant rather than chosen by the agent: one that could pick its own issuer could pick the cheapest, the least logged, or the one with the widest trust."
-        },
-        {
-          "name": "min_key_size",
-          "type": "integer",
-          "go_type": "int",
-          "required": false
-        },
-        {
-          "name": "allowed_key_types",
-          "type": "string[]",
-          "go_type": "[]string",
-          "required": false
-        },
-        {
-          "name": "validity_days",
-          "type": "integer",
-          "go_type": "int",
-          "required": false
-        },
-        {
-          "name": "renew_before_days",
-          "type": "integer",
-          "go_type": "int",
-          "required": false
-        },
-        {
-          "name": "is_enabled",
-          "type": "boolean",
-          "go_type": "bool",
-          "required": false
-        },
-        {
-          "name": "revoked_at",
-          "type": "timestamp",
-          "go_type": "*time.Time",
-          "required": false
-        },
-        {
-          "name": "revoked_by",
-          "type": "string",
-          "go_type": "*string",
-          "required": false
-        },
-        {
-          "name": "created_by",
-          "type": "string",
-          "go_type": "*string",
-          "required": false
-        },
-        {
-          "name": "created_at",
-          "type": "timestamp",
-          "go_type": "time.Time",
-          "required": false
-        },
-        {
-          "name": "updated_at",
-          "type": "timestamp",
-          "go_type": "time.Time",
-          "required": false
-        }
-      ]
-    },
     "AgentInstallation": {
       "name": "AgentInstallation",
       "doc": "AgentInstallation is one named place on one host that a certificate goes. The host's own view, kept beside the central one rather than instead of it. `CertificateDeployment` answers \"what is this certificate's state at that place\" in the same shape as every other target type, which is what makes an agent a deployment target like any other. This answers a question that only exists for agents: this machine has been configured to install a certificate nobody granted it, and nothing else in the system can see that. There is no command field this can be written *from*. ReloadCommand arrives from the host for display and travels in one direction only; a core that could set it would be a fleet-wide remote execution channel with a certificate manager on the front.",
@@ -3649,6 +3544,113 @@
         }
       ]
     },
+    "TemplateGrant": {
+      "name": "TemplateGrant",
+      "doc": "TemplateGrant is permission to use a certificate template, and nothing else. It used to be both halves of the problem. The top of this struct is *who may ask*; everything about what the certificate looks like now lives on the template it names — because a second, narrower rulebook reachable only by agents is how a host came to be able to obtain a certificate the policy engine would have refused a person. A grant narrows and never widens. Names here are a subset of what the template permits, not an exception to it. Getting the name list wrong is worse than not having an agent at all: a credential that can request any name is a way to obtain a certificate for the payroll system from a compromised web server, signed by the organisation's own CA, looking exactly like every other issuance in the log.",
+      "fields": [
+        {
+          "name": "id",
+          "type": "string",
+          "go_type": "string",
+          "required": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "go_type": "string",
+          "required": false
+        },
+        {
+          "name": "template_id",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "TemplateID is what this grant is permission for. Required: a grant that named no template would be permission for nothing in particular."
+        },
+        {
+          "name": "subject_kind",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "SubjectKind says which of the four fields below identifies the holder."
+        },
+        {
+          "name": "agent_id",
+          "type": "string",
+          "go_type": "*string",
+          "required": false,
+          "doc": "AgentID targets one host. LabelSelector targets every agent carrying these labels — which come from the enrolment token rather than from the agent, so a host cannot label itself into somebody else's grant."
+        },
+        {
+          "name": "label_selector",
+          "type": "object",
+          "go_type": "map[string]string",
+          "required": false
+        },
+        {
+          "name": "role",
+          "type": "string",
+          "go_type": "*string",
+          "required": false,
+          "doc": "Role, Team and UserID are the human subjects. Before these existed, a person's request was bounded by the estate-wide floor and nothing else: any operator could request anything any policy permitted, from any CA account, for any name."
+        },
+        {
+          "name": "team",
+          "type": "string",
+          "go_type": "*string",
+          "required": false
+        },
+        {
+          "name": "user_id",
+          "type": "string",
+          "go_type": "*string",
+          "required": false
+        },
+        {
+          "name": "names",
+          "type": "string[]",
+          "go_type": "[]string",
+          "required": false,
+          "doc": "Names permitted, as exact hostnames or single-level wildcards."
+        },
+        {
+          "name": "is_enabled",
+          "type": "boolean",
+          "go_type": "bool",
+          "required": false
+        },
+        {
+          "name": "revoked_at",
+          "type": "timestamp",
+          "go_type": "*time.Time",
+          "required": false
+        },
+        {
+          "name": "revoked_by",
+          "type": "string",
+          "go_type": "*string",
+          "required": false
+        },
+        {
+          "name": "created_by",
+          "type": "string",
+          "go_type": "*string",
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "go_type": "time.Time",
+          "required": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "go_type": "time.Time",
+          "required": false
+        }
+      ]
+    },
     "User": {
       "name": "User",
       "doc": "User is CertPilot's own record of a person who has signed in. The identity provider remains the authority on who somebody is; this is the authority on what they may do here. Roles used to come from a claim on the token, which meant that promoting a colleague required an administrator of the identity provider and took effect only when that person's token next refreshed — the wrong ownership for a team that runs the CA hierarchy but rarely runs Okta.",
@@ -3965,8 +3967,8 @@
           "keys": [
             {
               "name": "data",
-              "type": "AgentGrant[]",
-              "go_type": "[]*AgentGrant",
+              "type": "TemplateGrant[]",
+              "go_type": "[]*TemplateGrant",
               "required": false
             },
             {
@@ -4006,6 +4008,21 @@
             "required": true
           },
           {
+            "name": "template_id",
+            "type": "string",
+            "go_type": "string",
+            "required": true,
+            "doc": "TemplateID is what this grant is permission for, by slug or by uuid. Everything a grant used to carry about the certificate itself — ca_account_id, min_key_size, allowed_key_types, validity_days, renew_before_days — lives on the template now. A second rulebook reachable only by agents is how a host came to be able to obtain a certificate the policy engine would have refused a person."
+          },
+          {
+            "name": "subject_kind",
+            "type": "string",
+            "go_type": "string",
+            "required": false,
+            "constraint": "one of AGENT, ROLE, TEAM, USER",
+            "doc": "SubjectKind defaults to AGENT, which is what every grant was."
+          },
+          {
             "name": "agent_id",
             "type": "string",
             "go_type": "string",
@@ -4018,40 +4035,28 @@
             "required": false
           },
           {
+            "name": "role",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
+            "name": "team",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
+            "name": "user_id",
+            "type": "string",
+            "go_type": "string",
+            "required": false
+          },
+          {
             "name": "names",
             "type": "string[]",
             "go_type": "[]string",
             "required": true
-          },
-          {
-            "name": "ca_account_id",
-            "type": "string",
-            "go_type": "string",
-            "required": true
-          },
-          {
-            "name": "min_key_size",
-            "type": "integer",
-            "go_type": "int",
-            "required": false
-          },
-          {
-            "name": "allowed_key_types",
-            "type": "string[]",
-            "go_type": "[]string",
-            "required": false
-          },
-          {
-            "name": "validity_days",
-            "type": "integer",
-            "go_type": "int",
-            "required": false
-          },
-          {
-            "name": "renew_before_days",
-            "type": "integer",
-            "go_type": "int",
-            "required": false
           }
         ]
       },
@@ -4062,8 +4067,8 @@
           "keys": [
             {
               "name": "data",
-              "type": "AgentGrant",
-              "go_type": "store.AgentGrant",
+              "type": "TemplateGrant",
+              "go_type": "store.TemplateGrant",
               "required": false
             },
             {
@@ -4076,7 +4081,6 @@
         {
           "status": 400,
           "errors": [
-            "a grant needs either agent_id or label_selector — one that targets nothing would sit in the list looking like permission somebody had given",
             "a grant may not permit `*`. Any host holding it could obtain a certificate for any name your CA will sign — list the domains, or the wildcard beneath them",
             "a grant needs at least one name"
           ]
@@ -5673,6 +5677,9 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 409
         },
         {
           "status": 500

@@ -1539,13 +1539,57 @@ problem rather than a shipping one.
 - **Run the Azure Key Vault and F5 deployers against real hardware.** Both are
   written to published APIs and unit-tested against fakes, which is precisely
   the arrangement that let `sys/health` and `GetCAChain` ship broken
-- **Finish the policy rule types.** `key_type`, `naming` and `approval_required`
-  are accepted by the schema and do nothing, which is worse than rejecting them:
-  an operator can write a policy, see it saved, and believe it is enforced
 - **An approval queue for agent enrolment.** A leaked token currently yields a
   live agent rather than one waiting for somebody to say yes
-- **Java keystores, PKCS#12 and the Windows certificate store** in host
-  inventory. A JVM estate is invisible to the agent today
+
+---
+
+### Phase 12 — Certificate templates
+
+Issuance policy moves from the estate to the certificate. `policies` stays as
+the floor; a template says what one *kind* of certificate looks like, with the
+two dispositions a policy structurally cannot express — supply a value the
+requester may not touch, and pass one through that the requester decides.
+
+Built: the object and its store, and one resolver applying six precedence rungs
+in front of a person's request and a host's. Grants stopped carrying
+certificate shape and went back to being permission, which closed the bypass
+that let an agent obtain what a `BLOCK` policy would have refused a person.
+
+Left: the renewal sweep, which still consults nothing, and a console view —
+`agent_grants` has been API-only since migration 020, and a control nobody can
+see is a control nobody reviews.
+
+### Phase 13 — X.509 shape and CA profiles
+
+What CertPilot can enforce about the shape of a certificate, and what it can
+only verify afterwards. Key usage, extended key usage and extension
+passthrough; and carrying a native CA profile — a Vault role, an ACME profile,
+an AWS Private CA template ARN — through the gateway contract, which today has
+no field for one.
+
+The honest part is the limit. For a CA whose issuance CertPilot does not
+control, a template can select a profile and compare the certificate that comes
+back; it cannot dictate. Claiming otherwise would be a control that reports
+success while the CA does as it likes.
+
+### Phase 14 — Deploying to what people actually run
+
+The agent writes a certificate, validates the configuration and reloads the
+service. It cannot say which platforms that covers, and it writes only PEM.
+
+**Java keystores, PKCS#12 and the Windows certificate store.** A JVM estate is
+invisible today, in inventory and in deployment both. PKCS#12 first — Java 9
+made it the default keystore type, so it covers the modern JVM *and* the `.pfx`
+tooling; JKS is for the estate still on Java 8. The Windows store is filed
+separately because it is a port, not a format: there is no Windows build and
+`install.go` is POSIX throughout.
+
+**Named deployment profiles.** A profile is a path, a format, a validate
+command and a reload command — four fields over machinery that already exists.
+What is missing is the catalogue, and the documentation axis to go with it:
+every page in `docs/` is shaped like the software rather than like the reader,
+and none answers "I have forty nginx boxes and an F5".
 
 ---
 
@@ -1635,10 +1679,12 @@ Tracked honestly rather than quietly:
 - `migrations/001_initial_schema.sql` references `auth.users` and `auth.jwt()`
   and is now gone. The Go store layer is plain `pgx`, and as of the
   PostgreSQL-only change the schema carries no external-platform coupling
-  either: all 35 migrations apply to a stock PostgreSQL 17 server with no
+  either: all 38 migrations apply to a stock PostgreSQL 17 server with no
   prelude, and `TestNoMigrationDependsOnSupabase` keeps it that way
-- Policy is evaluated on issuance only, not renewal; `key_type`, `naming`, and
-  `approval_required` rule types are accepted by the schema but not implemented
+- Policy is evaluated on issuance, not renewal. The renewal sweep re-signs
+  whatever a certificate already is, from the row, and consults neither a policy
+  nor a template — so tightening a rule changes what may be requested tomorrow
+  and nothing about the estate already issued
 - The conformance suite covers the store's constraint, round-trip and queue
   behaviour against both implementations, and the two classes only PostgreSQL
   can exhibit. It does not yet cover discovery, CT, cloud sync or the
