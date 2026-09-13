@@ -14,17 +14,23 @@ const policies = useAsyncData<ListResponse<Policy>>((s) =>
 const policyList = computed(() => policies.data.value?.data ?? [])
 
 /**
- * Only these three rule types are evaluated by the engine
- * (core/engine/policy/engine.go). The schema's CHECK constraint also permits
- * key_type, naming, and approval_required, but nothing implements them — a
- * policy using one would silently never fire, which is worse than not being
- * able to create it.
+ * Every rule type the engine evaluates, and no others.
+ *
+ * This list used to be three long, with a note explaining that the schema also
+ * permitted key_type, naming and approval_required while nothing implemented
+ * them. Two of those now work. approval_required stays absent because there is
+ * still no approval workflow behind it, and the API no longer accepts one.
  */
 const RULE_TYPES = [
-  { value: 'key_size', label: 'Minimum key size', hint: 'Applies to RSA keys' },
-  { value: 'max_lifetime', label: 'Maximum lifetime', hint: 'Caps requested validity' },
+  { value: 'key_size', label: 'Minimum key size', hint: 'A floor per algorithm — RSA bits and ECDSA curve are set separately' },
+  { value: 'key_type', label: 'Allowed key types', hint: 'Which algorithms may be used at all' },
+  { value: 'max_lifetime', label: 'Lifetime bounds', hint: 'Caps requested validity, and can set a floor' },
   { value: 'ca_restriction', label: 'Allowed CA providers', hint: 'Restricts which gateways may issue' },
+  { value: 'naming', label: 'Naming rules', hint: 'Which names a certificate may carry, and how many' },
 ] as const
+
+/** The algorithms this build supports, from pkg/crypto. */
+const KEY_TYPES = ['RSA', 'ECDSA', 'Ed25519'] as const
 
 const SEVERITIES = [
   { value: 'INFO', label: 'Info', hint: 'Recorded on the request, allowed' },
@@ -49,12 +55,39 @@ function describeRule(policy: Policy): string {
   const cfg = parseDetails<Record<string, unknown>>(policy.rule_config)
   if (!cfg) return policy.rule_config || '—'
   switch (policy.rule_type) {
-    case 'key_size':
-      return `RSA keys must be at least ${cfg.min_key_size} bits`
-    case 'max_lifetime':
-      return `Validity must not exceed ${cfg.max_days} days`
+    case 'key_size': {
+      const parts: string[] = []
+      const rsa = cfg.rsa_min_bits ?? cfg.min_key_size
+      if (rsa) parts.push(`RSA at least ${rsa} bits`)
+      if (cfg.ecdsa_min_bits) parts.push(`ECDSA at least P-${cfg.ecdsa_min_bits}`)
+      return parts.join(', ') || policy.rule_config
+    }
+    case 'key_type': {
+      const allowed = cfg.allowed_key_types as string[] | undefined
+      const forbidden = cfg.forbidden_key_types as string[] | undefined
+      const parts: string[] = []
+      if (allowed?.length) parts.push(`Only ${allowed.join(', ')}`)
+      if (forbidden?.length) parts.push(`Never ${forbidden.join(', ')}`)
+      return parts.join(', ') || policy.rule_config
+    }
+    case 'max_lifetime': {
+      const parts: string[] = []
+      if (cfg.max_days) parts.push(`at most ${cfg.max_days} days`)
+      if (cfg.min_days) parts.push(`at least ${cfg.min_days} days`)
+      return parts.length ? `Validity ${parts.join(', ')}` : policy.rule_config
+    }
     case 'ca_restriction':
       return `May only be issued by: ${(cfg.allowed_providers as string[])?.join(', ')}`
+    case 'naming': {
+      const parts: string[] = []
+      const suffixes = cfg.allowed_suffixes as string[] | undefined
+      const forbidden = cfg.forbidden_patterns as string[] | undefined
+      if (suffixes?.length) parts.push(`names under ${suffixes.join(', ')}`)
+      if (forbidden?.length) parts.push(`never ${forbidden.join(', ')}`)
+      if (cfg.allow_wildcards === false) parts.push('no wildcards')
+      if (cfg.max_sans) parts.push(`at most ${cfg.max_sans} names`)
+      return parts.join(', ') || policy.rule_config
+    }
     default:
       return policy.rule_config
   }
@@ -73,22 +106,53 @@ const blankForm = () => ({
   domain_pattern: '*',
   is_enabled: true,
   min_key_size: '2048',
+  ecdsa_min_bits: '256',
+  allowed_key_types: ['RSA', 'ECDSA', 'Ed25519'] as string[],
   max_days: '90',
+  min_days: '',
   allowed_providers: 'acme',
+  allowed_suffixes: '',
+  forbidden_patterns: '',
+  allow_wildcards: true,
+  max_sans: '',
 })
+
+/** Comma-separated text to a trimmed list, dropping empties. */
+const toList = (s: string) => s.split(',').map((v) => v.trim()).filter(Boolean)
 const form = ref(blankForm())
 
 /** Builds the JSON `rule_config` the engine expects for the chosen rule type. */
 function buildRuleConfig(): string {
   switch (form.value.rule_type) {
     case 'key_size':
-      return JSON.stringify({ min_key_size: Number(form.value.min_key_size) })
+      // Both floors, because RSA bits and ECDSA curve bits are different units
+      // and one number cannot express a minimum for both.
+      return JSON.stringify({
+        rsa_min_bits: Number(form.value.min_key_size),
+        ecdsa_min_bits: Number(form.value.ecdsa_min_bits),
+      })
+    case 'key_type':
+      return JSON.stringify({ allowed_key_types: form.value.allowed_key_types })
     case 'max_lifetime':
-      return JSON.stringify({ max_days: Number(form.value.max_days) })
+      return JSON.stringify({
+        max_days: Number(form.value.max_days),
+        ...(form.value.min_days ? { min_days: Number(form.value.min_days) } : {}),
+      })
     case 'ca_restriction':
       return JSON.stringify({
-        allowed_providers: form.value.allowed_providers
-          .split(',').map((p) => p.trim()).filter(Boolean),
+        allowed_providers: toList(form.value.allowed_providers),
+      })
+    case 'naming':
+      return JSON.stringify({
+        ...(form.value.allowed_suffixes
+          ? { allowed_suffixes: toList(form.value.allowed_suffixes) } : {}),
+        ...(form.value.forbidden_patterns
+          ? { forbidden_patterns: toList(form.value.forbidden_patterns) } : {}),
+        // Sent only when it is the constraint being expressed: the engine reads
+        // an absent allow_wildcards as "not this policy's concern", so always
+        // sending false would make every naming rule ban wildcards.
+        ...(form.value.allow_wildcards ? {} : { allow_wildcards: false }),
+        ...(form.value.max_sans ? { max_sans: Number(form.value.max_sans) } : {}),
       })
   }
 }
@@ -294,25 +358,110 @@ async function removePolicy(policy: Policy) {
             </p>
           </div>
 
-          <div v-if="form.rule_type === 'key_size'" class="field">
-            <label class="label-micro" for="p-keysize">Minimum RSA key size (bits)</label>
-            <select id="p-keysize" v-model="form.min_key_size" class="select-console">
-              <option value="2048">2048</option>
-              <option value="3072">3072</option>
-              <option value="4096">4096</option>
-            </select>
-          </div>
+          <template v-if="form.rule_type === 'key_size'">
+            <div class="grid grid-cols-2 gap-3">
+              <div class="field">
+                <label class="label-micro" for="p-keysize">Minimum RSA key size</label>
+                <select id="p-keysize" v-model="form.min_key_size" class="select-console">
+                  <option value="2048">2048 bits</option>
+                  <option value="3072">3072 bits</option>
+                  <option value="4096">4096 bits</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="label-micro" for="p-ecdsa">Minimum ECDSA curve</label>
+                <select id="p-ecdsa" v-model="form.ecdsa_min_bits" class="select-console">
+                  <option value="256">P-256</option>
+                  <option value="384">P-384</option>
+                  <option value="521">P-521</option>
+                </select>
+              </div>
+            </div>
+            <p class="field-help">
+              Set separately because the numbers are not comparable: 256 is a strong
+              ECDSA key and a broken RSA one. Ed25519 has one size, so a floor cannot
+              apply to it — use an allowed key types rule to permit or forbid it.
+            </p>
+          </template>
 
-          <div v-else-if="form.rule_type === 'max_lifetime'" class="field">
-            <label class="label-micro" for="p-maxdays">Maximum validity (days)</label>
-            <input
-              id="p-maxdays" v-model="form.max_days" type="number" min="1" max="398"
-              class="input-console"
-            />
-            <p class="text-[11px] text-[color:var(--text-muted)] mt-1">
+          <template v-else-if="form.rule_type === 'key_type'">
+            <div class="field">
+              <span class="label-micro">Allowed key types</span>
+              <div class="flex gap-4 mt-1">
+                <label v-for="kt in KEY_TYPES" :key="kt" class="flex items-center gap-1.5">
+                  <input
+                    type="checkbox" :value="kt" v-model="form.allowed_key_types"
+                    class="accent-[color:var(--signal)]"
+                  />
+                  <span class="text-xs">{{ kt }}</span>
+                </label>
+              </div>
+              <p class="field-help">
+                Anything not ticked is refused. A request whose key type this build does
+                not recognise is refused too, rather than assumed acceptable.
+              </p>
+            </div>
+          </template>
+
+          <template v-else-if="form.rule_type === 'max_lifetime'">
+            <div class="grid grid-cols-2 gap-3">
+              <div class="field">
+                <label class="label-micro" for="p-maxdays">Maximum validity (days)</label>
+                <input
+                  id="p-maxdays" v-model="form.max_days" type="number" min="1" max="398"
+                  class="input-console"
+                />
+              </div>
+              <div class="field">
+                <label class="label-micro" for="p-mindays">Minimum (optional)</label>
+                <input
+                  id="p-mindays" v-model="form.min_days" type="number" min="1" max="398"
+                  placeholder="none" class="input-console"
+                />
+              </div>
+            </div>
+            <p class="field-help">
               Public TLS maximum is 200 days from March 2026, 100 from 2027, 47 from 2029.
             </p>
-          </div>
+          </template>
+
+          <template v-else-if="form.rule_type === 'naming'">
+            <div class="field">
+              <label class="label-micro" for="p-suffixes">Allowed suffixes</label>
+              <span class="field-help">Comma separated. Matched on a label boundary, so example.com does not admit evil-example.com.</span>
+              <input
+                id="p-suffixes" v-model="form.allowed_suffixes" type="text"
+                placeholder="example.com, corp.example.com" class="input-console"
+              />
+            </div>
+            <div class="field">
+              <label class="label-micro" for="p-forbidden">Forbidden patterns</label>
+              <span class="field-help">Comma separated. An exact name, or a leading *. wildcard.</span>
+              <input
+                id="p-forbidden" v-model="form.forbidden_patterns" type="text"
+                placeholder="*.internal, localhost" class="input-console"
+              />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="field">
+                <label class="label-micro" for="p-maxsans">Maximum names (optional)</label>
+                <input
+                  id="p-maxsans" v-model="form.max_sans" type="number" min="1"
+                  placeholder="unlimited" class="input-console"
+                />
+              </div>
+              <div class="field">
+                <span class="label-micro">Wildcards</span>
+                <label class="flex items-center gap-1.5 mt-1">
+                  <input
+                    type="checkbox" v-model="form.allow_wildcards"
+                    class="accent-[color:var(--signal)]"
+                  />
+                  <span class="text-xs">Allow *.name certificates</span>
+                </label>
+              </div>
+            </div>
+          </template>
 
           <div v-else class="field">
             <label class="label-micro" for="p-providers">Allowed providers</label>
