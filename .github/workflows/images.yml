@@ -3,8 +3,8 @@ name: Images
 # Every Dockerfile in this tree was unverified until this job existed, and one
 # of them could not have built: the frontend image copied nginx.conf from
 # outside its own build context. That is how they got there — nothing ever
-# tried. A job that builds all six on every pull request is the only thing that
-# keeps them from rotting back to the same state.
+# tried. A job that builds every one of them on each pull request is the only
+# thing that keeps them from rotting back to the same state.
 #
 # No runtime was available on the machine these were written on, so this job is
 # also where they were verified for the first time.
@@ -21,7 +21,6 @@ on:
       - '**/go.sum'
       - 'core/**'
       - 'agent/**'
-      - 'gateways/**'
       - 'pkg/**'
       - 'frontend/**'
       - 'migrations/**'
@@ -42,12 +41,6 @@ jobs:
         include:
           - name: core
             dockerfile: deploy/docker/core.Dockerfile
-          - name: gateway-selfsigned
-            dockerfile: deploy/docker/gateway-selfsigned.Dockerfile
-          - name: gateway-acme
-            dockerfile: deploy/docker/gateway-acme.Dockerfile
-          - name: gateway-vault
-            dockerfile: deploy/docker/gateway-vault.Dockerfile
           - name: agent
             dockerfile: deploy/docker/agent.Dockerfile
           - name: frontend
@@ -61,10 +54,15 @@ jobs:
       - name: Build ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
-          # The repository root for all six: this is a Go workspace and every
-          # module replaces ../pkg, so a context rooted at a module cannot
-          # resolve its own dependency. The frontend needs the root too, for
+          # The repository root: this is a Go workspace and core and agent both
+          # replace ../pkg, so a context rooted at a module cannot resolve its
+          # own dependency. The frontend needs the root too, for
           # deploy/docker/nginx.conf.
+          #
+          # The gateways used to be built here as well and no longer are. They
+          # are separate repositories publishing their own images, and each one
+          # builds from a context of its own module — which is what dropping the
+          # replace directives bought.
           context: .
           file: ${{ matrix.dockerfile }}
           push: false
@@ -113,8 +111,9 @@ jobs:
           # id — it passes "id -u" to the binary as arguments. The core ignores
           # them, falls back to its built-in development defaults, starts
           # listening and never exits, hanging the job until the six-hour
-          # timeout. The gateways exited non-zero instead, which made this check
-          # report success without ever reading a uid.
+          # timeout. The gateways, when they were built here, exited non-zero
+          # instead — which made this check report success without ever reading
+          # a uid.
           uid="$(timeout 30 docker run --rm --entrypoint id \
             certpilot/${{ matrix.name }}:ci -u)"
           if [ "$uid" = "0" ]; then
@@ -129,9 +128,24 @@ jobs:
   quickstart:
     name: quickstart stack
     runs-on: ubuntu-latest
+    # The gateway is pulled now rather than built, so this job needs to be able
+    # to read ghcr.io/certpilot/gateway-selfsigned. A package published by
+    # another repository in this organisation is not readable by this one's
+    # token unless the package is public or has granted access — so if this job
+    # fails on an unauthorized pull, that is the reason, and the fix is the
+    # package's visibility rather than anything in this file.
+    permissions:
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Bring it up
         run: docker compose -f deploy/docker-compose.quickstart.yml up -d --build

@@ -53,7 +53,7 @@ Everything below follows from three decisions.
 ## Decision 1 — a gateway is a process, not a package
 
 The core knows nothing about ACME, Vault, or any specific CA. It knows one gRPC
-contract, [`proto/provider/v1/provider.proto`](../proto/provider/v1/provider.proto),
+contract, [`provider.proto`](https://github.com/certpilot/certpilot-gateway-sdk/blob/main/proto/provider/v1/provider.proto),
 and it dials processes that implement it.
 
 This costs a network hop on every issuance. It buys four things:
@@ -200,9 +200,9 @@ wakes when something is due needs to wake often enough to notice.
 
 | Gateway | Port | Talks to |
 |:---|:---|:---|
-| [`gateways/acme`](../gateways/acme) | 9092 | Any RFC 8555 CA — Let's Encrypt, ZeroSSL, BuyPass, Google Trust Services, step-ca |
-| [`gateways/vault`](../gateways/vault) | 9093 | A HashiCorp Vault PKI secrets engine |
-| [`gateways/selfsigned`](../gateways/selfsigned) | 9091 | Nothing. Signs locally, for development |
+| [`certpilot-gateway-acme`](https://github.com/certpilot/certpilot-gateway-acme) | 9092 | Any RFC 8555 CA — Let's Encrypt, ZeroSSL, BuyPass, Google Trust Services, step-ca |
+| [`certpilot-gateway-vault`](https://github.com/certpilot/certpilot-gateway-vault) | 9093 | A HashiCorp Vault PKI secrets engine |
+| [`certpilot-gateway-selfsigned`](https://github.com/certpilot/certpilot-gateway-selfsigned) | 9091 | Nothing. Signs locally, for development |
 
 See [gateways/vault.md](gateways/vault.md) and
 [writing-a-gateway.md](writing-a-gateway.md).
@@ -377,9 +377,6 @@ pkg/                shared: config, crypto, x509util, secrets, grpckit,
                     agentapi, agentauth, webhooksig, generated protobuf
 core/               the control plane
 agent/              the host agent
-gateways/acme/      ACME gateway
-gateways/selfsigned/ development gateway
-gateways/vault/     Vault gateway
 ```
 
 `go build ./...` from the repository root does not work — it is a workspace,

@@ -3,7 +3,7 @@
 A gateway is a standalone process that teaches CertPilot how to talk to one
 certificate authority. The core knows nothing about ACME, Vault, or any specific
 CA — it only knows the gRPC contract in
-[`proto/provider/v1/provider.proto`](../proto/provider/v1/provider.proto).
+[`provider.proto`](https://github.com/certpilot/certpilot-gateway-sdk/blob/main/proto/provider/v1/provider.proto).
 
 That means a gateway can be written in any language with gRPC support, run
 anywhere the core can reach, and be deployed and upgraded independently.
@@ -80,12 +80,23 @@ finding out during an unattended renewal.
 
 ## A minimal Go gateway
 
+**In your own repository.** There is no longer a `gateways/` directory in the
+core to add one to — the three CertPilot maintains each live in a repository of
+their own, and so does yours. The contract is a published Go module and the
+channel is gRPC over the network, so nothing about being outside this project
+makes your gateway second-class.
+
 ```bash
-mkdir -p gateways/my-ca/cmd
-cd gateways/my-ca && go mod init github.com/certpilot/certpilot/gateways/my-ca
+mkdir -p certpilot-gateway-my-ca/cmd && cd certpilot-gateway-my-ca
+go mod init github.com/you/certpilot-gateway-my-ca
+go get github.com/certpilot/certpilot-gateway-sdk
 ```
 
-Add it to `go.work`, then implement the service:
+The `certpilot-gateway-` prefix is worth keeping: it is what makes a gateway
+findable on a GitHub search, and what lets this project point at community
+gateways without vouching for them.
+
+Then implement the service:
 
 ```go
 package myca
@@ -153,7 +164,7 @@ func (p *Provider) IssueCertificate(
 }
 ```
 
-Then the entrypoint. `pkg/gatewaysdk/grpckit` handles mTLS, health, and keepalives:
+Then the entrypoint. `grpckit` from the gateway SDK handles mTLS, health, and keepalives:
 
 ```go
 func main() {
@@ -242,10 +253,10 @@ core rather than just failing:
 - Whether unimplemented operations return `Unimplemented` rather than success
 - That `GetCapabilities` lists only what is actually implemented
 
-[`gateways/selfsigned`](../gateways/selfsigned) is the smallest complete
-example. [`gateways/acme`](../gateways/acme) is the realistic public-CA one:
+[`certpilot-gateway-selfsigned`](https://github.com/certpilot/certpilot-gateway-selfsigned) is the smallest complete
+example. [`certpilot-gateway-acme`](https://github.com/certpilot/certpilot-gateway-acme) is the realistic public-CA one:
 challenge solvers, persistent account state, External Account Binding, and RFC
-9773 renewal information. [`gateways/vault`](../gateways/vault) is the private-CA
+9773 renewal information. [`certpilot-gateway-vault`](https://github.com/certpilot/certpilot-gateway-vault) is the private-CA
 one, and the only gateway that implements `GetCAInfo` — worth reading for how it
 translates a CA's own refusals into sentences that name the cause, and for the
 live test suite that runs against a real Vault rather than a stub.
@@ -254,8 +265,39 @@ live test suite that runs against a real Vault rather than a stub.
 
 In rough order of demand: Microsoft AD CS, AWS Private CA, Google Cloud CAS,
 EJBCA, DigiCert, Sectigo, Entrust, and step-ca. HashiCorp Vault PKI is
-[built](../gateways/vault).
+[built](https://github.com/certpilot/certpilot-gateway-vault).
 
 The private-CA gateways are also where post-quantum issuance is possible today —
 AWS Private CA has had ML-DSA generally available since November 2025, while
 publicly trusted ACME CAs cannot issue post-quantum certificates at all yet.
+
+## Check it before you trust it
+
+```bash
+go run github.com/certpilot/certpilot-gateway-sdk/cmd/conformance@latest \
+    -addr localhost:9094 -insecure -domain test.example.com
+```
+
+The three gateways in this project are kept honest by live tests against a real
+Vault and a real ACME server, which you cannot run. This is the substitute: it
+makes real calls against your gateway and prints what it got wrong.
+
+The check to read first is `IssueCertificate (honours csr_pem)`. It generates a
+CSR, asks you to sign it, and compares the public key in the certificate you
+return against the key it asked you to sign. A gateway that generates its own
+key instead passes every test its author is likely to write, and fails much
+later as a certificate that does not match its private key.
+
+## Registering it with a core
+
+A gateway is reachable over the network, so the core does not need to have heard
+of it and there is no plugin registry to be listed in:
+
+```
+POST /api/v1/ca-accounts   { "gateway_addr": "gateway-my-ca.internal:9094", ... }
+```
+
+**What CertPilot will not do for you:** there is no discovery mechanism, and no
+compatibility testing of gateways this project does not build. The conformance
+probe above is what you have, and it is deliberately the same one the three
+in-house gateways run in their own CI.

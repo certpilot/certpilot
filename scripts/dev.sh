@@ -140,8 +140,20 @@ printf 'Applying migrations...\n'
 go run ./core/cmd/ --migrate
 
 # ── Services ──────────────────────────────────────────────────────────────────
-printf 'Starting self-signed gateway on :9091...\n'
-go run ./gateways/selfsigned/cmd/ --port=9091 --insecure &
+#
+# The self-signed gateway is fetched from its own repository rather than built
+# from this tree, which is where it used to live. Pinned to a release so this
+# script is reproducible and does not follow whatever is on somebody's main
+# branch — and left as `go run`, because the first run of the day should still
+# be one command and not a container pull.
+#
+# The first invocation downloads the module and can take a few seconds longer
+# than the wait loop below would suggest; that is why the loop waits 30s rather
+# than a couple.
+GATEWAY_SELFSIGNED="github.com/certpilot/certpilot-gateway-selfsigned/cmd@v0.2.0"
+
+printf 'Starting self-signed gateway on :9091 (%s)...\n' "$GATEWAY_SELFSIGNED"
+go run "$GATEWAY_SELFSIGNED" --port=9091 --insecure &
 gateway_pid=$!
 
 # Let the gateway bind before the core registers it as a plugin.
@@ -154,6 +166,8 @@ done
 
 if ! nc -z 127.0.0.1 9091 2>/dev/null; then
   echo 'The self-signed gateway did not start on port 9091.' >&2
+  echo 'It is fetched from the network now; if this is a first run on a machine' >&2
+  echo 'with no module cache and no connectivity, that is the likely reason.' >&2
   exit 1
 fi
 

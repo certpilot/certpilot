@@ -1,52 +1,38 @@
-.PHONY: test-store all build build-core build-agent build-gateways test test-frontend test-coverage lint proto proto-lint routes \
+.PHONY: test-store all build build-core build-agent test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
 # ── Variables ────────────────────────────────────────────
 GO   := go
-BUF  := buf
 BIN  := bin
 PKI  := .certpilot/pki
 STATE := .certpilot/state
 
 # Each component is its own Go module, so tooling has to iterate rather than
 # rely on a single ./... from the repository root.
-MODULES := pkg pkg/gatewaysdk pkg/agentsdk core gateways/selfsigned gateways/acme gateways/vault agent
+MODULES := pkg core agent
 
-CORE_BIN          := $(BIN)/certpilot-core
-GW_SELFSIGNED_BIN := $(BIN)/gateway-selfsigned
-GW_ACME_BIN       := $(BIN)/gateway-acme
-GW_VAULT_BIN      := $(BIN)/gateway-vault
-AGENT_BIN         := $(BIN)/certpilot-agent
+CORE_BIN  := $(BIN)/certpilot-core
+AGENT_BIN := $(BIN)/certpilot-agent
+
+# The gateways live in their own repositories now and are run from a release
+# rather than built from this tree. Pinned, so `make dev` is reproducible and
+# does not silently follow whatever is on somebody's main branch.
+GW_VERSION    := v0.2.0
+GW_SELFSIGNED := github.com/certpilot/certpilot-gateway-selfsigned/cmd@$(GW_VERSION)
+GW_ACME       := github.com/certpilot/certpilot-gateway-acme/cmd@$(GW_VERSION)
+GW_VAULT      := github.com/certpilot/certpilot-gateway-vault/cmd@$(GW_VERSION)
 
 # ── Build ────────────────────────────────────────────────
-all: proto build
+all: build
 
-build: build-core build-gateways build-agent
+build: build-core build-agent
 
 build-core:
 	$(GO) build -o $(CORE_BIN) ./core/cmd/
 
 build-agent:
 	$(GO) build -o $(AGENT_BIN) ./agent/cmd/
-
-build-gateways: build-gateway-selfsigned build-gateway-acme build-gateway-vault
-
-build-gateway-selfsigned:
-	$(GO) build -o $(GW_SELFSIGNED_BIN) ./gateways/selfsigned/cmd/
-
-build-gateway-acme:
-	$(GO) build -o $(GW_ACME_BIN) ./gateways/acme/cmd/
-
-build-gateway-vault:
-	$(GO) build -o $(GW_VAULT_BIN) ./gateways/vault/cmd/
-
-# ── Proto ────────────────────────────────────────────────
-proto:
-	$(BUF) generate
-
-proto-lint:
-	$(BUF) lint
 
 # ── Setup ────────────────────────────────────────────────
 
@@ -101,15 +87,19 @@ routes:
 run-core:
 	$(GO) run ./core/cmd/ --config=config.dev.yaml
 
+## The gateways are fetched from their own repositories at $(GW_VERSION).
+## Nothing here builds them, and nothing here can: the contract between this
+## core and any gateway is provider.v1 over the network, which is what makes a
+## gateway somebody else wrote as usable as these three.
 run-gateway-selfsigned:
-	$(GO) run ./gateways/selfsigned/cmd/ \
+	$(GO) run $(GW_SELFSIGNED) \
 		--port=9091 \
 		--tls-cert=$(PKI)/gateway.pem \
 		--tls-key=$(PKI)/gateway-key.pem \
 		--tls-ca=$(PKI)/ca.pem
 
 run-gateway-acme:
-	$(GO) run ./gateways/acme/cmd/ \
+	$(GO) run $(GW_ACME) \
 		--port=9092 \
 		--directory=letsencrypt-staging \
 		--state-dir=$(STATE)/acme \
@@ -121,7 +111,7 @@ run-gateway-acme:
 ## the AppRole or Kubernetes identity it issues under, so nothing here is
 ## authorised to sign anything.
 run-gateway-vault:
-	$(GO) run ./gateways/vault/cmd/ \
+	$(GO) run $(GW_VAULT) \
 		--port=9093 \
 		--address=$(VAULT_ADDR) \
 		--tls-cert=$(PKI)/gateway.pem \
@@ -193,11 +183,6 @@ lint:
 	@echo "==> scripts"
 	@$(GO) vet scripts/schemagen/main.go
 	@gofmt -l $(MODULES) scripts | grep . && echo "gofmt needed on the files above" && exit 1 || true
-	@## The three modules under pkg/ must not import each other. Nothing else
-	@## enforces it while they share a tree, and the seam closes the first time
-	@## somebody reaches across it.
-	@echo "==> sdk seam"
-	@./scripts/check-sdk-seam.sh
 	@## staticcheck when it is installed, because it catches a class go vet does
 	@## not: dead assignments, impossible conditions, and code nothing reaches.
 	@## Not a hard requirement, so a clone can be linted without installing it.
@@ -233,15 +218,14 @@ help:
 	@echo "  make generate-kek            Print a new CERTPILOT_KEK"
 	@echo ""
 	@echo "Build"
-	@echo "  make build                   Build all binaries"
-	@echo "  make proto                   Generate protobuf Go code"
+	@echo "  make build                   Build the core and the agent"
 	@echo ""
 	@echo "Run (one per terminal)"
 	@echo "  make dev                      Start the complete local development stack"
 	@echo "  make run-core                CertPilot Core        :8080"
-	@echo "  make run-gateway-selfsigned  Self-signed gateway   :9091"
-	@echo "  make run-gateway-acme        ACME gateway          :9092"
-	@echo "  make run-gateway-vault       Vault PKI gateway     :9093"
+	@echo "  make run-gateway-selfsigned  Self-signed gateway   :9091  (fetched, $(GW_VERSION))"
+	@echo "  make run-gateway-acme        ACME gateway          :9092  (fetched, $(GW_VERSION))"
+	@echo "  make run-gateway-vault       Vault PKI gateway     :9093  (fetched, $(GW_VERSION))"
 	@echo "  make run-frontend            Vue frontend          :3000"
 	@echo ""
 	@echo "Docs"

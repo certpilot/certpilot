@@ -1032,7 +1032,7 @@ process doing the replacing is on the far side of every firewall, with nobody
 watching.
 
 **Where a certificate goes, and above all what to run afterwards, is declared on
-the host.** There is no wire format for a destination in `pkg/agentsdk/agentapi`, and
+the host.** There is no wire format for a destination in `certpilot-agent-sdk/agentapi`, and
 that absence is the security argument of the step rather than an oversight: a
 core that could hand a host a command to run would be a fleet-wide remote
 execution channel with a certificate manager on the front of it, authenticated
