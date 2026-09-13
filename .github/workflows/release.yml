@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    name: publish ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    # images.yml builds these on every pull request and pushes none of them,
+    # which was the right shape while a gateway sat in the same tree and the
+    # compose files built everything from source. It is not any more: the
+    # gateways publish their own images from their own repositories, and a
+    # quickstart that pulls three of five services and builds the other two is
+    # a quickstart that still needs a Go toolchain to try.
+    #
+    # So building stays on the pull request, where it catches a broken
+    # Dockerfile before it merges, and publishing happens here.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core
+            dockerfile: deploy/docker/core.Dockerfile
+          - name: agent
+            dockerfile: deploy/docker/agent.Dockerfile
+          - name: frontend
+            dockerfile: deploy/docker/frontend.Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/certpilot/${{ matrix.name }}
+          # latest tracks main. A release tag also publishes its exact version,
+          # so a deployment can pin one and a quickstart can follow the other.
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+
+      - uses: docker/build-push-action@v6
+        with:
+          # The repository root, not the module: this is a Go workspace and
+          # core and agent both replace ../pkg. The frontend needs the root too,
+          # for deploy/docker/nginx.conf.
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Both architectures, because the machines people evaluate this on are
+          # increasingly not amd64 and an image that will not start says nothing
+          # useful about the product. Each Dockerfile cross-compiles from the
+          # build platform rather than being emulated — Go does that natively
+          # with CGO off, and QEMU would spend minutes producing an identical
+          # binary.
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

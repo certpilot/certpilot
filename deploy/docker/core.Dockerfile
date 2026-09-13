@@ -6,17 +6,23 @@
 # carries `replace github.com/certpilot/certpilot/pkg => ../pkg`, which a
 # context rooted at core/ cannot resolve. .dockerignore keeps the context to
 # source — and keeps .env and .certpilot/ out of the builder layer.
-FROM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 WORKDIR /src
 COPY . .
+
+# Set by buildx, one pair per platform being built. Declared after COPY so the
+# source layer is shared between architectures rather than invalidated per-arch.
+ARG TARGETOS
+ARG TARGETARCH
 
 # CGO off: the runtime stage is alpine and a cgo-linked binary would pick up a
 # glibc dependency the image does not have. -trimpath keeps the build machine's
 # paths out of the binary.
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" \
       -o /out/certpilot-core ./core/cmd/
 
 FROM alpine:3.20

@@ -11,14 +11,20 @@
 # The agent generates its identity key inside its own state directory and sends
 # no private key anywhere, so that directory must be a volume or enrolment is
 # repeated on every restart.
-FROM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 WORKDIR /src
 COPY . .
 
+# Set by buildx, one pair per platform being built. Declared after COPY so the
+# source layer is shared between architectures rather than invalidated per-arch.
+ARG TARGETOS
+ARG TARGETARCH
+
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" \
       -o /out/certpilot-agent ./agent/cmd/
 
 FROM alpine:3.20
