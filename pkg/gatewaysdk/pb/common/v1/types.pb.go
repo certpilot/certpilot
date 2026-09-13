@@ -567,9 +567,9 @@ const file_common_v1_types_proto_rawDesc = "" +
 	"\x19HEALTH_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15HEALTH_STATUS_HEALTHY\x10\x01\x12\x1a\n" +
 	"\x16HEALTH_STATUS_DEGRADED\x10\x02\x12\x1b\n" +
-	"\x17HEALTH_STATUS_UNHEALTHY\x10\x03B\xcd\x01\n" +
+	"\x17HEALTH_STATUS_UNHEALTHY\x10\x03B\xd5\x01\n" +
 	"\x17com.certpilot.common.v1B\n" +
-	"TypesProtoP\x01Z8github.com/certpilot/certpilot/pkg/pb/common/v1;commonv1\xa2\x02\x03CCX\xaa\x02\x13Certpilot.Common.V1\xca\x02\x13Certpilot\\Common\\V1\xe2\x02\x1fCertpilot\\Common\\V1\\GPBMetadata\xea\x02\x15Certpilot::Common::V1b\x06proto3"
+	"TypesProtoP\x01Z@github.com/certpilot/certpilot-gateway-sdk/pb/common/v1;commonv1\xa2\x02\x03CCX\xaa\x02\x13Certpilot.Common.V1\xca\x02\x13Certpilot\\Common\\V1\xe2\x02\x1fCertpilot\\Common\\V1\\GPBMetadata\xea\x02\x15Certpilot::Common::V1b\x06proto3"
 
 var (
 	file_common_v1_types_proto_rawDescOnce sync.Once

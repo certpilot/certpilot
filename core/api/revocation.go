@@ -7,10 +7,10 @@ import (
 	"sort"
 	"time"
 
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/server/middleware"
 	"github.com/certpilot/certpilot/core/store"
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
 	"github.com/gin-gonic/gin"
 )
 

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/certpilot/certpilot/pkg/agentapi"
+	"github.com/certpilot/certpilot-agent-sdk/agentapi"
 )
 
 // InstallCycle brings this host's destinations into line and tells the core.

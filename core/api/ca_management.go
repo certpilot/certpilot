@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/engine/pki"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/x509util"
 	"github.com/gin-gonic/gin"
 )
 

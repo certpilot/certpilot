@@ -4,7 +4,13 @@ go 1.26.6
 
 replace github.com/certpilot/certpilot/pkg => ../pkg
 
+replace github.com/certpilot/certpilot-gateway-sdk => ../pkg/gatewaysdk
+
+replace github.com/certpilot/certpilot-agent-sdk => ../pkg/agentsdk
+
 require (
+	github.com/certpilot/certpilot-agent-sdk v0.0.0-00010101000000-000000000000
+	github.com/certpilot/certpilot-gateway-sdk v0.0.0-00010101000000-000000000000
 	github.com/certpilot/certpilot/pkg v0.0.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -13,7 +19,7 @@ require (
 	github.com/lestrrat-go/httprc/v3 v3.0.6
 	github.com/lestrrat-go/jwx/v3 v3.2.0
 	golang.org/x/crypto v0.55.0
-	google.golang.org/grpc v1.83.0
+	google.golang.org/grpc v1.83.2
 )
 
 require (
@@ -50,7 +56,7 @@ require (
 	github.com/valyala/fastjson v1.6.10 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	golang.org/x/arch v0.22.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect

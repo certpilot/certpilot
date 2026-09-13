@@ -94,9 +94,9 @@ import (
     "context"
     "fmt"
 
-    commonv1 "github.com/certpilot/certpilot/pkg/pb/common/v1"
-    providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
-    "github.com/certpilot/certpilot/pkg/x509util"
+    commonv1 "github.com/certpilot/certpilot-gateway-sdk/pb/common/v1"
+    providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
+    "github.com/certpilot/certpilot-gateway-sdk/x509util"
     "google.golang.org/grpc/codes"
     "google.golang.org/grpc/status"
     "google.golang.org/protobuf/types/known/timestamppb"
@@ -153,7 +153,7 @@ func (p *Provider) IssueCertificate(
 }
 ```
 
-Then the entrypoint. `pkg/grpckit` handles mTLS, health, and keepalives:
+Then the entrypoint. `pkg/gatewaysdk/grpckit` handles mTLS, health, and keepalives:
 
 ```go
 func main() {

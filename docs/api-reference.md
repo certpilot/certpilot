@@ -1599,7 +1599,7 @@ A refused replay answers `401` with `"code": "agent_replay"`. An agent's own
 retries sign afresh with a new timestamp and never collide, so seeing this means
 something else is re-sending its traffic.
 
-The reference implementation is [`pkg/agentauth`](../pkg/agentauth), and
+The reference implementation is [`pkg/agentsdk/agentauth`](../pkg/agentsdk/agentauth), and
 `SigningString` is written out as its own exported function precisely so an
 agent in another language can reproduce it byte for byte.
 
@@ -1843,7 +1843,7 @@ is currently carrying traffic.*
 
 **Where a certificate goes, and what to run afterwards, is declared on the host
 — never sent by the core.** There is no wire format for a destination in
-`pkg/agentapi`, deliberately, because a core that could hand a host a command to
+`pkg/agentsdk/agentapi`, deliberately, because a core that could hand a host a command to
 run would be a fleet-wide remote execution channel with a certificate manager on
 the front of it. The core may say *"install certificate X"*; it may never say
 *"and here is what to run".*

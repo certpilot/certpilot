@@ -6,12 +6,12 @@ import (
 	"log/slog"
 	"net/http"
 
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"github.com/certpilot/certpilot/core/engine/issuance"
 	"github.com/certpilot/certpilot/core/engine/pki"
 	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/server/middleware"
 	"github.com/certpilot/certpilot/core/store"
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
 	"github.com/certpilot/certpilot/pkg/secrets"
 	"github.com/gin-gonic/gin"
 )

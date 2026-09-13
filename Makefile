@@ -11,7 +11,7 @@ STATE := .certpilot/state
 
 # Each component is its own Go module, so tooling has to iterate rather than
 # rely on a single ./... from the repository root.
-MODULES := pkg core gateways/selfsigned gateways/acme gateways/vault agent
+MODULES := pkg pkg/gatewaysdk pkg/agentsdk core gateways/selfsigned gateways/acme gateways/vault agent
 
 CORE_BIN          := $(BIN)/certpilot-core
 GW_SELFSIGNED_BIN := $(BIN)/gateway-selfsigned
@@ -193,6 +193,11 @@ lint:
 	@echo "==> scripts"
 	@$(GO) vet scripts/schemagen/main.go
 	@gofmt -l $(MODULES) scripts | grep . && echo "gofmt needed on the files above" && exit 1 || true
+	@## The three modules under pkg/ must not import each other. Nothing else
+	@## enforces it while they share a tree, and the seam closes the first time
+	@## somebody reaches across it.
+	@echo "==> sdk seam"
+	@./scripts/check-sdk-seam.sh
 	@## staticcheck when it is installed, because it catches a class go vet does
 	@## not: dead assignments, impossible conditions, and code nothing reaches.
 	@## Not a hard requirement, so a clone can be linted without installing it.

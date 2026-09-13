@@ -7,4 +7,6 @@ use (
 	./gateways/selfsigned
 	./gateways/vault
 	./pkg
+	./pkg/agentsdk
+	./pkg/gatewaysdk
 )

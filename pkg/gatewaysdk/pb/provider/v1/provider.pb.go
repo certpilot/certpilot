@@ -7,7 +7,7 @@
 package providerv1
 
 import (
-	v1 "github.com/certpilot/certpilot/pkg/pb/common/v1"
+	v1 "github.com/certpilot/certpilot-gateway-sdk/pb/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1191,8 +1191,8 @@ const file_provider_v1_provider_proto_rawDesc = "" +
 	"\tGetCAInfo\x12'.certpilot.provider.v1.GetCAInfoRequest\x1a(.certpilot.provider.v1.GetCAInfoResponse\x12p\n" +
 	"\x0fGetCapabilities\x12-.certpilot.provider.v1.GetCapabilitiesRequest\x1a..certpilot.provider.v1.GetCapabilitiesResponse\x12d\n" +
 	"\vHealthCheck\x12).certpilot.provider.v1.HealthCheckRequest\x1a*.certpilot.provider.v1.HealthCheckResponse\x12m\n" +
-	"\x0eValidateConfig\x12,.certpilot.provider.v1.ValidateConfigRequest\x1a-.certpilot.provider.v1.ValidateConfigResponseB\xde\x01\n" +
-	"\x19com.certpilot.provider.v1B\rProviderProtoP\x01Z<github.com/certpilot/certpilot/pkg/pb/provider/v1;providerv1\xa2\x02\x03CPX\xaa\x02\x15Certpilot.Provider.V1\xca\x02\x15Certpilot\\Provider\\V1\xe2\x02!Certpilot\\Provider\\V1\\GPBMetadata\xea\x02\x17Certpilot::Provider::V1b\x06proto3"
+	"\x0eValidateConfig\x12,.certpilot.provider.v1.ValidateConfigRequest\x1a-.certpilot.provider.v1.ValidateConfigResponseB\xe6\x01\n" +
+	"\x19com.certpilot.provider.v1B\rProviderProtoP\x01ZDgithub.com/certpilot/certpilot-gateway-sdk/pb/provider/v1;providerv1\xa2\x02\x03CPX\xaa\x02\x15Certpilot.Provider.V1\xca\x02\x15Certpilot\\Provider\\V1\xe2\x02!Certpilot\\Provider\\V1\\GPBMetadata\xea\x02\x17Certpilot::Provider::V1b\x06proto3"
 
 var (
 	file_provider_v1_provider_proto_rawDescOnce sync.Once

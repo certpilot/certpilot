@@ -288,7 +288,7 @@ Constraints, none of them configurable:
 
 ### Agent signatures
 
-Ed25519 over a canonical string, in [`pkg/agentauth`](../pkg/agentauth):
+Ed25519 over a canonical string, in [`pkg/agentsdk/agentauth`](../pkg/agentsdk/agentauth):
 
 ```
 certpilot-agent-v1

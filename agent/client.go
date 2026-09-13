@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/certpilot/certpilot/pkg/agentauth"
+	"github.com/certpilot/certpilot-agent-sdk/agentauth"
 )
 
 // Client talks to the core as one agent.

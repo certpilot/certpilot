@@ -24,10 +24,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/engine/posture"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/x509util"
 )
 
 const (

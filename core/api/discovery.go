@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/engine/discovery"
 	"github.com/certpilot/certpilot/core/server/middleware"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/x509util"
 	"github.com/gin-gonic/gin"
 )
 

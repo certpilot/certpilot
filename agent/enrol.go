@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/certpilot/certpilot/pkg/agentauth"
+	"github.com/certpilot/certpilot-agent-sdk/agentauth"
 )
 
 // EnrolOptions is what a person supplies when joining a host to CertPilot.

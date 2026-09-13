@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/certpilot/certpilot/pkg/agentapi"
+	"github.com/certpilot/certpilot-agent-sdk/agentapi"
 	pkcs12 "software.sslmate.com/src/go-pkcs12"
 )
 

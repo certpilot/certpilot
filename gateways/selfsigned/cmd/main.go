@@ -16,9 +16,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/certpilot/certpilot-gateway-sdk/grpckit"
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"github.com/certpilot/certpilot/gateways/selfsigned"
-	"github.com/certpilot/certpilot/pkg/grpckit"
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
 )
 
 func main() {

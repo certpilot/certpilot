@@ -7,14 +7,14 @@ import (
 	"log/slog"
 	"time"
 
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/engine/deploy"
 	"github.com/certpilot/certpilot/core/engine/policy"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/store"
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
 	"github.com/certpilot/certpilot/pkg/secrets"
-	"github.com/certpilot/certpilot/pkg/x509util"
 )
 
 // Executor coordinates renewing a single certificate through its gateway plugin.
