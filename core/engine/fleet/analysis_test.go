@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/certpilot/certpilot-agent-sdk/agentapi"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/agentapi"
 )
 
 func codes(findings []store.Finding) []string {

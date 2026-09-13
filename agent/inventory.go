@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/certpilot/certpilot/pkg/agentapi"
+	"github.com/certpilot/certpilot-agent-sdk/agentapi"
 )
 
 // Discovered and InventoryReport are the wire types, defined once in

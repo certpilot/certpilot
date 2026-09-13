@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/store"
 	"github.com/certpilot/certpilot/pkg/revocation"
-	"github.com/certpilot/certpilot/pkg/x509util"
 )
 
 // CAMonitor periodically inspects all registered CA authorities.

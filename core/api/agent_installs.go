@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/certpilot/certpilot-agent-sdk/agentapi"
 	"github.com/certpilot/certpilot/core/engine/fleet"
 	"github.com/certpilot/certpilot/core/server/middleware"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/agentapi"
 	"github.com/gin-gonic/gin"
 )
 

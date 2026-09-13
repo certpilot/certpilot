@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/engine/issuance"
 	"github.com/certpilot/certpilot/core/engine/policy"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/store"
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
 	"github.com/certpilot/certpilot/pkg/secrets"
-	"github.com/certpilot/certpilot/pkg/x509util"
 )
 
 // maxRequestedNames bounds one request.

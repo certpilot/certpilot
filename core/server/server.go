@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/certpilot/certpilot-gateway-sdk/grpckit"
 	"github.com/certpilot/certpilot/core/api"
 	"github.com/certpilot/certpilot/core/engine/cloudsync"
 	"github.com/certpilot/certpilot/core/engine/ctlog"
@@ -27,7 +28,6 @@ import (
 	"github.com/certpilot/certpilot/core/server/middleware"
 	"github.com/certpilot/certpilot/core/store"
 	"github.com/certpilot/certpilot/pkg/config"
-	"github.com/certpilot/certpilot/pkg/grpckit"
 	"github.com/certpilot/certpilot/pkg/secrets"
 	"github.com/gin-gonic/gin"
 )

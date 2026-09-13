@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/certpilot/certpilot/pkg/agentauth"
+	"github.com/certpilot/certpilot-agent-sdk/agentauth"
 )
 
 // Version is what the agent reports about itself.

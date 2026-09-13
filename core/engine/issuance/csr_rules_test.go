@@ -13,8 +13,8 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/x509util"
 )
 
 // csrWith builds a signed request carrying whatever a caller wants to test,

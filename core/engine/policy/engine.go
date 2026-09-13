@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/certpilot/certpilot-gateway-sdk/crypto"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/crypto"
 )
 
 // Rule types this engine evaluates. The schema's CHECK constraint and the API's

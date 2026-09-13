@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/certpilot/certpilot/pkg/agentapi"
+	"github.com/certpilot/certpilot-agent-sdk/agentapi"
 )
 
 // Where the destinations are declared, and how long a command may take.

@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/certpilot/certpilot/pkg/agentapi"
+	"github.com/certpilot/certpilot-agent-sdk/agentapi"
 )
 
 // heldOn writes a certificate into a state directory the way a real issuance

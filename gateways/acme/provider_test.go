@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	certcrypto "github.com/certpilot/certpilot/pkg/crypto"
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
+	certcrypto "github.com/certpilot/certpilot-gateway-sdk/crypto"
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

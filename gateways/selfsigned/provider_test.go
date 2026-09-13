@@ -10,7 +10,7 @@ import (
 	"encoding/pem"
 	"testing"
 
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 )
 
 func TestIssueCertificate(t *testing.T) {

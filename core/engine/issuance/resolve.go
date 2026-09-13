@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/engine/policy"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/x509util"
 )
 
 // The precedence order, stated once and obeyed everywhere.

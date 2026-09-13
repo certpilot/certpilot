@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/certpilot/certpilot-agent-sdk/agentapi"
 	"github.com/certpilot/certpilot/core/engine/deploy"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/agentapi"
 )
 
 // Installs records where a host has put the certificates it holds.

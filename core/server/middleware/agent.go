@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/certpilot/certpilot-agent-sdk/agentauth"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/agentauth"
 	"github.com/gin-gonic/gin"
 )
 

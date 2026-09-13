@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/certpilot/certpilot/pkg/x509util"
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

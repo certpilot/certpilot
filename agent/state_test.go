@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/certpilot/certpilot/pkg/agentauth"
+	"github.com/certpilot/certpilot-agent-sdk/agentauth"
 )
 
 // TestAnIdentitySurvivesARestart — which is every restart of every host the

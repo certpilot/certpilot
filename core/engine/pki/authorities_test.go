@@ -14,13 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/certpilot/certpilot-gateway-sdk/grpckit"
+	commonv1 "github.com/certpilot/certpilot-gateway-sdk/pb/common/v1"
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/grpckit"
-	commonv1 "github.com/certpilot/certpilot/pkg/pb/common/v1"
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
-	"github.com/certpilot/certpilot/pkg/x509util"
 	"google.golang.org/grpc"
 )
 

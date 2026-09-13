@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/certpilot/certpilot/pkg/grpckit"
-	commonv1 "github.com/certpilot/certpilot/pkg/pb/common/v1"
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
+	"github.com/certpilot/certpilot-gateway-sdk/grpckit"
+	commonv1 "github.com/certpilot/certpilot-gateway-sdk/pb/common/v1"
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"google.golang.org/grpc"
 )
 

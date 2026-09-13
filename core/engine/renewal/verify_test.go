@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/engine/discovery"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/store"
-	"github.com/certpilot/certpilot/pkg/x509util"
 )
 
 // swappableServer is a TLS endpoint whose certificate can be changed while it

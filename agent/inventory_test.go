@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/certpilot/certpilot/pkg/agentapi"
+	"github.com/certpilot/certpilot-agent-sdk/agentapi"
 )
 
 // writePair creates a certificate and, optionally, its key on disk.

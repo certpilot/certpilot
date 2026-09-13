@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	commonv1 "github.com/certpilot/certpilot/pkg/pb/common/v1"
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
+	commonv1 "github.com/certpilot/certpilot-gateway-sdk/pb/common/v1"
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

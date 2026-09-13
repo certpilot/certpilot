@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 )
 
 // issuerHorizon is how close an issuing CA has to be to its own expiry before

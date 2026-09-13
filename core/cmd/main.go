@@ -20,10 +20,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/certpilot/certpilot-gateway-sdk/grpckit"
 	"github.com/certpilot/certpilot/core/server"
 	"github.com/certpilot/certpilot/core/store"
 	"github.com/certpilot/certpilot/pkg/config"
-	"github.com/certpilot/certpilot/pkg/grpckit"
 	"github.com/certpilot/certpilot/pkg/secrets"
 )
 

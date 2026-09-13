@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package certpilot.provider.v1;
 
-option go_package = "github.com/certpilot/certpilot/pkg/pb/provider/v1;providerv1";
+option go_package = "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1;providerv1";
 
 import "google/protobuf/timestamp.proto";
 import "common/v1/types.proto";

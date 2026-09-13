@@ -34,9 +34,9 @@ import (
 	"strings"
 	"time"
 
-	commonv1 "github.com/certpilot/certpilot/pkg/pb/common/v1"
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
-	"github.com/certpilot/certpilot/pkg/x509util"
+	commonv1 "github.com/certpilot/certpilot-gateway-sdk/pb/common/v1"
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
+	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"

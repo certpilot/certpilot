@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	providerv1 "github.com/certpilot/certpilot/pkg/pb/provider/v1"
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
