@@ -29,6 +29,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  # Deliberately not a plausible version. If this ever leaks into a published
+  # image, it should be obvious rather than look like a release.
+  STAMP: 0.0.0-ci-stamp-check
+
 jobs:
   build:
     name: image (${{ matrix.name }})
@@ -68,6 +73,12 @@ jobs:
           push: false
           load: true
           tags: certpilot/${{ matrix.name }}:ci
+          # A sentinel the next step asserts the binary reports back. An ldflags
+          # -X path that does not match a real symbol fails silently — the build
+          # succeeds and the binary keeps its compiled-in default for ever — so
+          # the stamp has to be checked rather than trusted. This is the check.
+          build-args: |
+            VERSION=${{ env.STAMP }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
@@ -89,14 +100,20 @@ jobs:
               docker run --rm certpilot/${{ matrix.name }}:ci \
                 test -s /usr/share/nginx/html/index.html
               ;;
-            agent)
-              docker run --rm certpilot/${{ matrix.name }}:ci --help
-              ;;
             *)
-              # Bounded: a binary that ignores an unknown flag and starts
-              # serving would otherwise hang the job rather than fail it.
-              timeout 30 docker run --rm certpilot/${{ matrix.name }}:ci --help || true
-              timeout 30 docker run --rm certpilot/${{ matrix.name }}:ci --version 2>/dev/null || true
+              docker run --rm certpilot/${{ matrix.name }}:ci --help >/dev/null
+
+              # The stamp, asserted rather than printed. Before this, --version
+              # was run with `2>/dev/null || true` — it could not fail, so it
+              # proved nothing about a value an operator reads off a running
+              # fleet to decide what is out of date.
+              got="$(docker run --rm certpilot/${{ matrix.name }}:ci --version)"
+              if [ "$got" != "${{ env.STAMP }}" ]; then
+                echo "::error::${{ matrix.name }} reports version '$got', expected '${{ env.STAMP }}'."
+                echo "::error::The -ldflags -X path in ${{ matrix.dockerfile }} no longer names a real symbol."
+                exit 1
+              fi
+              echo "${{ matrix.name }} reports the version it was stamped with"
               ;;
           esac
 

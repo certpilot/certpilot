@@ -54,6 +54,12 @@ func main() {
 	case "-h", "--help", "help":
 		usage()
 		return
+	case "-v", "--version", "version":
+		// Answered before anything is initialised: asking a binary what it is
+		// must work on a host where nothing else about it does — no state
+		// directory, no enrolment, no network.
+		fmt.Println(agent.Version)
+		return
 	default:
 		usage()
 		os.Exit(2)
@@ -77,6 +83,7 @@ func usage() {
   certpilot-agent request --name=HOST [--name=...] [--key-type=ECDSA]
   certpilot-agent install [--installs=FILE] [--force] [--offline]
   certpilot-agent status [--state-dir=DIR]
+  certpilot-agent version
 
 Enrolment generates this host's identity key locally. The private half is never
 sent to the core and there is no flag that would send it.

@@ -1,8 +1,19 @@
 name: Release
 
+# Tags only.
+#
+# This published on every merge to main, which meant two multi-architecture
+# builds of three images for changes that were often a paragraph of
+# documentation — and it moved `latest` each time, so a `docker compose pull`
+# could change what a deployment was running without anybody deciding to.
+#
+# Building still happens on every pull request, in images.yml, which is where a
+# broken Dockerfile should be caught. Only publishing is tied to a tag now, so
+# `latest` means "the most recent release" rather than "the most recent merge".
+#
+# workflow_dispatch stays for republishing a tag whose run failed.
 on:
   push:
-    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -48,13 +59,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/certpilot/${{ matrix.name }}
-          # latest tracks main. A release tag also publishes its exact version,
-          # so a deployment can pin one and a quickstart can follow the other.
+          # latest=auto attaches `latest` to a semver tag and to nothing else,
+          # so a prerelease or a manual run from a branch cannot claim it.
+          flavor: latest=auto
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
             type=sha,format=short
 
       - uses: docker/build-push-action@v6
@@ -74,5 +85,11 @@ jobs:
           # with CGO off, and QEMU would spend minutes producing an identical
           # binary.
           platforms: linux/amd64,linux/arm64
+          # The version the binary reports about itself. steps.meta gives the
+          # tag without its leading v, and empty for a manual branch run — which
+          # is what the Dockerfiles treat as "do not stamp", leaving the -dev
+          # default rather than a release number this build is not.
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}

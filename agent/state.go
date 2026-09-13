@@ -26,8 +26,23 @@ import (
 	"github.com/certpilot/certpilot-agent-sdk/agentauth"
 )
 
-// Version is what the agent reports about itself.
-const Version = "0.1.0"
+// Version is what the agent reports about itself, on enrolment, on every
+// heartbeat, and in its User-Agent.
+//
+// A var rather than a const so a release build can stamp it:
+//
+//	-ldflags "-X github.com/certpilot/certpilot/agent.Version=1.2.3"
+//
+// It was a const, which meant every agent ever built reported 0.1.0 whatever it
+// actually was — and this value is the one an operator uses to answer "which of
+// these five hundred hosts is running something old", which is the question the
+// fleet view exists for. A number nobody updates at release time answers it
+// wrongly and confidently.
+//
+// The default keeps the -dev suffix on purpose. An unstamped build is a
+// development build, and saying so is better than claiming to be the release it
+// was branched from.
+var Version = "0.1.0-dev"
 
 // File names inside the state directory.
 const (

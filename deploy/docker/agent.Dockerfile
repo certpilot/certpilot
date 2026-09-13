@@ -21,10 +21,15 @@ COPY . .
 ARG TARGETOS
 ARG TARGETARCH
 
+# The version this build reports. Left empty for an ordinary build, which then
+# keeps the -dev default compiled into the source — an unstamped build saying so
+# is better than one claiming to be the release it was branched from.
+ARG VERSION=
+
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" \
+    go build -trimpath -ldflags="-s -w ${VERSION:+-X github.com/certpilot/certpilot/agent.Version=$VERSION}" \
       -o /out/certpilot-agent ./agent/cmd/
 
 FROM alpine:3.20
