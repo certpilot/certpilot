@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/certpilot/certpilot/core/engine/issuance"
 	"github.com/certpilot/certpilot/core/engine/pki"
 	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/server/middleware"
@@ -158,6 +159,20 @@ func (h *CAAccountHandler) Create(c *gin.Context) {
 	if err := h.store.CreateCAAccount(c.Request.Context(), acc); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// The default template for this account, matching what migration 037 wrote
+	// for every account that already existed.
+	//
+	// Without it a request that names no template has nothing to resolve to,
+	// and the first request against a newly connected CA fails for a reason
+	// that has nothing to do with the CA. The account is still usable if this
+	// fails — an operator can write a template by hand — so it warns rather
+	// than unwinding an account the gateway has already validated.
+	if err := h.createDefaultTemplate(c, acc); err != nil {
+		warnings = append(warnings, fmt.Sprintf(
+			"the account was created and its default certificate template was not: %v. "+
+				"Requests that name no template will be refused until one exists", err))
 	}
 
 	actorID := c.GetString(middleware.ContextUserID)
@@ -324,4 +339,31 @@ func (h *CAAccountHandler) SetRateLimit(c *gin.Context) {
 		message = fmt.Sprintf("%s is now unlimited: CertPilot will not hold back any renewal against it.", acc.Name)
 	}
 	c.JSON(http.StatusOK, gin.H{"data": acc, "message": message})
+}
+
+// createDefaultTemplate writes the unconstrained template a new CA account
+// needs, so the compatibility path has somewhere to land.
+//
+// Deliberately identical to what migration 037 generates. Two places producing
+// the same row is a duplication worth one comment each: an account created
+// before the upgrade and one created after it must behave the same way, and a
+// migration cannot run for an account that does not exist yet.
+func (h *CAAccountHandler) createDefaultTemplate(c *gin.Context, acc *store.CAAccount) error {
+	return h.store.CreateCertificateTemplate(c.Request.Context(), &store.CertificateTemplate{
+		Slug: issuance.DefaultSlug(acc.ID),
+		Name: fmt.Sprintf("Default (%s)", acc.Name),
+		Description: "Generated when this CA account was connected. Constrains nothing, so " +
+			"requests that name no template behave exactly as they did before templates " +
+			"existed. Safe to tighten; the estate-wide floor in Policies still applies " +
+			"either way.",
+		Version:            1,
+		IsEnabled:          true,
+		CAAccountID:        acc.ID,
+		SubjectMode:        store.SubjectModeSupplied,
+		AllowedKeyTypes:    []string{"RSA", "ECDSA", "Ed25519"},
+		ECDSACurves:        []string{"P-256", "P-384", "P-521"},
+		KeyCustodyRequired: store.KeyCustodyAny,
+		RenewBeforeDays:    30,
+		AutoRenew:          true,
+	})
 }
