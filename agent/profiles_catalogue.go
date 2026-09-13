@@ -63,9 +63,13 @@ var catalogue = []Profile{
 				"from a cache and no fresh client does.",
 			"nginx reloads by starting new workers and letting the old ones finish, " +
 				"so no connection is dropped and no request sees a half-written file.",
-			"The key is written 0640. nginx's workers drop privileges but its master " +
-				"process reads the key as root at startup, so the key does not need to " +
-				"be readable by the worker user.",
+			"The key is written 0640 with no group, which on a root-owned file is the " +
+				"same as 0600 — nginx's master reads the key as root before the workers " +
+				"drop privileges, so the worker user never needs it. The mode is 0640 " +
+				"rather than 0600 so that adding `\"group\": \"ssl-cert\"` is the only " +
+				"change needed on a host that shares the key with something else, " +
+				"rather than two changes where forgetting the second one silently does " +
+				"nothing.",
 		},
 		Verified: "nginx 1.27.5",
 	},
