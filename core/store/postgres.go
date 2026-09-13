@@ -107,12 +107,12 @@ const certificateColumns = `id, fingerprint_sha256, common_name,
 		coalesce(posture_requirements, '[]'::jsonb),
 		quantum_readiness_score, quantum_assessed_at,
 	revoked_at, revocation_reason, coalesce(revoked_by, ''),
-		template_id, template_version, grant_id`
+		template_id, template_version, grant_id, coalesce(conformance_findings, '[]'::jsonb)`
 
 // scanCertificate reads one row of certificateColumns.
 func scanCertificate(row pgx.Row) (*Certificate, error) {
 	cert := &Certificate{}
-	var sansJSON, tagsJSON, metadataJSON, postureJSON []byte
+	var sansJSON, tagsJSON, metadataJSON, postureJSON, findingsJSON []byte
 	err := row.Scan(
 		&cert.ID, &cert.FingerprintSHA256, &cert.CommonName, &sansJSON, &cert.SerialNumber, &cert.IssuerDN,
 		&cert.NotBefore, &cert.NotAfter, &cert.DaysRemaining, &cert.KeyType, &cert.KeySize, &cert.Status,
@@ -129,7 +129,7 @@ func scanCertificate(row pgx.Row) (*Certificate, error) {
 		&cert.PostureVerdict, &cert.PostureSummary, &postureJSON,
 		&cert.QuantumReadinessScore, &cert.QuantumAssessedAt,
 		&cert.RevokedAt, &cert.RevocationReason, &cert.RevokedBy,
-		&cert.TemplateID, &cert.TemplateVersion, &cert.GrantID,
+		&cert.TemplateID, &cert.TemplateVersion, &cert.GrantID, &findingsJSON,
 	)
 	if err != nil {
 		return nil, err
@@ -148,6 +148,9 @@ func scanCertificate(row pgx.Row) (*Certificate, error) {
 		_ = json.Unmarshal(metadataJSON, &cert.Metadata)
 	}
 	cert.PostureRequirements = postureJSON
+	if len(findingsJSON) > 0 {
+		_ = json.Unmarshal(findingsJSON, &cert.ConformanceFindings)
+	}
 	return cert, nil
 }
 
@@ -277,10 +280,10 @@ func (s *PostgresStore) CreateCertificate(ctx context.Context, cert *Certificate
 			discovered_via, environment, team, tags, created_by,
 			key_custody, key_holder_agent_id, metadata,
 			revoked_at, revocation_reason, revoked_by,
-			template_id, template_version, grant_id
+			template_id, template_version, grant_id, conformance_findings
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-			$25, $26, $27, $28, $29, $30, $31, $32, $33
+			$25, $26, $27, $28, $29, $30, $31, $32, $33, $34
 		) RETURNING id, created_at, updated_at
 	`
 	// The revocation columns are written here even though revocation itself
@@ -302,7 +305,7 @@ func (s *PostgresStore) CreateCertificate(ctx context.Context, cert *Certificate
 		cert.DiscoveredVia, nullIfEmpty(cert.Environment), cert.Team, tagsJSON, cert.CreatedBy,
 		custodyOrDefault(cert), cert.KeyHolderAgentID, metadataJSON(cert.Metadata),
 		cert.RevokedAt, cert.RevocationReason, cert.RevokedBy,
-		cert.TemplateID, cert.TemplateVersion, cert.GrantID,
+		cert.TemplateID, cert.TemplateVersion, cert.GrantID, findingsOrEmpty(cert.ConformanceFindings),
 	).Scan(&cert.ID, &cert.CreatedAt, &cert.UpdatedAt)
 }
 
@@ -378,6 +381,13 @@ func (s *PostgresStore) UpdateCertificate(ctx context.Context, cert *Certificate
 			template_id = COALESCE($30::uuid, template_id),
 			template_version = COALESCE($31::integer, template_version),
 			grant_id = COALESCE($32::uuid, grant_id),
+			-- COALESCE for the same reason as metadata: #30's conformance check
+			-- runs once, right after issuance or renewal, and every other writer
+			-- of this row — UpdateCertificateMetadata, the posture assessor, the
+			-- ARI poller — has nothing to say about it. Assigning unconditionally
+			-- would erase a genuine finding the moment an operator relabels the
+			-- certificate's team.
+			conformance_findings = COALESCE($33::jsonb, conformance_findings),
 			updated_at = now()
 		WHERE id = $1
 	`
@@ -405,7 +415,7 @@ func (s *PostgresStore) UpdateCertificate(ctx context.Context, cert *Certificate
 		// unconditionally would wipe an operator's cost centre every time a
 		// certificate renewed itself.
 		nullableMetadata(cert.Metadata),
-		cert.TemplateID, cert.TemplateVersion, cert.GrantID,
+		cert.TemplateID, cert.TemplateVersion, cert.GrantID, nullableFindings(cert.ConformanceFindings),
 	)
 	return err
 }
@@ -417,6 +427,30 @@ func nullableMetadata(m map[string]any) []byte {
 		return nil
 	}
 	return metadataJSON(m)
+}
+
+// findingsOrEmpty encodes conformance findings for INSERT, where the column is
+// NOT NULL and there is no existing row for COALESCE to fall back to — nil
+// becomes '[]', not SQL NULL.
+func findingsOrEmpty(f []ConformanceFinding) []byte {
+	if len(f) == 0 {
+		return []byte("[]")
+	}
+	encoded, err := json.Marshal(f)
+	if err != nil {
+		return []byte("[]")
+	}
+	return encoded
+}
+
+// nullableFindings is findingsOrEmpty's UPDATE counterpart: nil stays NULL so
+// the COALESCE above preserves whatever is already stored, the same contract
+// nullableMetadata gives metadata.
+func nullableFindings(f []ConformanceFinding) []byte {
+	if f == nil {
+		return nil
+	}
+	return findingsOrEmpty(f)
 }
 
 // custodyOrDefault fills in who holds the key when a caller did not say.

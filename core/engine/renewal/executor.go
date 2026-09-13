@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/engine/deploy"
+	"github.com/certpilot/certpilot/core/engine/issuance"
 	"github.com/certpilot/certpilot/core/engine/policy"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/pluginmgr"
@@ -133,10 +135,13 @@ func (e *Executor) RenewCertificate(ctx context.Context, certID string) (*store.
 		ProviderCertificateId: cert.SerialNumber,
 		// Deduplicated: an issued certificate carries its common name as a SAN
 		// too, and sending both produced a certificate listing the same name twice.
-		Domains:        shape.Domains,
-		KeyType:        shape.KeyType,
-		KeySize:        int32(shape.KeySize),
-		ProviderConfig: providerConfig,
+		Domains:          shape.Domains,
+		KeyType:          shape.KeyType,
+		KeySize:          int32(shape.KeySize),
+		ProviderConfig:   providerConfig,
+		CaProfile:        shape.CAProfile,
+		KeyUsage:         shape.KeyUsage,
+		ExtendedKeyUsage: shape.ExtendedKeyUsage,
 	}
 	if cert.CertificatePEM != nil {
 		renewReq.CurrentCertificatePem = []byte(*cert.CertificatePEM)
@@ -157,6 +162,40 @@ func (e *Executor) RenewCertificate(ctx context.Context, certID string) (*store.
 	if err != nil {
 		return nil, e.recordFailure(ctx, cert,
 			fmt.Errorf("gateway returned data that is not a valid X.509 certificate: %w", err))
+	}
+
+	// Issue, then check — #30. A renewal is an issuance, and the same
+	// question applies: did the CA actually honour what today's rules ask
+	// for, or only agree to sign something.
+	findings, err := issuance.VerifyConformance(&issuance.Decision{
+		Template: shape.Template, KeyType: shape.KeyType, KeySize: shape.KeySize,
+		Domains: shape.Domains, ValidityDays: shape.ValidityDays,
+	}, resp.Certificate.CertificatePem)
+	if err != nil {
+		return nil, e.recordFailure(ctx, cert,
+			fmt.Errorf("renewed certificate could not be checked for conformance: %w", err))
+	}
+	// Enforcement is a template property; a certificate with no template has
+	// nothing to enforce against, the same reasoning applyTemplateFloor
+	// already applies to the key-and-validity floor above.
+	if shape.Template != nil {
+		if blocking := issuance.Enforced(shape.Template, findings); len(blocking) > 0 {
+			messages := make([]string, 0, len(blocking))
+			for _, f := range blocking {
+				messages = append(messages, f.Message)
+			}
+			if _, revokeErr := gw.Client.RevokeCertificate(ctx, &providerv1.RevokeCertificateRequest{
+				CertificatePem:        resp.Certificate.CertificatePem,
+				ProviderCertificateId: resp.ProviderCertificateId,
+				ProviderConfig:        providerConfig,
+			}); revokeErr != nil {
+				slog.Warn("could not revoke a renewal that failed conformance under an ENFORCE template",
+					"template", shape.Template.Slug, "cert_id", cert.ID, "error", revokeErr)
+			}
+			return nil, e.recordFailure(ctx, cert, fmt.Errorf(
+				"template %q requires ENFORCE conformance and the CA did not honour the renewal: %s",
+				shape.Template.Slug, strings.Join(messages, "; ")))
+		}
 	}
 
 	// Seal the rotated key before anything else is written. Renewal normally
@@ -191,6 +230,10 @@ func (e *Executor) RenewCertificate(ctx context.Context, certID string) (*store.
 	cert.Status = "ISSUED"
 	cert.RenewalError = nil
 	cert.RenewalCount++
+	// Non-blocking findings reach here even under ENFORCE, the same as the
+	// issuance paths: neither shorter validity nor an added subject field was
+	// ever the class that setting refuses.
+	cert.ConformanceFindings = findings
 
 	if err := e.store.UpdateCertificate(ctx, cert); err != nil {
 		return nil, fmt.Errorf("failed to save renewed certificate: %w", err)

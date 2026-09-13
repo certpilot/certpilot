@@ -2,11 +2,19 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/certpilot/certpilot-gateway-sdk/grpckit"
 	"github.com/certpilot/certpilot/core/engine/policy"
+	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/store"
+	"github.com/certpilot/certpilot/pkg/secrets"
+	"github.com/gin-gonic/gin"
 )
 
 // templateFixture returns a handler over a store with one CA account and no
@@ -36,7 +44,19 @@ func templateFixture(t *testing.T) (*TemplateHandler, store.Store, string) {
 		t.Fatal(err)
 	}
 
-	return NewTemplateHandler(s, policy.NewEngine(s)), s, acc.ID
+	keyring, err := secrets.NewEphemeralKeyring()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No gateway is ever registered against this manager: the #29/#31 live
+	// checks in validate are written to treat "cannot reach the gateway" as
+	// "cannot judge this, so do not refuse" rather than as an error, and a
+	// manager that never connects to anything is exactly what proves that —
+	// every template test below saves successfully with no gateway process
+	// anywhere.
+	pm := pluginmgr.NewManager(grpckit.TLSConfig{Insecure: true})
+
+	return NewTemplateHandler(s, policy.NewEngine(s), pm, keyring), s, acc.ID
 }
 
 func addPolicy(t *testing.T, s store.Store, name, ruleType, config, severity string) {
@@ -423,5 +443,154 @@ func TestATemplateAGrantStillNamesCannotBeDeleted(t *testing.T) {
 	}
 	if len(blocking) != 1 {
 		t.Errorf("a revoked grant stopped counting, and it still references the template: %v", blocking)
+	}
+}
+
+// callHandler drives a TemplateHandler method the way the router does, without
+// building a whole router — gin.CreateTestContext plus a real *http.Request is
+// the minimum that exercises ShouldBindJSON and c.Param the same way
+// SetupRouter's wiring does.
+func callHandler(t *testing.T, method, path, body string, params gin.Params, fn gin.HandlerFunc) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(method, path, strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = params
+	fn(c)
+	return w
+}
+
+func decodeTemplate(t *testing.T, w *httptest.ResponseRecorder) store.CertificateTemplate {
+	t.Helper()
+	var got store.CertificateTemplate
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response %s: %v", w.Body.String(), err)
+	}
+	return got
+}
+
+// TestANewTemplateAgainstAPrivateCADefaultsToEnforce. #30's default has to
+// differ by CA type, or the column default (REPORT, chosen so an existing
+// estate does not break on upgrade) would leave every brand new template
+// against a CA this deployment actually runs silently unenforced.
+func TestANewTemplateAgainstAPrivateCADefaultsToEnforce(t *testing.T) {
+	h, s, _ := templateFixture(t)
+	acc := &store.CAAccount{Name: "Vault", ProviderType: "vault", GatewayAddr: "127.0.0.1:9443", Status: "CONNECTED"}
+	if err := s.CreateCAAccount(context.Background(), acc); err != nil {
+		t.Fatal(err)
+	}
+
+	body := fmt.Sprintf(`{"slug":"vault-default","name":"Vault default","ca_account_id":%q}`, acc.ID)
+	w := callHandler(t, http.MethodPost, "/api/v1/certificate-templates", body, nil, h.Create)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	if got := decodeTemplate(t, w); got.Conformance != store.ConformanceEnforce {
+		t.Errorf("a new template against a private CA should default to ENFORCE, got %q", got.Conformance)
+	}
+}
+
+// TestANewTemplateAgainstAPublicCADefaultsToReport. Defaulting to ENFORCE
+// here would fail the first renewal the day a public CA caps validity below
+// what was requested — which every public CA already does.
+func TestANewTemplateAgainstAPublicCADefaultsToReport(t *testing.T) {
+	h, s, _ := templateFixture(t)
+	acc := &store.CAAccount{Name: "Public ACME", ProviderType: "acme", GatewayAddr: "127.0.0.1:9443", Status: "CONNECTED"}
+	if err := s.CreateCAAccount(context.Background(), acc); err != nil {
+		t.Fatal(err)
+	}
+
+	body := fmt.Sprintf(`{"slug":"acme-default","name":"ACME default","ca_account_id":%q}`, acc.ID)
+	w := callHandler(t, http.MethodPost, "/api/v1/certificate-templates", body, nil, h.Create)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	if got := decodeTemplate(t, w); got.Conformance != store.ConformanceReport {
+		t.Errorf("a new template against a public CA should default to REPORT, got %q", got.Conformance)
+	}
+}
+
+// TestAnExplicitConformanceIsNeverOverridden.
+func TestAnExplicitConformanceIsNeverOverridden(t *testing.T) {
+	h, s, _ := templateFixture(t)
+	acc := &store.CAAccount{Name: "Vault", ProviderType: "vault", GatewayAddr: "127.0.0.1:9443", Status: "CONNECTED"}
+	if err := s.CreateCAAccount(context.Background(), acc); err != nil {
+		t.Fatal(err)
+	}
+
+	body := fmt.Sprintf(`{"slug":"vault-report","name":"Vault, reported","ca_account_id":%q,"conformance":"REPORT"}`, acc.ID)
+	w := callHandler(t, http.MethodPost, "/api/v1/certificate-templates", body, nil, h.Create)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	if got := decodeTemplate(t, w); got.Conformance != store.ConformanceReport {
+		t.Errorf("an explicit REPORT against a private CA must not be upgraded to ENFORCE, got %q", got.Conformance)
+	}
+}
+
+// TestUpdatePreservesConformanceWhenNotSupplied. A PUT that only changes,
+// say, default_team must not silently flip a template back to REPORT.
+func TestUpdatePreservesConformanceWhenNotSupplied(t *testing.T) {
+	h, s, accID := templateFixture(t)
+	ctx := context.Background()
+
+	tpl := &store.CertificateTemplate{
+		Slug: "preserve-me", Name: "Preserve me", CAAccountID: accID, Conformance: store.ConformanceEnforce,
+	}
+	if err := s.CreateCertificateTemplate(ctx, tpl); err != nil {
+		t.Fatal(err)
+	}
+
+	body := fmt.Sprintf(`{"slug":"preserve-me","name":"Preserve me","ca_account_id":%q,"default_team":"platform"}`, accID)
+	w := callHandler(t, http.MethodPut, "/api/v1/certificate-templates/"+tpl.ID, body,
+		gin.Params{{Key: "id", Value: tpl.ID}}, h.Update)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update: %d %s", w.Code, w.Body.String())
+	}
+	if got := decodeTemplate(t, w); got.Conformance != store.ConformanceEnforce {
+		t.Errorf("an update that does not mention conformance must preserve it, got %q", got.Conformance)
+	}
+}
+
+// TestKeyUsageIsRefusedOnAnACMETemplate. #31's ACME rule: refused outright,
+// because the profile decides in a way this deployment cannot predict.
+func TestKeyUsageIsRefusedOnAnACMETemplate(t *testing.T) {
+	h, s, _ := templateFixture(t)
+	ctx := context.Background()
+	acc := &store.CAAccount{Name: "Public ACME", ProviderType: "acme", GatewayAddr: "127.0.0.1:9443", Status: "CONNECTED"}
+	if err := s.CreateCAAccount(ctx, acc); err != nil {
+		t.Fatal(err)
+	}
+
+	tpl := &store.CertificateTemplate{
+		Slug: "acme-eku", Name: "ACME EKU", CAAccountID: acc.ID,
+		AllowedKeyTypes:  []string{"RSA", "ECDSA", "Ed25519"},
+		ECDSACurves:      []string{"P-256", "P-384", "P-521"},
+		ExtendedKeyUsage: []string{"clientAuth"},
+	}
+	err := h.validate(ctx, tpl)
+	if err == nil {
+		t.Fatal("a declared extended_key_usage on an ACME template must be refused")
+	}
+	if !strings.Contains(err.Error(), "profile decides") {
+		t.Errorf("the refusal should say the profile decides, got: %v", err)
+	}
+}
+
+// TestKeyUsageIsAcceptedOnASelfsignedTemplate. selfsigned enforces directly;
+// there is nothing here to check against and nothing to refuse.
+func TestKeyUsageIsAcceptedOnASelfsignedTemplate(t *testing.T) {
+	h, _, accID := templateFixture(t) // the fixture's own account is selfsigned
+	ctx := context.Background()
+
+	tpl := &store.CertificateTemplate{
+		Slug: "ss-eku", Name: "Selfsigned EKU", CAAccountID: accID,
+		AllowedKeyTypes:  []string{"RSA", "ECDSA", "Ed25519"},
+		ECDSACurves:      []string{"P-256", "P-384", "P-521"},
+		ExtendedKeyUsage: []string{"clientAuth"},
+	}
+	if err := h.validate(ctx, tpl); err != nil {
+		t.Errorf("a declared key usage on a selfsigned template must be accepted: %v", err)
 	}
 }

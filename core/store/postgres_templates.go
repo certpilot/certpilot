@@ -20,12 +20,15 @@ const certificateTemplateColumns = `id, slug, name, description, version, is_ena
 		allowed_key_types, rsa_min_bits, rsa_max_bits, ecdsa_curves,
 		csr_required, key_custody_required,
 		validity_days, max_validity_days, renew_before_days, auto_renew,
+		key_usage, extended_key_usage, basic_constraints_ca,
+		extension_passthrough, passthrough_oids, conformance,
 		require_metadata, default_environment, default_team, default_tags,
 		created_by, created_at, updated_at`
 
 func scanCertificateTemplate(row pgx.Row) (*CertificateTemplate, error) {
 	t := &CertificateTemplate{}
 	var subjectJSON, cnJSON, sanJSON, keyTypesJSON, curvesJSON, metaJSON, tagsJSON []byte
+	var keyUsageJSON, ekuJSON, passthroughOIDsJSON []byte
 
 	err := row.Scan(
 		&t.ID, &t.Slug, &t.Name, &t.Description, &t.Version, &t.IsEnabled,
@@ -34,6 +37,8 @@ func scanCertificateTemplate(row pgx.Row) (*CertificateTemplate, error) {
 		&keyTypesJSON, &t.RSAMinBits, &t.RSAMaxBits, &curvesJSON,
 		&t.CSRRequired, &t.KeyCustodyRequired,
 		&t.ValidityDays, &t.MaxValidityDays, &t.RenewBeforeDays, &t.AutoRenew,
+		&keyUsageJSON, &ekuJSON, &t.BasicConstraintsCA,
+		&t.ExtensionPassthrough, &passthroughOIDsJSON, &t.Conformance,
 		&metaJSON, &t.DefaultEnvironment, &t.DefaultTeam, &tagsJSON,
 		&t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
 	)
@@ -66,6 +71,15 @@ func scanCertificateTemplate(row pgx.Row) (*CertificateTemplate, error) {
 	if err := unmarshalTemplateJSON(tagsJSON, &t.DefaultTags); err != nil {
 		return nil, fmt.Errorf("template %s: default_tags: %w", t.Slug, err)
 	}
+	if err := unmarshalTemplateJSON(keyUsageJSON, &t.KeyUsage); err != nil {
+		return nil, fmt.Errorf("template %s: key_usage: %w", t.Slug, err)
+	}
+	if err := unmarshalTemplateJSON(ekuJSON, &t.ExtendedKeyUsage); err != nil {
+		return nil, fmt.Errorf("template %s: extended_key_usage: %w", t.Slug, err)
+	}
+	if err := unmarshalTemplateJSON(passthroughOIDsJSON, &t.PassthroughOIDs); err != nil {
+		return nil, fmt.Errorf("template %s: passthrough_oids: %w", t.Slug, err)
+	}
 
 	normaliseTemplate(t)
 	return t, nil
@@ -89,11 +103,25 @@ func normaliseTemplate(t *CertificateTemplate) {
 	t.ECDSACurves = orEmptyStrings(t.ECDSACurves)
 	t.RequireMetadata = orEmptyStrings(t.RequireMetadata)
 	t.DefaultTags = orEmptyStrings(t.DefaultTags)
+	t.KeyUsage = orEmptyStrings(t.KeyUsage)
+	t.ExtendedKeyUsage = orEmptyStrings(t.ExtendedKeyUsage)
+	t.PassthroughOIDs = orEmptyStrings(t.PassthroughOIDs)
+
+	// A zero value here is Go's, not an operator's choice, and must not reach
+	// a CHECK constraint that would refuse it as a raw SQLSTATE — the API
+	// layer already gives the same case a sentence.
+	if t.ExtensionPassthrough == "" {
+		t.ExtensionPassthrough = ExtensionPassthroughNone
+	}
+	if t.Conformance == "" {
+		t.Conformance = ConformanceReport
+	}
 }
 
 // templateJSON marshals the seven jsonb columns in one place, so a caller
 // cannot marshal six and forget the seventh.
-func templateJSON(t *CertificateTemplate) (subject, cn, san, keyTypes, curves, meta, tags []byte, err error) {
+func templateJSON(t *CertificateTemplate) (subject, cn, san, keyTypes, curves, meta, tags,
+	keyUsage, eku, passthroughOIDs []byte, err error) {
 	if subject, err = json.Marshal(orEmptyMap(t.SubjectDefaults)); err != nil {
 		return
 	}
@@ -112,7 +140,16 @@ func templateJSON(t *CertificateTemplate) (subject, cn, san, keyTypes, curves, m
 	if meta, err = json.Marshal(orEmptyStrings(t.RequireMetadata)); err != nil {
 		return
 	}
-	tags, err = json.Marshal(orEmptyStrings(t.DefaultTags))
+	if tags, err = json.Marshal(orEmptyStrings(t.DefaultTags)); err != nil {
+		return
+	}
+	if keyUsage, err = json.Marshal(orEmptyStrings(t.KeyUsage)); err != nil {
+		return
+	}
+	if eku, err = json.Marshal(orEmptyStrings(t.ExtendedKeyUsage)); err != nil {
+		return
+	}
+	passthroughOIDs, err = json.Marshal(orEmptyStrings(t.PassthroughOIDs))
 	return
 }
 
@@ -157,7 +194,8 @@ func (s *PostgresStore) GetCertificateTemplateBySlug(ctx context.Context, slug s
 }
 
 func (s *PostgresStore) CreateCertificateTemplate(ctx context.Context, t *CertificateTemplate) error {
-	subject, cn, san, keyTypes, curves, meta, tags, err := templateJSON(t)
+	normaliseTemplate(t)
+	subject, cn, san, keyTypes, curves, meta, tags, keyUsage, eku, passthroughOIDs, err := templateJSON(t)
 	if err != nil {
 		return err
 	}
@@ -169,10 +207,13 @@ func (s *PostgresStore) CreateCertificateTemplate(ctx context.Context, t *Certif
 			 allowed_key_types, rsa_min_bits, rsa_max_bits, ecdsa_curves,
 			 csr_required, key_custody_required,
 			 validity_days, max_validity_days, renew_before_days, auto_renew,
+			 key_usage, extended_key_usage, basic_constraints_ca,
+			 extension_passthrough, passthrough_oids, conformance,
 			 require_metadata, default_environment, default_team, default_tags,
 			 created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-		        $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+		        $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26,
+		        $27, $28, $29, $30, $31, $32)
 		RETURNING id, version, created_at, updated_at`,
 		t.Slug, t.Name, t.Description, orOne(t.Version), t.IsEnabled,
 		t.CAAccountID, t.CAProfile,
@@ -180,6 +221,8 @@ func (s *PostgresStore) CreateCertificateTemplate(ctx context.Context, t *Certif
 		keyTypes, t.RSAMinBits, t.RSAMaxBits, curves,
 		t.CSRRequired, t.KeyCustodyRequired,
 		t.ValidityDays, t.MaxValidityDays, t.RenewBeforeDays, t.AutoRenew,
+		keyUsage, eku, t.BasicConstraintsCA,
+		t.ExtensionPassthrough, passthroughOIDs, t.Conformance,
 		meta, t.DefaultEnvironment, t.DefaultTeam, tags,
 		t.CreatedBy,
 	).Scan(&t.ID, &t.Version, &t.CreatedAt, &t.UpdatedAt)
@@ -191,7 +234,8 @@ func (s *PostgresStore) CreateCertificateTemplate(ctx context.Context, t *Certif
 // edit changed a rule or only a label is a question about the two versions of
 // the object, and the handler is the only place that holds both.
 func (s *PostgresStore) UpdateCertificateTemplate(ctx context.Context, t *CertificateTemplate) error {
-	subject, cn, san, keyTypes, curves, meta, tags, err := templateJSON(t)
+	normaliseTemplate(t)
+	subject, cn, san, keyTypes, curves, meta, tags, keyUsage, eku, passthroughOIDs, err := templateJSON(t)
 	if err != nil {
 		return err
 	}
@@ -203,7 +247,9 @@ func (s *PostgresStore) UpdateCertificateTemplate(ctx context.Context, t *Certif
 			allowed_key_types = $13, rsa_min_bits = $14, rsa_max_bits = $15, ecdsa_curves = $16,
 			csr_required = $17, key_custody_required = $18,
 			validity_days = $19, max_validity_days = $20, renew_before_days = $21, auto_renew = $22,
-			require_metadata = $23, default_environment = $24, default_team = $25, default_tags = $26,
+			key_usage = $23, extended_key_usage = $24, basic_constraints_ca = $25,
+			extension_passthrough = $26, passthrough_oids = $27, conformance = $28,
+			require_metadata = $29, default_environment = $30, default_team = $31, default_tags = $32,
 			updated_at = now()
 		WHERE id = $1`,
 		t.ID,
@@ -213,6 +259,8 @@ func (s *PostgresStore) UpdateCertificateTemplate(ctx context.Context, t *Certif
 		keyTypes, t.RSAMinBits, t.RSAMaxBits, curves,
 		t.CSRRequired, t.KeyCustodyRequired,
 		t.ValidityDays, t.MaxValidityDays, t.RenewBeforeDays, t.AutoRenew,
+		keyUsage, eku, t.BasicConstraintsCA,
+		t.ExtensionPassthrough, passthroughOIDs, t.Conformance,
 		meta, t.DefaultEnvironment, t.DefaultTeam, tags,
 	)
 	if err != nil {

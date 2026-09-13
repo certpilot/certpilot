@@ -36,6 +36,9 @@ This is early development software. Do not run it in production yet.
 | CA hierarchy tree | ⚠️ | Position and lineage are shown per CA and a malformed hierarchy is flagged; the tree is not drawn as a tree |
 | Policy engine | ⚠️ | `key_size`, `key_type`, `max_lifetime`, `ca_restriction`, `naming`; a rule type it cannot evaluate is a violation, not a pass. **It runs on all three issuance paths.** A person's request and a host's go through the issuance resolver; renewal re-evaluates against the template and the floor and renews *into* conformance where it can, reporting what it cannot fix rather than refusing |
 | Certificate templates | ⚠️ | What a kind of certificate looks like, with the three dispositions a policy cannot express — supply a value, constrain it, or pass it through. Key type and size, curve, naming, wildcards, SAN kinds, lifetime, custody, required metadata, and a supplied subject a CSR may not contradict. Enforced on **a person's request and a host's**, through one resolver. A grant says who may use which template and for which names; it no longer describes the certificate. A template that could never issue anything is refused when it is saved. Renewal reloads the template and raises a key to what the rules now require — never downgrading, and never changing what it does not have to. The console shows every template, which CA signs it, what it would refuse, and who may use it |
+| CA profiles | ✅ | A Vault role, an ACME profile, an AWS template — selected per template, carried through on every issuance and renewal. An unadvertised ACME profile is refused at save time, checked against the CA's live directory rather than a compiled-in list |
+| Key usage and extended key usage | ⚠️ | Enforced where a gateway builds the certificate (selfsigned). Refused at save time on Vault unless the selected role's own flags can produce it, and on ACME unconditionally — see the table below for why. Verified after every issuance regardless, so a wrong value cannot pass silently |
+| Post-issuance conformance checking | ✅ | Every issuance and renewal parses what the CA actually returned and compares it against what was asked: key type, key size, names, validity, and added subject fields. `conformance: ENFORCE | REPORT` on the template decides whether a mismatch refuses (and revokes, where the gateway supports it) or is only recorded. See [templates.md](templates.md#issue-then-check) |
 | Discovery | ✅ | Scans hosts, CIDR networks, and address ranges on a schedule; records the full handshake, says which certificates nobody manages, and reports what changed since last time |
 | Certificate Transparency | ✅ | Watches CT for certificates issued in your name — including ones never deployed anywhere you could scan. A check that could not run is never reported as a check that found nothing |
 | Cloud inventory | ✅ | Reads ACM, Azure Key Vault, Google Cloud, and Kubernetes TLS secrets. Reports which certificates the provider itself will not renew — the ones everybody assumes are automatic |
@@ -49,6 +52,32 @@ This is early development software. Do not run it in production yet.
 | Vault issuers in the CA inventory | ✅ | Connecting a CA account records the CAs behind it, and from that moment they are monitored, thresholded and alerted on like everything else. The importer refreshes what the certificate says and never touches what an operator decided — the name, the thresholds, the owning team |
 | Certificate revocation | ✅ | `POST /certificates/:id/revoke`, admin only. The CA is told first and only what it accepted is recorded, so a row can never read `REVOKED` while the certificate still answers handshakes. `DELETE` now refuses a live certificate and points at revoke; `?forget=true` is the deliberate override for one you want to stop tracking while it stays live |
 | GCP CAS, AWS PCA, DigiCert, Sectigo gateways | ❌ | Not started |
+
+## What is checked before issuance, what is only checked after
+
+The table above says templates are enforced. This is the honest version of
+that claim, per provider, because "enforced" means three different things
+depending on which CA a template points at.
+
+| | Before issuance | After issuance |
+|:---|:---|:---|
+| Key type, key size | selfsigned: enforced (the gateway builds the certificate). Vault: enforced by the role, which a template selects but cannot override. ACME: not controllable — the CA's own CSR handling decides | All three: verified against the returned certificate. A mismatch is BLOCK-class |
+| Key usage, extended key usage | selfsigned: enforced. Vault: refused at template-save time unless the selected role's own flags can produce it — checked by reading the role, not by sending a value and hoping, because **Vault ignores key usage in an issue/sign request body entirely**. ACME: refused at template-save time, unconditionally — the profile decides in a way nothing here can predict | All three: not independently re-verified as a distinct check — a wrong value would already have failed to save, and selfsigned's output is definitionally correct since it built the certificate itself |
+| Names (SANs) | All three: validated against the template's rules and the caller's grant before the request is sent | All three: verified against the returned certificate. Added or dropped names are BLOCK-class |
+| Validity | Requested per the template's `validity_days`; no gateway is asked to promise it will honour that exactly | All three: verified. Shorter is REPORT-class (a public CA capping lifetime is correct); longer is BLOCK-class |
+| Subject | `SUPPLIED` templates send a fixed subject; `CONSTRAINED` ones validate the requester's | All three: an added field (an OU a CA inserts by policy) is REPORT-class. A requester-supplied subject under `CONSTRAINED` is not compared, because there is no template default to compare it against |
+| CA profile (Vault role, ACME profile) | Checked against the CA's live directory at template-save time, for ACME. Vault has no equivalent list to check against — an unknown role is caught at issuance, where Vault itself refuses it | Not applicable — the profile either issued or the request already failed |
+| `basic_constraints_ca` | selfsigned only. Not communicated to Vault or ACME at all; there is no field on the wire contract for it yet | Not checked |
+| `extension_passthrough` | selfsigned only, where "the gateway builds the certificate" already means a CSR's extensions are never copied unless this says so | Not checked |
+
+The row that matters most to read literally: **a declared key usage on an ACME
+or Vault template is a promise about what CertPilot will refuse to save, not a
+promise about what the CA will do differently.** The CA was never going to do
+anything differently — Vault's role and ACME's profile already decided before
+the request existed. What changed is that a template asking for something its
+CA account cannot produce now fails at the moment somebody makes that mistake,
+in a sentence naming why, instead of at the moment somebody discovers a
+certificate that does not do what its name implies.
 
 ## Known gaps
 

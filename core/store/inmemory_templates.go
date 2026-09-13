@@ -42,6 +42,9 @@ func cloneTemplate(t *CertificateTemplate) *CertificateTemplate {
 	c.ECDSACurves = append([]string{}, t.ECDSACurves...)
 	c.RequireMetadata = append([]string{}, t.RequireMetadata...)
 	c.DefaultTags = append([]string{}, t.DefaultTags...)
+	c.KeyUsage = append([]string{}, t.KeyUsage...)
+	c.ExtendedKeyUsage = append([]string{}, t.ExtendedKeyUsage...)
+	c.PassthroughOIDs = append([]string{}, t.PassthroughOIDs...)
 
 	return &c
 }

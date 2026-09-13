@@ -270,6 +270,14 @@ type Certificate struct {
 	// identical to one that has nothing to say.
 	ARISupported *bool `json:"ari_supported,omitempty"`
 
+	// ConformanceFindings is what #30's post-issuance check found, if
+	// anything: the returned certificate compared against what the template
+	// asked for. Empty means either nothing was checked (most of an
+	// inventory predates this) or nothing was found — the two are not
+	// distinguished, for the same reason TemplateID is null rather than
+	// false for a certificate issued before templates existed.
+	ConformanceFindings []ConformanceFinding `json:"conformance_findings,omitempty"`
+
 	// VerificationState answers the only question that matters after a
 	// renewal: is the thing in front of the users actually serving the new
 	// certificate?
@@ -468,7 +476,8 @@ type CertificateTemplate struct {
 	// or the one with the widest trust.
 	CAAccountID string `json:"ca_account_id"`
 	// CAProfile names the CA's own template when it has one — a Vault role, an
-	// ACME profile, an AWS Private CA template ARN. Nothing reads it yet.
+	// ACME profile, an AWS Private CA template ARN. Carried through to the
+	// gateway on every issuance and renewal; see core/engine/issuance.
 	CAProfile string `json:"ca_profile,omitempty"`
 
 	SubjectMode     string            `json:"subject_mode"`
@@ -497,6 +506,32 @@ type CertificateTemplate struct {
 	RenewBeforeDays int  `json:"renew_before_days"`
 	AutoRenew       bool `json:"auto_renew"`
 
+	// ── Key usage, extended key usage, extension passthrough ────────────
+	//
+	// Deliberately last, and deliberately narrow — see #31. Empty means
+	// unconstrained, the same convention as everything else here.
+	KeyUsage         []string `json:"key_usage"`
+	ExtendedKeyUsage []string `json:"extended_key_usage"`
+	// BasicConstraintsCA is enforced only where a gateway builds the
+	// certificate itself. See docs/status.md for which do.
+	BasicConstraintsCA bool `json:"basic_constraints_ca"`
+	// ExtensionPassthrough governs whether a CSR's own extensions reach the
+	// certificate. NONE is the default everywhere that matters — Google CAS,
+	// EJBCA and AWS all default the equivalent setting off, because an
+	// extension copied out of a CSR is an attacker-controlled field in a
+	// signed certificate.
+	ExtensionPassthrough string `json:"extension_passthrough"`
+	// PassthroughOIDs is read only when ExtensionPassthrough is LISTED.
+	PassthroughOIDs []string `json:"passthrough_oids"`
+
+	// Conformance decides what happens when an issued certificate does not
+	// match what this template asked for — see #30 and
+	// core/engine/issuance/conform.go. ENFORCE refuses and, where possible,
+	// revokes; REPORT records the certificate with the mismatch attached as
+	// a finding. The right choice differs by CA, which is why this is a
+	// template property rather than a global setting.
+	Conformance string `json:"conformance"`
+
 	// RequireMetadata names MetadataField keys a request must answer. Separate
 	// from MetadataField.IsRequired, which is estate-wide: a change ticket may
 	// be required for a production certificate and meaningless for a
@@ -514,6 +549,41 @@ type CertificateTemplate struct {
 // Live reports whether this template may issue anything right now.
 func (t *CertificateTemplate) Live() bool {
 	return t != nil && t.IsEnabled
+}
+
+// Conformance values. ENFORCE refuses a certificate that does not match what
+// was asked for; REPORT records it anyway, with the mismatch attached.
+const (
+	ConformanceEnforce = "ENFORCE"
+	ConformanceReport  = "REPORT"
+)
+
+// Extension passthrough values. NONE is the default everywhere it matters.
+const (
+	ExtensionPassthroughNone   = "NONE"
+	ExtensionPassthroughListed = "LISTED"
+	ExtensionPassthroughAll    = "ALL"
+)
+
+// Finding severities. BLOCK is the class core/engine/issuance/conform.go
+// refuses under an ENFORCE template; REPORT is recorded regardless of the
+// template's own conformance setting, because the issue it names — the CA
+// capping validity, or adding a subject field — was never something ENFORCE
+// could sensibly refuse.
+const (
+	FindingBlock  = "BLOCK"
+	FindingReport = "REPORT"
+)
+
+// ConformanceFinding is one way an issued certificate diverged from what a
+// template asked for.
+type ConformanceFinding struct {
+	// Field names what was compared — "key_type", "key_size", "sans",
+	// "validity", "subject".
+	Field string `json:"field"`
+	// Severity is BLOCK or REPORT — see the constants above.
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
 }
 
 // AuditLog represents an immutable audit log entry.

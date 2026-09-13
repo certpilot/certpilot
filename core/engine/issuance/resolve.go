@@ -119,6 +119,16 @@ type Decision struct {
 	KeySize      int
 	ValidityDays int
 
+	// CAProfile, KeyUsage and ExtendedKeyUsage come straight from the
+	// template — see #29 and #31. There is no rung for them: unlike the
+	// subject or the key, nothing on the request side can supply or narrow
+	// these, so there is nothing to reconcile. A gateway that cannot honour
+	// them is expected to refuse the request itself, which is where #31's
+	// enforcement actually lives.
+	CAProfile        string
+	KeyUsage         []string
+	ExtendedKeyUsage []string
+
 	RenewBeforeDays int
 	AutoRenew       bool
 
@@ -162,10 +172,13 @@ func (r *Resolver) Resolve(ctx context.Context, req Request) (*Decision, error) 
 	}
 
 	d := &Decision{
-		Template:        tpl,
-		Account:         account,
-		RenewBeforeDays: tpl.RenewBeforeDays,
-		AutoRenew:       tpl.AutoRenew,
+		Template:         tpl,
+		Account:          account,
+		RenewBeforeDays:  tpl.RenewBeforeDays,
+		AutoRenew:        tpl.AutoRenew,
+		CAProfile:        tpl.CAProfile,
+		KeyUsage:         tpl.KeyUsage,
+		ExtendedKeyUsage: tpl.ExtendedKeyUsage,
 	}
 
 	// ── Rung 6, then 5: the CSR decides the names and the key, the request
