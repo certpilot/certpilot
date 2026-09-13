@@ -13,7 +13,10 @@ revocation endpoint.
 - Go 1.26+
 - Node.js 20+ (frontend only)
 - PostgreSQL 13+ (`brew install postgresql@17`)
-- [buf](https://buf.build) (only if you edit `.proto` files)
+
+The `.proto` contract lives in
+[`certpilot-gateway-sdk`](https://github.com/certpilot/certpilot-gateway-sdk)
+now, so `buf` is only a prerequisite there.
 
 No cloud account is needed. If you skip PostgreSQL entirely the core still
 starts, on an in-memory store seeded with sample data that is discarded on exit
@@ -27,10 +30,14 @@ make dev
 ```
 
 That is the whole thing: it starts PostgreSQL if it is not already running,
-creates a `certpilot_dev` database, applies the prelude and all 26 migrations,
+creates a `certpilot_dev` database, applies the prelude and all 39 migrations,
 generates a development key encryption key once and reuses it, starts the
 self-signed gateway, the API, and the frontend, and registers the gateway as a
 CA account so there is something to issue from.
+
+The gateway is fetched from its own release rather than built from this tree, so
+the first run downloads it. Nothing else about `make dev` changed when the
+gateways moved out.
 
 Open `http://localhost:3000`. Ctrl-C stops everything, and stops PostgreSQL too
 if it was not already running when you started.

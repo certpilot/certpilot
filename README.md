@@ -65,19 +65,20 @@ is aimed at.
 
 ## Quick start
 
-Requires Docker. No toolchain, no database, no cloud account.
+Requires Docker. No clone, no toolchain, no database, no cloud account.
 
 ```bash
-git clone https://github.com/certpilot/certpilot.git
-cd certpilot
-docker compose -f deploy/docker-compose.quickstart.yml up -d --build
+mkdir certpilot-demo && cd certpilot-demo
+base=https://raw.githubusercontent.com/certpilot/certpilot/v0.1.1/deploy
+curl -O $base/docker-compose.quickstart.yml -O $base/config.quickstart.yaml
+CERTPILOT_VERSION=0.1.1 docker compose -f docker-compose.quickstart.yml up -d
 ```
 
 The frontend is on `:3000` and the API on `:8080`. The first start creates an
 administrator and prints its password once:
 
 ```bash
-docker compose -f deploy/docker-compose.quickstart.yml logs core | grep -i password
+docker compose -f docker-compose.quickstart.yml logs core | grep -i password
 ```
 
 This stack is for evaluating, not deploying, and it says so in its own
@@ -153,9 +154,21 @@ writing one, in any language, without touching the core.
 └────────────────┘      └────────────────┘      └────────────────┘
 ```
 
+Each gateway is its own repository, its own release and its own image, and the
+core depends on none of them at build time — only on the published contract:
+
+| | |
+|:---|:---|
+| [`certpilot-gateway-acme`](https://github.com/certpilot/certpilot-gateway-acme) | any RFC 8555 CA |
+| [`certpilot-gateway-vault`](https://github.com/certpilot/certpilot-gateway-vault) | HashiCorp Vault PKI |
+| [`certpilot-gateway-selfsigned`](https://github.com/certpilot/certpilot-gateway-selfsigned) | a local CA, for evaluating and for internal names |
+| [`certpilot-gateway-sdk`](https://github.com/certpilot/certpilot-gateway-sdk) | the contract, plus a conformance probe that checks yours against it |
+
 Separately, a **host agent** runs on the machines where certificates are served.
 It generates its own private keys and never sends them anywhere — CertPilot
-cannot produce them and does not claim to.
+cannot produce them and does not claim to. Its contract is published too, in
+[`certpilot-agent-sdk`](https://github.com/certpilot/certpilot-agent-sdk), so an
+agent can be a Kubernetes operator or a Python daemon rather than this binary.
 
 [docs/architecture.md](docs/architecture.md) explains the three decisions the
 whole design follows from.
@@ -219,8 +232,13 @@ make lint         # gofmt, go vet, staticcheck
 make routes       # regenerate the API route table after changing the router
 ```
 
-This is a Go workspace with six modules, so `go build ./...` from the root does
-not work. Build from inside a module, or use the `make` targets.
+This is a Go workspace with three modules — `core`, `agent` and `pkg` — so
+`go build ./...` from the root does not work. Build from inside a module, or use
+the `make` targets.
+
+The gateways are not built here. `make dev` and the compose files fetch them
+from their own releases, which is the same thing a gateway somebody else wrote
+would do.
 
 **Go** 1.26 · Gin · pgx · gRPC · PostgreSQL · **Vue 3** · TypeScript ·
 Tailwind 4 · Chart.js

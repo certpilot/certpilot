@@ -1463,36 +1463,46 @@ build.
 
 ### Phase 9 — Containers, and proof that they run
 
-`deploy/docker-compose.yml` exists and has never been built. That is recorded
-as a known gap rather than presented as working, and it is now the single
-biggest obstacle to anybody trying this: the quick start needs Go 1.26, Node 20
-and a local PostgreSQL, which is a thirty-minute detour for somebody who wanted
-to spend ten minutes deciding whether the product is interesting.
+**Done, and released as v0.1.1.** The quickstart is two files and one command
+with no clone and no toolchain, on published multi-architecture images.
 
-It is first for that reason and no other. Nothing in this phase makes CertPilot
+It was first for one reason and no other: nothing in this phase makes CertPilot
 better at managing certificates. It makes the difference between a reader who
-evaluates it and a reader who closes the tab.
+evaluates it and a reader who closes the tab. What follows is what it asked for
+and what actually happened.
 
-- **Build every image and run the stack from them.** Six modules produce five
-  binaries — core, three gateways, the agent — plus the frontend. Every
-  Dockerfile in the tree is unverified, and the honest expectation is that
-  several do not build at all
+- ~~**Build every image and run the stack from them.**~~ — **closed.** The
+  honest expectation was right: the frontend image copied `nginx.conf` from
+  outside its own build context and could never have built. Every Dockerfile is
+  built on each pull request now, and the binary inside each is run rather than
+  assumed
 - **One `docker compose up` to a working instance**, with PostgreSQL, the
   self-signed gateway, the core and the frontend, seeded. The migration step
   stays explicit: the server never migrates itself, and a compose file that
   quietly did would contradict the one rule this project is least willing to
   bend
-- **Publish to a registry, tagged.** `ghcr.io` alongside the repository, built
-  by CI on a tag so the image and the source cannot drift
-- **A CI job that builds the images on every pull request.** Without it they rot
-  back to unbuildable within a month, which is how they got here
-- **Verify the mTLS story survives containers.** The core-to-gateway channel is
-  mutually authenticated and `make dev-certs` writes development material for
-  loopback. Names change inside a compose network, and this is exactly where a
-  certificate management product looks silly if it gets it wrong
+- ~~**Publish to a registry, tagged.**~~ — **closed.** `ghcr.io/certpilot/*`,
+  `linux/amd64` and `linux/arm64`, cross-compiled rather than emulated. Publishing
+  fires on a tag and not on a merge, so `latest` means the most recent release
+  rather than the most recent commit, and a `docker compose pull` cannot change
+  what a deployment runs without somebody deciding to. Each binary reports the
+  version it was stamped with, and CI asserts that — an `-ldflags -X` path that
+  stops matching a real symbol fails silently, leaving every build reporting its
+  compiled-in default for ever
+- ~~**A CI job that builds the images on every pull request.**~~ — **closed**,
+  and it is also where the stack is brought up end to end. That job builds the
+  branch's own core and frontend under the tag the quickstart asks for, because
+  pulling published images there would have turned the only end-to-end test in
+  the repository into a test of the last release
+- ~~**Verify the mTLS story survives containers.**~~ — **closed**, and checked
+  by absence rather than presence: a failed gateway connection is only a warning
+  in the core, so a healthy core proves nothing on its own. The job asserts the
+  log never contains `could not connect to configured gateway`
 
-Blocked on this machine — there is no container runtime here — so this is work
-for somebody who has one, or for CI.
+What this phase did not anticipate is that the gateways would leave the
+repository before it finished, so "six modules produce five binaries" describes
+a tree that no longer exists. Each gateway publishes its own image from its own
+repository now, and the compose files pull all five services.
 
 ### Phase 10 — Post-quantum, the half that is possible
 
