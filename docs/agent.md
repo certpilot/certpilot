@@ -103,32 +103,45 @@ does not then get backed up to somebody's home directory by accident.
 An agent cannot ask for whatever it likes. An operator writes a grant first,
 and the grant is checked on every request.
 
+A grant says **who may ask, and for which names**. What the certificate looks
+like — the issuer, the key rules, the lifetime — lives on the
+[certificate template](templates.md) the grant names.
+
 ```bash
 curl -X POST localhost:8080/api/v1/agent-grants -H 'Content-Type: application/json' -d '{
   "name": "web tier certificates",
+  "template_id": "host-workloads",
   "label_selector": {"tier": "web"},
-  "names": ["*.web.example.com", "api.example.com"],
-  "ca_account_id": "<id>",
-  "allowed_key_types": ["ECDSA"],
-  "min_key_size": 256,
-  "validity_days": 90,
-  "renew_before_days": 30
+  "names": ["*.web.example.com", "api.example.com"]
 }'
 ```
 
 | Field | |
 |:---|:---|
+| `template_id` | The template this grant is permission for, by slug or uuid. **Required** |
+| `subject_kind` | `AGENT` (the default), or `ROLE`, `TEAM`, `USER` for a person's request |
 | `agent_id` | Targets one host |
 | `label_selector` | Targets every agent carrying these labels. Either this or `agent_id` |
-| `names` | Exact hostnames, or single-level wildcards |
-| `ca_account_id` | **Part of the grant, not chosen by the agent.** An agent that could pick its own issuer could pick the cheapest, the least logged, or the one with the widest trust |
-| `allowed_key_types`, `min_key_size` | What the host may generate |
-| `validity_days` | How long the certificate is asked for |
-| `renew_before_days` | Becomes `renew_after` in the response — **the core decides when**, not the host |
+| `names` | Exact hostnames, or single-level wildcards. A **narrowing** of what the template permits, never an exception to it |
 
-That last row matters more than it looks. A fleet that picked its own renewal
-moment is a fleet that can decide to renew hourly, and four hundred hosts doing
-that is a denial of service against your CA.
+### Why the shape is not on the grant
+
+It used to be. `ca_account_id`, `allowed_key_types`, `min_key_size`,
+`validity_days` and `renew_before_days` were columns here, and that made them a
+second rulebook — narrower than `policies`, reachable only by agents, and
+maintained separately. The result was that a `BLOCK` policy an operator wrote
+stopped somebody in the console and did not stop a host.
+
+Now both paths go through one resolver, so the same template rules and the same
+estate-wide floor apply to a host as to a person. Migration 038 converted every
+existing grant into a template carrying its exact rules, so nothing an agent
+could request before is refused now.
+
+`renew_before_days` moved to the template and still does the same job: it
+becomes `renew_after` in the response, and **the core decides when**, not the
+host. A fleet that picked its own renewal moment is a fleet that can decide to
+renew hourly, and four hundred hosts doing that is a denial of service against
+your CA.
 
 A refused request is recorded and raises `agent.request_refused`. An agent
 asking for a name it has no grant for is a signal, not a nuisance.

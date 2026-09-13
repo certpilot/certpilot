@@ -24,6 +24,7 @@ team inside an organisation.
 
 | | |
 |:---|:---|
+| [templates.md](templates.md) | What a kind of certificate looks like, who may ask for one, and the six rungs that decide |
 | [monitoring.md](monitoring.md) | CA health, expiry thresholds, alerting, acknowledgement, wall displays |
 | [deployment.md](deployment.md) | Getting a renewed certificate to the thing that serves it |
 | [agent.md](agent.md) | The host agent, and the private keys CertPilot never sees |
