@@ -88,7 +88,7 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 	displayHandler := NewDisplayTokenHandler(deps.Store)
 	notifHandler := NewNotificationHandler(deps.Store, deps.Keyring, deps.Dispatcher)
 	ackHandler := NewAcknowledgementHandler(deps.Store)
-	agentHandler := NewAgentHandler(deps.Store, deps.PluginMgr, deps.Keyring, deps.Broker, deps.DeployQueue)
+	agentHandler := NewAgentHandler(deps.Store, deps.PluginMgr, deps.Keyring, deps.Broker, deps.DeployQueue, deps.PolicyEngine)
 	ctHandler := NewCTHandler(deps.Store, deps.CTMonitor)
 	cloudHandler := NewCloudHandler(deps.Store, deps.CloudEngine, deps.Keyring)
 	deployHandler := NewDeploymentHandler(deps.Store, deps.Keyring)

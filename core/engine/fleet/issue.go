@@ -2,17 +2,13 @@ package fleet
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/ed25519"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/asn1"
-	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/certpilot/certpilot/core/engine/issuance"
+	"github.com/certpilot/certpilot/core/engine/policy"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/store"
@@ -45,12 +41,24 @@ type Issuer struct {
 	pluginMgr *pluginmgr.Manager
 	keyring   *secrets.Keyring
 	broker    *events.Broker
-	now       func() time.Time
+	// resolver decides what may be issued. The grant decides who may ask and
+	// for which names; everything about the certificate itself comes from here,
+	// through the same six rungs a person's request goes through.
+	//
+	// Before this, the two paths had separate rulebooks and the agent's was the
+	// narrower one — which is how a host could obtain a certificate the policy
+	// engine would have refused a person.
+	resolver *issuance.Resolver
+	now      func() time.Time
 }
 
 // NewIssuer creates the issuer.
-func NewIssuer(s store.Store, pm *pluginmgr.Manager, kr *secrets.Keyring, broker *events.Broker) *Issuer {
-	return &Issuer{store: s, pluginMgr: pm, keyring: kr, broker: broker, now: time.Now}
+func NewIssuer(s store.Store, pm *pluginmgr.Manager, kr *secrets.Keyring, broker *events.Broker, pe *policy.Engine) *Issuer {
+	return &Issuer{
+		store: s, pluginMgr: pm, keyring: kr, broker: broker,
+		resolver: issuance.NewResolver(s, pe),
+		now:      time.Now,
+	}
 }
 
 // Request is what an agent submits.
@@ -92,7 +100,7 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 		return nil, err
 	}
 
-	grant, err := i.authorise(ctx, agent, csr, names)
+	grant, err := i.authorise(ctx, agent, names)
 	if err != nil {
 		// Refusals are published, not only returned. A host asking for a name
 		// it has not been granted is either a misconfiguration somebody needs
@@ -102,10 +110,24 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 		return nil, err
 	}
 
-	account, err := i.store.GetCAAccount(ctx, grant.CAAccountID)
+	// Everything about the certificate — the issuer, the key rules, the
+	// lifetime, the naming rules and the estate-wide floor above all of them —
+	// comes from here. The grant said who may ask and for which names, and that
+	// is the whole of its job now.
+	decision, err := i.resolver.Resolve(ctx, issuance.Request{
+		TemplateRef: grant.TemplateID,
+		CSR:         csr,
+		// The host generated this key and CertPilot has never seen it. Stated
+		// rather than left to be inferred, so a template that requires custody
+		// elsewhere refuses instead of silently accepting.
+		KeyCustody: store.KeyCustodyAgent,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("the CA account this grant issues from no longer exists: %w", err)
+		i.announceRefusal(agent, names, err)
+		return nil, err
 	}
+
+	account := decision.Account
 	gateway, err := i.gateway(account)
 	if err != nil {
 		return nil, err
@@ -115,22 +137,23 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 		return nil, err
 	}
 
-	keyType, keySize := describeCSRKey(csr)
 	slog.Info("signing a request from a host",
-		"agent", agent.Name, "names", names, "grant", grant.Name,
-		"ca_account", account.Name, "key", fmt.Sprintf("%s/%d", keyType, keySize),
+		"agent", agent.Name, "names", decision.Domains, "grant", grant.Name,
+		"template", decision.Template.Slug,
+		"ca_account", account.Name,
+		"key", fmt.Sprintf("%s/%d", decision.KeyType, decision.KeySize),
 		"private_key", "never sent, never held")
 
 	resp, err := gateway.Client.IssueCertificate(ctx, &providerv1.IssueCertificateRequest{
 		CsrPem: []byte(req.CSRPem),
 		// The names CertPilot validated, not the ones the request asked for.
-		// The two are the same here — that is what authorise checked — but
-		// passing the validated set means a gateway that trusts its caller is
-		// trusting a decision that was actually made.
-		Domains:        names,
-		KeyType:        keyType,
-		KeySize:        int32(keySize),
-		ValidityDays:   int32(grant.ValidityDays),
+		// The two are the same here — that is what the grant and the template
+		// between them checked — but passing the validated set means a gateway
+		// that trusts its caller is trusting a decision that was actually made.
+		Domains:        decision.Domains,
+		KeyType:        decision.KeyType,
+		KeySize:        int32(decision.KeySize),
+		ValidityDays:   int32(decision.ValidityDays),
 		ProviderConfig: config,
 	})
 	if err != nil {
@@ -157,7 +180,7 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 			account.ProviderType)
 	}
 
-	cert, err := i.record(ctx, agent, grant, req, info, resp)
+	cert, err := i.record(ctx, agent, grant, decision, req, info, resp)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +192,7 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 		CertificatePEM: string(resp.Certificate.CertificatePem),
 		ChainPEM:       string(resp.Certificate.ChainPem),
 		NotAfter:       info.NotAfter,
-		RenewAfter:     info.NotAfter.AddDate(0, 0, -grant.RenewBeforeDays),
+		RenewAfter:     info.NotAfter.AddDate(0, 0, -decision.RenewBeforeDays),
 	}
 	return issued, nil
 }
@@ -179,13 +202,14 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 // With no private key, and said so explicitly rather than left as an absence:
 // KeyCustodyAgent is the difference between "we do not have this key" and "this
 // key is on a host and we could not produce it if we were ordered to".
-func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.AgentGrant,
-	req Request, info *x509util.CertInfo, resp *providerv1.IssueCertificateResponse) (*store.Certificate, error) {
+func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.TemplateGrant,
+	decision *issuance.Decision, req Request, info *x509util.CertInfo,
+	resp *providerv1.IssueCertificateResponse) (*store.Certificate, error) {
 
 	notBefore, notAfter := info.NotBefore, info.NotAfter
 	certPEM := string(resp.Certificate.CertificatePem)
 	holder := agent.ID
-	accountID := grant.CAAccountID
+	accountID := decision.Account.ID
 
 	cert := &store.Certificate{
 		FingerprintSHA256: info.FingerprintSHA256,
@@ -203,7 +227,7 @@ func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.Ag
 		// host can rotate it, and a sweep that tried would fail on every
 		// attempt forever.
 		AutoRenew:        false,
-		RenewalLeadDays:  grant.RenewBeforeDays,
+		RenewalLeadDays:  decision.RenewBeforeDays,
 		CAAccountID:      &accountID,
 		CertificatePEM:   &certPEM,
 		DiscoveredVia:    "AGENT",
@@ -244,7 +268,7 @@ func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.Ag
 
 // authorise decides whether this host may have this certificate.
 func (i *Issuer) authorise(ctx context.Context, agent *store.Agent,
-	csr *x509.CertificateRequest, names []string) (*store.AgentGrant, error) {
+	names []string) (*store.TemplateGrant, error) {
 
 	grants, err := i.store.GetGrantsForAgent(ctx, agent.ID)
 	if err != nil {
@@ -255,8 +279,6 @@ func (i *Issuer) authorise(ctx context.Context, agent *store.Agent,
 			"%s has no grant, so it may not request certificates. Create one with POST /api/v1/agent-grants naming this agent or a label it carries",
 			agent.Name)
 	}
-
-	keyType, keySize := describeCSRKey(csr)
 
 	// One grant has to cover the whole request. Assembling permission from
 	// several would let a host combine a grant for one tier's names with
@@ -269,10 +291,10 @@ func (i *Issuer) authorise(ctx context.Context, agent *store.Agent,
 				grant.Name, strings.Join(missing, ", ")))
 			continue
 		}
-		if ok, why := grant.AllowsKey(keyType, keySize); !ok {
-			reasons = append(reasons, fmt.Sprintf("%s: %s", grant.Name, why))
-			continue
-		}
+		// No key check here. The grant used to carry one, and it was a
+		// second, narrower rulebook that drifted from the policy engine the
+		// moment either changed. The template the grant names decides the key
+		// now, and the estate-wide floor sits above that.
 		return grant, nil
 	}
 
@@ -280,7 +302,7 @@ func (i *Issuer) authorise(ctx context.Context, agent *store.Agent,
 		agent.Name, strings.Join(reasons, "; "))
 }
 
-func uncovered(grant *store.AgentGrant, names []string) []string {
+func uncovered(grant *store.TemplateGrant, names []string) []string {
 	missing := []string{}
 	for _, name := range names {
 		if !grant.Covers(name) {
@@ -291,104 +313,32 @@ func uncovered(grant *store.AgentGrant, names []string) []string {
 }
 
 // parseCSR reads a request and checks it is what it claims to be.
-func parseCSR(csrPEM string) (*x509.CertificateRequest, error) {
-	block, _ := pem.Decode([]byte(csrPEM))
-	if block == nil {
-		return nil, fmt.Errorf("csr_pem is not a PEM block")
-	}
-	csr, err := x509.ParseCertificateRequest(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("csr_pem is not a certificate request: %w", err)
-	}
-
-	// Proof of possession, and the reason a CSR is worth more than a list of
-	// names. Without this check anybody who can reach this endpoint could
-	// obtain a certificate for a public key belonging to somebody else — which
-	// is a certificate issued to that somebody else, from an authority this
-	// organisation runs.
-	if err := csr.CheckSignature(); err != nil {
-		return nil, fmt.Errorf("the request is not signed by the key it contains: %w", err)
-	}
-
-	if err := refuseDangerousExtensions(csr); err != nil {
-		return nil, err
-	}
-	return csr, nil
+//
+// The shared parser checks the signature — proof of possession, and the reason
+// a CSR is worth more than a list of names. Without it anybody who can reach
+// this endpoint could obtain a certificate for a public key belonging to
+// somebody else, from an authority this organisation runs.
+//
+// It also reports whether the request asks to become a CA. The refusal for that
+// used to live here and applied to agents only, so the same CSR submitted by a
+// person through the API reached the gateway unchecked. It is in the resolver
+// now, which every path goes through.
+func parseCSR(csrPEM string) (*x509util.CSRInfo, error) {
+	return x509util.ParseCSRPEM([]byte(csrPEM))
 }
 
-// OIDs for the extensions a request has no business asking for.
-var (
-	oidBasicConstraints = asn1.ObjectIdentifier{2, 5, 29, 19}
-	oidKeyUsage         = asn1.ObjectIdentifier{2, 5, 29, 15}
-)
-
-// refuseDangerousExtensions rejects a request that asks to be an authority.
+// requestedNames is what this request asks to certify.
 //
-// A CSR is a request, not an instruction, and a correct CA builds its own
-// template and ignores everything in the request but the public key and the
-// names. That is what the gateways here do — but "the code downstream is
-// careful" is not a control, it is a hope about code that may be replaced by a
-// third-party gateway next year.
+// The restriction to DNS names used to live here — "a grant has no way to
+// express them" — and a template does, through san_rules.types. Migration 038
+// sets it on every template generated from an existing grant, so the rule is
+// unchanged for every agent that has one and can now be relaxed deliberately
+// for a host that genuinely needs an IP or SPIFFE name.
 //
-// So it is refused rather than stripped. A client asking for basicConstraints
-// CA:TRUE or keyCertSign is either broken or hostile, and both deserve an error
-// rather than a certificate that silently is not what they asked for.
-func refuseDangerousExtensions(csr *x509.CertificateRequest) error {
-	for _, ext := range csr.Extensions {
-		switch {
-		case ext.Id.Equal(oidBasicConstraints):
-			var bc struct {
-				IsCA       bool `asn1:"optional"`
-				MaxPathLen int  `asn1:"optional,default:-1"`
-			}
-			if _, err := asn1.Unmarshal(ext.Value, &bc); err == nil && bc.IsCA {
-				return fmt.Errorf(
-					"this request asks for a CA certificate (basicConstraints CA:TRUE). An agent may request certificates for the names it has been granted, never an authority that could issue more")
-			}
-		case ext.Id.Equal(oidKeyUsage):
-			var usage asn1.BitString
-			if _, err := asn1.Unmarshal(ext.Value, &usage); err != nil {
-				continue
-			}
-			// Bit 5 is keyCertSign in the KeyUsage bit string.
-			const keyCertSignBit = 5
-			if usage.BitLength > keyCertSignBit && usage.At(keyCertSignBit) == 1 {
-				return fmt.Errorf(
-					"this request asks for the keyCertSign usage, which would let the certificate sign others. An agent may request certificates, never an authority")
-			}
-		}
-	}
-	return nil
-}
-
-// requestedNames pulls the hostnames out of a request.
-//
-// The common name is folded into the set rather than treated separately,
-// because a grant has to authorise every name a certificate will carry and CN
-// is one of them — a request whose SANs are all permitted and whose CN is not
-// would otherwise produce a certificate for a name nobody granted.
-func requestedNames(csr *x509.CertificateRequest) ([]string, error) {
-	if len(csr.IPAddresses) > 0 || len(csr.EmailAddresses) > 0 || len(csr.URIs) > 0 {
-		return nil, fmt.Errorf(
-			"this request carries an IP address, email, or URI name. Only DNS names are issued to agents: the others are validated differently and a grant has no way to express them")
-	}
-
-	seen := map[string]bool{}
-	names := []string{}
-	add := func(name string) {
-		name = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "."))
-		if name == "" || seen[name] {
-			return
-		}
-		seen[name] = true
-		names = append(names, name)
-	}
-
-	add(csr.Subject.CommonName)
-	for _, name := range csr.DNSNames {
-		add(name)
-	}
-
+// What stays is the count ceiling, which is not policy: it is a bound on one
+// request.
+func requestedNames(csr *x509util.CSRInfo) ([]string, error) {
+	names := csr.Names()
 	if len(names) == 0 {
 		return nil, fmt.Errorf("this request names nothing: it has no common name and no DNS names")
 	}
@@ -396,20 +346,12 @@ func requestedNames(csr *x509.CertificateRequest) ([]string, error) {
 		return nil, fmt.Errorf("this request carries %d names, which is more than the %d allowed",
 			len(names), maxRequestedNames)
 	}
-	return names, nil
-}
 
-// describeCSRKey reports the key in a request.
-func describeCSRKey(csr *x509.CertificateRequest) (string, int) {
-	switch pub := csr.PublicKey.(type) {
-	case *ecdsa.PublicKey:
-		return "ECDSA", pub.Curve.Params().BitSize
-	case *rsa.PublicKey:
-		return "RSA", pub.N.BitLen()
-	case ed25519.PublicKey:
-		return "Ed25519", 256
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		out = append(out, strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), ".")))
 	}
-	return csr.PublicKeyAlgorithm.String(), 0
+	return out, nil
 }
 
 func (i *Issuer) gateway(account *store.CAAccount) (*pluginmgr.GatewayClient, error) {

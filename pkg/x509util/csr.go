@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
 	"net"
@@ -23,6 +24,7 @@ type CSRInfo struct {
 	// that does not cover what was asked for.
 	IPAddresses    []string `json:"ip_addresses,omitempty"`
 	EmailAddresses []string `json:"email_addresses,omitempty"`
+	URIs           []string `json:"uris,omitempty"`
 	SubjectDN      string   `json:"subject_dn"`
 	// Subject carries the structured components of the subject, keyed by the
 	// short attribute names a policy or a template names them by: O, OU, C, L,
@@ -33,12 +35,28 @@ type CSRInfo struct {
 	// An attribute with several values is joined with ", ". A template supplies
 	// one value per attribute, so a multi-valued request differs from it, which
 	// is the right answer rather than a lossy one.
-	Subject            map[string]string `json:"subject,omitempty"`
-	KeyType            string            `json:"key_type"`
-	KeySize            int               `json:"key_size"`
-	Curve              string            `json:"curve,omitempty"`
-	SignatureAlgorithm string            `json:"signature_algorithm"`
-	PublicKeyAlgorithm string            `json:"public_key_algorithm"`
+	Subject map[string]string `json:"subject,omitempty"`
+
+	// RequestsCA and RequestsKeyCertSign report a request asking to become an
+	// authority rather than an end entity.
+	//
+	// Reported here rather than refused here, because parsing and deciding are
+	// different jobs: a screen showing an operator what a CSR asks for needs to
+	// parse one it would never issue. The refusal belongs wherever issuance is
+	// decided, which is one place.
+	//
+	// A correct CA builds its own template and ignores everything in a request
+	// but the public key and the names, and the gateways here do. But "the code
+	// downstream is careful" is not a control — it is a hope about code that
+	// may be a third-party gateway next year.
+	RequestsCA          bool `json:"requests_ca,omitempty"`
+	RequestsKeyCertSign bool `json:"requests_key_cert_sign,omitempty"`
+
+	KeyType            string `json:"key_type"`
+	KeySize            int    `json:"key_size"`
+	Curve              string `json:"curve,omitempty"`
+	SignatureAlgorithm string `json:"signature_algorithm"`
+	PublicKeyAlgorithm string `json:"public_key_algorithm"`
 }
 
 // Names returns the certificate's requested names, common name first.
@@ -115,6 +133,10 @@ func ParseCSRPEM(csrPEM []byte) (*CSRInfo, error) {
 	for _, ip := range csr.IPAddresses {
 		info.IPAddresses = append(info.IPAddresses, ip.String())
 	}
+	for _, u := range csr.URIs {
+		info.URIs = append(info.URIs, u.String())
+	}
+	info.RequestsCA, info.RequestsKeyCertSign = authorityRequest(csr)
 	sort.Strings(info.DNSNames)
 
 	switch pub := csr.PublicKey.(type) {
@@ -178,4 +200,42 @@ func subjectComponents(name pkix.Name) map[string]string {
 		return nil
 	}
 	return out
+}
+
+// OIDs for the extensions a request has no business asking for.
+var (
+	oidBasicConstraints = asn1.ObjectIdentifier{2, 5, 29, 19}
+	oidKeyUsage         = asn1.ObjectIdentifier{2, 5, 29, 15}
+)
+
+// authorityRequest reports whether a request asks to be an authority.
+//
+// An extension that will not parse is not a claim, so it is ignored rather than
+// guessed at. The two answers are separate because they are separate asks: a
+// certificate can be a CA without keyCertSign, and a leaf with keyCertSign is
+// its own problem.
+func authorityRequest(csr *x509.CertificateRequest) (isCA, keyCertSign bool) {
+	for _, ext := range csr.Extensions {
+		switch {
+		case ext.Id.Equal(oidBasicConstraints):
+			var bc struct {
+				IsCA       bool `asn1:"optional"`
+				MaxPathLen int  `asn1:"optional,default:-1"`
+			}
+			if _, err := asn1.Unmarshal(ext.Value, &bc); err == nil && bc.IsCA {
+				isCA = true
+			}
+		case ext.Id.Equal(oidKeyUsage):
+			var usage asn1.BitString
+			if _, err := asn1.Unmarshal(ext.Value, &usage); err != nil {
+				continue
+			}
+			// Bit 5 is keyCertSign in the KeyUsage bit string.
+			const keyCertSignBit = 5
+			if usage.BitLength > keyCertSignBit && usage.At(keyCertSignBit) == 1 {
+				keyCertSign = true
+			}
+		}
+	}
+	return isCA, keyCertSign
 }

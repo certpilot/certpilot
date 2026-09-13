@@ -22,7 +22,7 @@ func applyNamesAndKey(d *Decision, tpl *store.CertificateTemplate, req Request) 
 			return refuse(RungRequest, "the signing request names nothing to certify")
 		}
 		d.CommonName = names[0]
-		d.Domains = names
+		d.Domains = dedupe(names)
 		d.KeyType = req.CSR.KeyType
 		d.KeySize = req.CSR.KeySize
 	} else {
@@ -112,7 +112,13 @@ func applySuppliedValues(d *Decision, tpl *store.CertificateTemplate, req Reques
 
 // checkTemplate is rung 3: everything the template constrains.
 func checkTemplate(d *Decision, tpl *store.CertificateTemplate, req Request) error {
+	if err := checkAuthorityRequest(req); err != nil {
+		return err
+	}
 	if err := checkKey(d, tpl); err != nil {
+		return err
+	}
+	if err := checkSANTypes(tpl, req); err != nil {
 		return err
 	}
 	if err := checkNames(d, tpl); err != nil {
@@ -324,11 +330,16 @@ func dedupe(names []string) []string {
 	seen := make(map[string]bool, len(names))
 	out := make([]string, 0, len(names))
 	for _, n := range names {
-		n = strings.TrimSpace(n)
-		if n == "" || seen[strings.ToLower(n)] {
+		// Lowercased and stripped of a trailing dot, because DNS names are
+		// case-insensitive and "app.example.com." is the same name as
+		// "app.example.com". Normalising here rather than at each comparison is
+		// what lets the issued certificate, the grant's name list and the
+		// template's suffixes all be talking about the same string.
+		n = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(n), "."))
+		if n == "" || seen[n] {
 			continue
 		}
-		seen[strings.ToLower(n)] = true
+		seen[n] = true
 		out = append(out, n)
 	}
 	return out
@@ -358,4 +369,80 @@ func weakestCurve(curves []string) int {
 		}
 	}
 	return best
+}
+
+// checkAuthorityRequest refuses a request asking to become an authority.
+//
+// Refused rather than stripped: a client asking for basicConstraints CA:TRUE or
+// keyCertSign is either broken or hostile, and both deserve an error rather
+// than a certificate that silently is not what they asked for.
+//
+// This lived in the fleet issuer and applied only to agents, so a person
+// submitting the same CSR through the API reached the gateway unchecked — the
+// mirror image of the bypass this package exists to close. It applies to every
+// path now because every path comes through here.
+func checkAuthorityRequest(req Request) error {
+	if req.CSR == nil {
+		return nil
+	}
+	if req.CSR.RequestsCA {
+		return refuse(RungTemplate,
+			"this request asks for a CA certificate (basicConstraints CA:TRUE). "+
+				"CertPilot issues certificates for the names a requester has been granted, "+
+				"never an authority that could issue more")
+	}
+	if req.CSR.RequestsKeyCertSign {
+		return refuse(RungTemplate,
+			"this request asks for the keyCertSign usage, which would let the certificate "+
+				"sign others. CertPilot issues certificates, never an authority")
+	}
+	return nil
+}
+
+// checkSANTypes enforces san_rules.types.
+//
+// Without this the field was accepted by the API, stored, shown on the template
+// and consulted by nothing — a rule an operator wrote that changed no outcome.
+// That is the defect class this whole line of work exists to remove, and it was
+// reintroduced one layer up.
+//
+// Only a CSR can carry an IP, email or URI name; the JSON request body has no
+// field for them. So a request without one has only DNS names by construction
+// and nothing to check.
+func checkSANTypes(tpl *store.CertificateTemplate, req Request) error {
+	if len(tpl.SANRules.Types) == 0 || req.CSR == nil {
+		return nil
+	}
+
+	permitted := map[string]bool{}
+	for _, t := range tpl.SANRules.Types {
+		permitted[strings.ToUpper(strings.TrimSpace(t))] = true
+	}
+
+	for _, present := range []struct {
+		kind   string
+		values []string
+	}{
+		{"IP", req.CSR.IPAddresses},
+		{"EMAIL", req.CSR.EmailAddresses},
+		{"URI", req.CSR.URIs},
+	} {
+		if len(present.values) == 0 || permitted[present.kind] {
+			continue
+		}
+		return refuse(RungTemplate,
+			"the signing request carries %s name %q, and template %q permits only %s",
+			strings.ToLower(present.kind), present.values[0], tpl.Slug,
+			strings.Join(tpl.SANRules.Types, ", "))
+	}
+
+	// DNS is the one that can be forbidden rather than merely absent, and a
+	// template permitting only IP or email names is a real configuration —
+	// a SPIFFE identity, or a mail server certificate.
+	if len(req.CSR.DNSNames) > 0 && !permitted["DNS"] {
+		return refuse(RungTemplate,
+			"the signing request carries DNS name %q, and template %q permits only %s",
+			req.CSR.DNSNames[0], tpl.Slug, strings.Join(tpl.SANRules.Types, ", "))
+	}
+	return nil
 }

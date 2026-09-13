@@ -249,6 +249,30 @@ func (h *TemplateHandler) Delete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
+	// Refused here rather than at the foreign key.
+	//
+	// Migration 038 makes template_grants reference this table with `on delete
+	// restrict`, deliberately: a rule that silently disappeared when somebody
+	// removed a template would take an estate's permissions with it. But
+	// letting that constraint fire reaches an operator as
+	// `SQLSTATE 23503 … template_grants_template_id_fkey`, which names a
+	// constraint and not a thing they can act on.
+	//
+	// A revoked grant still references its template, which is why this counts
+	// every grant rather than only the live ones — that is exactly the case
+	// that produced the raw error.
+	if blocking, err := h.grantsUsing(c.Request.Context(), existing.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	} else if len(blocking) > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf(
+			"template %q is still named by %d grant(s): %s. Delete those first, or disable this "+
+				"template instead — a revoked grant still refers to the template it was written against, "+
+				"and that record is part of why a certificate exists",
+			existing.Slug, len(blocking), strings.Join(blocking, ", "))})
+		return
+	}
+
 	if err := h.store.DeleteCertificateTemplate(c.Request.Context(), existing.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -561,4 +585,19 @@ func orEmptyStringMap(m map[string]string) map[string]string {
 		return map[string]string{}
 	}
 	return m
+}
+
+// grantsUsing names the grants that refer to a template, revoked ones included.
+func (h *TemplateHandler) grantsUsing(ctx context.Context, templateID string) ([]string, error) {
+	grants, err := h.store.ListTemplateGrants(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, g := range grants {
+		if g.TemplateID == templateID {
+			names = append(names, g.Name)
+		}
+	}
+	return names, nil
 }

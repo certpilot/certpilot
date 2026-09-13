@@ -375,3 +375,53 @@ func TestASlugMustBeUsableAsAMachineName(t *testing.T) {
 		}
 	}
 }
+
+// TestATemplateAGrantStillNamesCannotBeDeleted.
+//
+// Found by running it: the delete reached the foreign key and came back as
+// `SQLSTATE 23503 … template_grants_template_id_fkey`, which names a constraint
+// and not a thing an operator can act on. The restrict is deliberate — a rule
+// that vanished when somebody removed a template would take an estate's
+// permissions with it — so the fix is the message, not the constraint.
+//
+// A *revoked* grant still references its template, and that is the case that
+// produced the raw error: the grant looked gone and was not.
+func TestATemplateAGrantStillNamesCannotBeDeleted(t *testing.T) {
+	h, s, accountID := templateFixture(t)
+	ctx := context.Background()
+
+	tpl := minimalTemplate(accountID)
+	tpl.Slug = "spoken-for"
+	if err := s.CreateCertificateTemplate(ctx, &tpl); err != nil {
+		t.Fatal(err)
+	}
+
+	agentID := "some-agent"
+	grant := &store.TemplateGrant{
+		Name: "web tier", TemplateID: tpl.ID, SubjectKind: store.GrantSubjectAgent,
+		AgentID: &agentID, Names: []string{"a.example.com"}, IsEnabled: true,
+	}
+	if err := s.CreateTemplateGrant(ctx, grant); err != nil {
+		t.Fatal(err)
+	}
+
+	blocking, err := h.grantsUsing(ctx, tpl.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocking) != 1 || blocking[0] != "web tier" {
+		t.Fatalf("the grant holding this template was not found: %v", blocking)
+	}
+
+	// Revoked, and it still counts — which is the whole point.
+	if err := s.RevokeTemplateGrant(ctx, grant.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	blocking, err = h.grantsUsing(ctx, tpl.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocking) != 1 {
+		t.Errorf("a revoked grant stopped counting, and it still references the template: %v", blocking)
+	}
+}

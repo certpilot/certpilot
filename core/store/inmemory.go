@@ -62,7 +62,7 @@ type MemoryStore struct {
 	agents         map[string]*Agent
 	enrolTokens    map[string]*AgentEnrolToken
 	agentCerts     []*AgentCertificate
-	agentGrants    map[string]*AgentGrant
+	templateGrants map[string]*TemplateGrant
 
 	certificateTemplates map[string]*CertificateTemplate
 	agentInstalls        []*AgentInstallation
@@ -262,9 +262,9 @@ func NewMemoryStore() *MemoryStore {
 		deployments: make(map[string]*CertificateDeployment),
 		// Empty for the same reason display tokens are: a seeded credential is
 		// a credential somebody forgets to remove.
-		agents:      make(map[string]*Agent),
-		enrolTokens: make(map[string]*AgentEnrolToken),
-		agentGrants: make(map[string]*AgentGrant),
+		agents:         make(map[string]*Agent),
+		enrolTokens:    make(map[string]*AgentEnrolToken),
+		templateGrants: make(map[string]*TemplateGrant),
 
 		certificateTemplates: make(map[string]*CertificateTemplate),
 		tlsPosture:           make(map[string]*EndpointTLSPosture),
@@ -3236,48 +3236,81 @@ func (m *MemoryStore) GetCertificateBySupersededFingerprint(ctx context.Context,
 
 // ── What a host may ask for ─────────────────────────────────
 
-func (m *MemoryStore) ListAgentGrants(ctx context.Context) ([]*AgentGrant, error) {
+// cloneGrant deep-copies, where clone() shallow-copies.
+//
+// A grant is mostly slices, a map and six pointers. A shallow copy hands every
+// caller a reference to the same backing array, so a handler appending one name
+// to what it read would widen the stored grant without writing it — and against
+// PostgreSQL it would not. Widening a grant by accident is the worst version of
+// that bug available here.
+func cloneGrant(g *TemplateGrant) *TemplateGrant {
+	c := *g
+	c.Names = append([]string{}, g.Names...)
+	if g.LabelSelector != nil {
+		c.LabelSelector = make(map[string]string, len(g.LabelSelector))
+		for k, v := range g.LabelSelector {
+			c.LabelSelector[k] = v
+		}
+	}
+	for _, pair := range []struct{ from, to **string }{
+		{&g.AgentID, &c.AgentID}, {&g.Role, &c.Role},
+		{&g.Team, &c.Team}, {&g.UserID, &c.UserID},
+		{&g.RevokedBy, &c.RevokedBy}, {&g.CreatedBy, &c.CreatedBy},
+	} {
+		if *pair.from != nil {
+			v := **pair.from
+			*pair.to = &v
+		}
+	}
+	if g.RevokedAt != nil {
+		t := *g.RevokedAt
+		c.RevokedAt = &t
+	}
+	return &c
+}
+
+func (m *MemoryStore) ListTemplateGrants(ctx context.Context) ([]*TemplateGrant, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	out := make([]*AgentGrant, 0, len(m.agentGrants))
-	for _, g := range m.agentGrants {
-		out = append(out, clone(g))
+	out := make([]*TemplateGrant, 0, len(m.templateGrants))
+	for _, g := range m.templateGrants {
+		out = append(out, cloneGrant(g))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
 	return out, nil
 }
 
-func (m *MemoryStore) GetAgentGrant(ctx context.Context, id string) (*AgentGrant, error) {
+func (m *MemoryStore) GetTemplateGrant(ctx context.Context, id string) (*TemplateGrant, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	g, ok := m.agentGrants[id]
+	g, ok := m.templateGrants[id]
 	if !ok {
 		return nil, fmt.Errorf("grant %s not found", id)
 	}
-	return clone(g), nil
+	return cloneGrant(g), nil
 }
 
-func (m *MemoryStore) CreateAgentGrant(ctx context.Context, g *AgentGrant) error {
+func (m *MemoryStore) CreateTemplateGrant(ctx context.Context, g *TemplateGrant) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	stored := clone(g)
+	stored := cloneGrant(g)
 	if stored.ID == "" {
 		stored.ID = uuid.New().String()
 	}
 	now := time.Now()
 	stored.CreatedAt, stored.UpdatedAt = now, now
-	m.agentGrants[stored.ID] = stored
-	*g = *clone(stored)
+	m.templateGrants[stored.ID] = stored
+	*g = *cloneGrant(stored)
 	return nil
 }
 
-func (m *MemoryStore) RevokeAgentGrant(ctx context.Context, id string, revokedBy *string) error {
+func (m *MemoryStore) RevokeTemplateGrant(ctx context.Context, id string, revokedBy *string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	g, ok := m.agentGrants[id]
+	g, ok := m.templateGrants[id]
 	if !ok || g.RevokedAt != nil {
 		return fmt.Errorf("grant %s is already revoked", id)
 	}
@@ -3286,7 +3319,7 @@ func (m *MemoryStore) RevokeAgentGrant(ctx context.Context, id string, revokedBy
 	return nil
 }
 
-func (m *MemoryStore) GetGrantsForAgent(ctx context.Context, agentID string) ([]*AgentGrant, error) {
+func (m *MemoryStore) GetGrantsForAgent(ctx context.Context, agentID string) ([]*TemplateGrant, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -3295,10 +3328,10 @@ func (m *MemoryStore) GetGrantsForAgent(ctx context.Context, agentID string) ([]
 		return nil, fmt.Errorf("agent %s not found", agentID)
 	}
 
-	out := []*AgentGrant{}
-	for _, g := range m.agentGrants {
+	out := []*TemplateGrant{}
+	for _, g := range m.templateGrants {
 		if g.AppliesTo(agent) {
-			out = append(out, clone(g))
+			out = append(out, cloneGrant(g))
 		}
 	}
 	// Agent-specific grants first, matching the Postgres ORDER BY, so the same
