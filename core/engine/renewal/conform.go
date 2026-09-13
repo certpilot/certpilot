@@ -30,6 +30,20 @@ type conformance struct {
 	// leaving the version the *original* was issued under would make an auditor
 	// read a conforming certificate as a stale one.
 	TemplateVersion *int
+	// Template is the object TemplateVersion names, kept alongside it because
+	// #30's post-renewal conformance check needs the rules themselves — the
+	// SANs mode, the conformance switch — not only which version they were.
+	// Nil under the same conditions TemplateVersion is nil.
+	Template *store.CertificateTemplate
+
+	// CAProfile, KeyUsage and ExtendedKeyUsage are read fresh from the
+	// (possibly changed) template on every renewal, the same as KeyType and
+	// KeySize above — a renewal is an issuance, so it asks under today's
+	// rules, not the ones that were in force when this certificate was first
+	// issued.
+	CAProfile        string
+	KeyUsage         []string
+	ExtendedKeyUsage []string
 
 	// Upgrades are changes renewal is making because the rules moved. Recorded
 	// so an operator can see that a certificate was quietly strengthened rather
@@ -83,11 +97,15 @@ func conform(ctx context.Context, s store.Store, eng *policy.Engine, cert *store
 	if tpl != nil {
 		version := tpl.Version
 		out.TemplateVersion = &version
+		out.Template = tpl
 		applyTemplateFloor(out, tpl, cert)
 		out.Unfixable = append(out.Unfixable, templateMismatches(tpl, cert, domains)...)
 		if tpl.ValidityDays > 0 {
 			out.ValidityDays = tpl.ValidityDays
 		}
+		out.CAProfile = tpl.CAProfile
+		out.KeyUsage = tpl.KeyUsage
+		out.ExtendedKeyUsage = tpl.ExtendedKeyUsage
 	}
 
 	// The floor, judged on the key renewal is actually going to ask for rather

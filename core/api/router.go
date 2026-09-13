@@ -83,7 +83,7 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 	auditHandler := NewAuditHandler(deps.Store)
 	discHandler := NewDiscoveryHandler(deps.Store, deps.Scanner)
 	policyHandler := NewPolicyHandler(deps.Store)
-	templateHandler := NewTemplateHandler(deps.Store, deps.PolicyEngine)
+	templateHandler := NewTemplateHandler(deps.Store, deps.PolicyEngine, deps.PluginMgr, deps.Keyring)
 	eventsHandler := NewEventsHandler(deps.Store, deps.Broker)
 	displayHandler := NewDisplayTokenHandler(deps.Store)
 	notifHandler := NewNotificationHandler(deps.Store, deps.Keyring, deps.Dispatcher)

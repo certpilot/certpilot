@@ -150,7 +150,7 @@ go run ./core/cmd/ --migrate
 # The first invocation downloads the module and can take a few seconds longer
 # than the wait loop below would suggest; that is why the loop waits 30s rather
 # than a couple.
-GATEWAY_SELFSIGNED="github.com/certpilot/certpilot-gateway-selfsigned/cmd@v0.2.0"
+GATEWAY_SELFSIGNED="github.com/certpilot/certpilot-gateway-selfsigned/cmd@v0.3.0"
 
 printf 'Starting self-signed gateway on :9091 (%s)...\n' "$GATEWAY_SELFSIGNED"
 go run "$GATEWAY_SELFSIGNED" --port=9091 --insecure &

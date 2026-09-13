@@ -3,15 +3,22 @@ package api
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
+	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"github.com/certpilot/certpilot/core/engine/policy"
+	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/store"
+	"github.com/certpilot/certpilot/pkg/secrets"
 	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // templateSlug is the pattern migration 036 enforces on the column.
@@ -21,11 +28,19 @@ var templateSlug = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 type TemplateHandler struct {
 	store     store.Store
 	policyEng *policy.Engine
+	// pluginMgr and keyring are used only by the #29/#31 checks in validate:
+	// a template naming a ca_profile or a key usage is checked against the
+	// gateway it will actually issue from, live, rather than against a list
+	// compiled into this handler — the same reasoning GetCAInfo's
+	// supported_profiles is built on, and for the same reason: a CA can
+	// withdraw or add a profile between deployments of this code.
+	pluginMgr *pluginmgr.Manager
+	keyring   *secrets.Keyring
 }
 
 // NewTemplateHandler creates a new TemplateHandler.
-func NewTemplateHandler(s store.Store, pe *policy.Engine) *TemplateHandler {
-	return &TemplateHandler{store: s, policyEng: pe}
+func NewTemplateHandler(s store.Store, pe *policy.Engine, pm *pluginmgr.Manager, kr *secrets.Keyring) *TemplateHandler {
+	return &TemplateHandler{store: s, policyEng: pe, pluginMgr: pm, keyring: kr}
 }
 
 // TemplateInput is what a caller may set on a certificate template.
@@ -73,6 +88,24 @@ type TemplateInput struct {
 	DefaultEnvironment string   `json:"default_environment"`
 	DefaultTeam        string   `json:"default_team"`
 	DefaultTags        []string `json:"default_tags"`
+
+	// KeyUsage and ExtendedKeyUsage — see #31. Deliberately no binding
+	// vocabulary check here: which names are valid depends on the CA this
+	// template points at (selfsigned enforces the full x509 vocabulary; ACME
+	// and Vault refuse the field entirely), so validate checks it against the
+	// account rather than a static list.
+	KeyUsage             []string `json:"key_usage"`
+	ExtendedKeyUsage     []string `json:"extended_key_usage"`
+	BasicConstraintsCA   bool     `json:"basic_constraints_ca"`
+	ExtensionPassthrough string   `json:"extension_passthrough" binding:"omitempty,oneof=NONE LISTED ALL"`
+	PassthroughOIDs      []string `json:"passthrough_oids"`
+
+	// Conformance — see #30. A pointer so omitting it on create can default by
+	// CA type (ENFORCE for a private CA, REPORT otherwise) rather than always
+	// falling back to the column's own REPORT default, which would make every
+	// new template against a CA this deployment controls silently unenforced
+	// until an operator noticed and changed it.
+	Conformance *string `json:"conformance" binding:"omitempty,oneof=ENFORCE REPORT"`
 }
 
 // template builds the record this input describes. Everything the caller does
@@ -106,6 +139,11 @@ func (in TemplateInput) template() store.CertificateTemplate {
 		curves = []string{"P-256", "P-384", "P-521"}
 	}
 
+	passthrough := in.ExtensionPassthrough
+	if passthrough == "" {
+		passthrough = store.ExtensionPassthroughNone
+	}
+
 	return store.CertificateTemplate{
 		Slug:        strings.TrimSpace(in.Slug),
 		Name:        strings.TrimSpace(in.Name),
@@ -131,6 +169,17 @@ func (in TemplateInput) template() store.CertificateTemplate {
 		MaxValidityDays: in.MaxValidityDays,
 		RenewBeforeDays: renewBefore,
 		AutoRenew:       in.AutoRenew == nil || *in.AutoRenew,
+
+		KeyUsage:             in.KeyUsage,
+		ExtendedKeyUsage:     in.ExtendedKeyUsage,
+		BasicConstraintsCA:   in.BasicConstraintsCA,
+		ExtensionPassthrough: passthrough,
+		PassthroughOIDs:      in.PassthroughOIDs,
+		// Conformance is left at the Go zero value when the caller did not
+		// name one. Create fills it in by CA type once the account is known,
+		// which template() alone cannot do — it has no store to ask. Update
+		// leaves an unset value at whatever the existing row already has,
+		// the same rule every other omitted field on this input follows.
 
 		RequireMetadata:    in.RequireMetadata,
 		DefaultEnvironment: in.DefaultEnvironment,
@@ -181,6 +230,26 @@ func (h *TemplateHandler) Create(c *gin.Context) {
 	t := in.template()
 	t.Version = 1
 
+	// Conformance defaults by what the template can actually control. ENFORCE
+	// against a CA this deployment runs is the useful default — a mismatch
+	// there is a misconfiguration worth refusing on. REPORT against a public
+	// CA is the honest one: the CA's behaviour is not this deployment's to
+	// set, and defaulting to ENFORCE would make every template against
+	// Let's Encrypt fail its first renewal the day the CA caps validity below
+	// what was asked, which every public CA already does.
+	//
+	// Only applied when the caller left conformance unset. An explicit choice
+	// is never overridden by a default.
+	if in.Conformance == nil {
+		if account, err := h.store.GetCAAccount(c.Request.Context(), t.CAAccountID); err == nil && isPrivateCA(account.ProviderType) {
+			t.Conformance = store.ConformanceEnforce
+		} else {
+			t.Conformance = store.ConformanceReport
+		}
+	} else {
+		t.Conformance = *in.Conformance
+	}
+
 	if err := h.validate(c.Request.Context(), &t); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -221,6 +290,15 @@ func (h *TemplateHandler) Update(c *gin.Context) {
 	t.ID = existing.ID
 	t.CreatedBy = existing.CreatedBy
 	t.Version = existing.Version
+	// Preserved, not reset, when the caller left it unset — the same rule
+	// every other omitted field on this input follows, and the one that
+	// matters most here: a PUT that only touches, say, default_team must not
+	// silently flip a template back from ENFORCE to REPORT.
+	if in.Conformance == nil {
+		t.Conformance = existing.Conformance
+	} else {
+		t.Conformance = *in.Conformance
+	}
 	if rulesDiffer(existing, &t) {
 		t.Version = existing.Version + 1
 	}
@@ -327,7 +405,215 @@ func (h *TemplateHandler) validate(ctx context.Context, t *store.CertificateTemp
 		}
 	}
 
+	if err := h.validateCAProfile(ctx, t); err != nil {
+		return err
+	}
+	if err := h.validateKeyUsage(ctx, t); err != nil {
+		return err
+	}
+
 	return h.refuseIfNothingCouldEverBeIssued(ctx, t)
+}
+
+// isPrivateCA names the provider types this deployment actually runs, as
+// opposed to a public CA whose behaviour is not this deployment's to set —
+// the axis Conformance's default and, less directly, every check below,
+// turns on.
+func isPrivateCA(providerType string) bool {
+	switch strings.ToLower(providerType) {
+	case "vault", "selfsigned":
+		return true
+	default:
+		return false
+	}
+}
+
+// gatewayCallTimeout bounds every live check below. A template save must not
+// hang because a gateway process is restarting; it should fail the specific
+// check that needed the gateway and say so, in seconds rather than minutes.
+const gatewayCallTimeout = 8 * time.Second
+
+// validateCAProfile refuses a ca_profile the CA does not advertise — #29.
+//
+// Checked against the live directory (via the gateway's GetCAInfo), not a
+// list compiled into this handler: a CA can withdraw or add a profile
+// between deployments of this code, which is precisely what motivated
+// checking live in the first place — see the comment on GetCAInfo's
+// supported_profiles field.
+//
+// A gateway this handler cannot reach, or one that reports no advertised
+// profiles at all, is not treated as a refusal. The former is an operational
+// problem orthogonal to whether the profile name is real, and failing a
+// template save because a gateway process happens to be restarting would be
+// its own defect; the latter means the CA has no such concept, which #30's
+// post-issuance check will catch if the name turns out to be meaningless.
+func (h *TemplateHandler) validateCAProfile(ctx context.Context, t *store.CertificateTemplate) error {
+	if t.CAProfile == "" {
+		return nil
+	}
+	account, err := h.store.GetCAAccount(ctx, t.CAAccountID)
+	if err != nil {
+		return nil // Reported already, by the ca_account_id check above.
+	}
+	gw, err := h.pluginMgr.GetGateway(account.Name)
+	if err != nil {
+		gw, err = h.pluginMgr.GetGateway(account.ProviderType)
+	}
+	if err != nil {
+		slog.Warn("could not reach the gateway to check ca_profile against advertised profiles",
+			"template", t.Slug, "ca_profile", t.CAProfile, "error", err)
+		return nil
+	}
+	config, err := decryptCAConfig(h.keyring, account)
+	if err != nil {
+		return nil
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, gatewayCallTimeout)
+	defer cancel()
+	info, err := gw.Client.GetCAInfo(callCtx, &providerv1.GetCAInfoRequest{ProviderConfig: config})
+	if err != nil {
+		slog.Warn("could not check ca_profile against the CA's advertised profiles",
+			"template", t.Slug, "ca_profile", t.CAProfile, "error", err)
+		return nil
+	}
+	if len(info.SupportedProfiles) == 0 {
+		// No concept of profiles here (Vault), or the CA has not implemented
+		// the draft (many ACME servers still). Nothing to check against.
+		return nil
+	}
+	for _, p := range info.SupportedProfiles {
+		if p == t.CAProfile {
+			return nil
+		}
+	}
+	sorted := append([]string(nil), info.SupportedProfiles...)
+	sort.Strings(sorted)
+	return fmt.Errorf(
+		"ca_profile %q is not one %s currently advertises. It offers: %s",
+		t.CAProfile, account.Name, strings.Join(sorted, ", "))
+}
+
+// validateKeyUsage refuses a declared key_usage or extended_key_usage this
+// deployment cannot make the CA actually produce — #31.
+//
+// The three gateways this project ships take three different answers, and
+// this function has to know all three rather than delegate to one call,
+// because ACME's answer is "never, regardless of what the profile might
+// claim" rather than something DescribeProfile could report:
+//
+//   - ACME: the profile decides key usage in a way this contract cannot
+//     predict. Refused outright, naming the profiles the directory
+//     advertises so an operator is not left guessing what the alternative is.
+//   - Vault: DescribeProfile reads the role's own flags. Checked only when
+//     ca_profile is set — an empty one means "the account's own configured
+//     role", whose name this handler does not know without understanding
+//     Vault-specific configuration, which it deliberately does not.
+//   - selfsigned, and anything DescribeProfile answers Unimplemented for:
+//     nothing to check here. Either the gateway enforces it directly
+//     (selfsigned) or has said it cannot describe itself, and #30's
+//     post-issuance check is what catches the rest.
+func (h *TemplateHandler) validateKeyUsage(ctx context.Context, t *store.CertificateTemplate) error {
+	if len(t.KeyUsage) == 0 && len(t.ExtendedKeyUsage) == 0 {
+		return nil
+	}
+	account, err := h.store.GetCAAccount(ctx, t.CAAccountID)
+	if err != nil {
+		return nil
+	}
+
+	if strings.EqualFold(account.ProviderType, "acme") {
+		config, _ := decryptCAConfig(h.keyring, account)
+		advertised := "none"
+		if gw, gwErr := h.pluginMgr.GetGateway(account.Name); gwErr == nil {
+			callCtx, cancel := context.WithTimeout(ctx, gatewayCallTimeout)
+			info, err := gw.Client.GetCAInfo(callCtx, &providerv1.GetCAInfoRequest{ProviderConfig: config})
+			cancel()
+			if err == nil && len(info.SupportedProfiles) > 0 {
+				sorted := append([]string(nil), info.SupportedProfiles...)
+				sort.Strings(sorted)
+				advertised = strings.Join(sorted, ", ")
+			}
+		}
+		return fmt.Errorf(
+			"key_usage and extended_key_usage cannot be declared on a template pointed at an ACME "+
+				"account: the profile decides, and this deployment has no way to make a profile "+
+				"produce a declared value. Select a profile with ca_profile instead — %s advertises: %s",
+			account.Name, advertised)
+	}
+
+	if t.CAProfile == "" {
+		// Vault with no override, or any other provider type: nothing this
+		// handler can check live without either the role name (Vault) or a
+		// gateway that implements DescribeProfile against its default. #30
+		// remains the backstop.
+		return nil
+	}
+
+	gw, err := h.pluginMgr.GetGateway(account.Name)
+	if err != nil {
+		gw, err = h.pluginMgr.GetGateway(account.ProviderType)
+	}
+	if err != nil {
+		slog.Warn("could not reach the gateway to check key usage against the profile",
+			"template", t.Slug, "ca_profile", t.CAProfile, "error", err)
+		return nil
+	}
+	config, err := decryptCAConfig(h.keyring, account)
+	if err != nil {
+		return nil
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, gatewayCallTimeout)
+	defer cancel()
+	desc, err := gw.Client.DescribeProfile(callCtx, &providerv1.DescribeProfileRequest{
+		CaProfile: t.CAProfile, ProviderConfig: config,
+	})
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			// A supported answer, not a failure — see the doc comment.
+			return nil
+		}
+		slog.Warn("could not check key usage against the profile",
+			"template", t.Slug, "ca_profile", t.CAProfile, "error", err)
+		return nil
+	}
+	if !desc.IsDefinite {
+		return nil
+	}
+
+	if missing := notInList(t.KeyUsage, desc.KeyUsage); len(missing) > 0 {
+		return fmt.Errorf(
+			"profile %q produces key usage %s and cannot produce %s",
+			t.CAProfile, joinOrNone(desc.KeyUsage), strings.Join(missing, ", "))
+	}
+	if missing := notInList(t.ExtendedKeyUsage, desc.ExtendedKeyUsage); len(missing) > 0 {
+		return fmt.Errorf(
+			"profile %q produces extended key usage %s and cannot produce %s",
+			t.CAProfile, joinOrNone(desc.ExtendedKeyUsage), strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func notInList(want, have []string) []string {
+	present := make(map[string]bool, len(have))
+	for _, v := range have {
+		present[strings.ToLower(v)] = true
+	}
+	var missing []string
+	for _, v := range want {
+		if !present[strings.ToLower(v)] {
+			missing = append(missing, v)
+		}
+	}
+	return missing
+}
+
+func joinOrNone(vals []string) string {
+	if len(vals) == 0 {
+		return "none"
+	}
+	return strings.Join(vals, ", ")
 }
 
 // validateTemplateShape checks the template against itself.
@@ -566,6 +852,9 @@ func rulesOnly(t *store.CertificateTemplate) store.CertificateTemplate {
 	c.ECDSACurves = orEmptyStringSlice(c.ECDSACurves)
 	c.RequireMetadata = orEmptyStringSlice(c.RequireMetadata)
 	c.DefaultTags = orEmptyStringSlice(c.DefaultTags)
+	c.KeyUsage = orEmptyStringSlice(c.KeyUsage)
+	c.ExtendedKeyUsage = orEmptyStringSlice(c.ExtendedKeyUsage)
+	c.PassthroughOIDs = orEmptyStringSlice(c.PassthroughOIDs)
 	c.CommonNameRule.Suffixes = orEmptyStringSlice(c.CommonNameRule.Suffixes)
 	c.CommonNameRule.ForbiddenPatterns = orEmptyStringSlice(c.CommonNameRule.ForbiddenPatterns)
 	c.SANRules.Types = orEmptyStringSlice(c.SANRules.Types)

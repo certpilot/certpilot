@@ -72,7 +72,7 @@ services:
   # The gateway that needs no account anywhere, which is what makes a first run
   # possible without registering with a CA.
   gateway-selfsigned:
-    image: ghcr.io/certpilot/gateway-selfsigned:${GATEWAY_VERSION:-0.2.0}
+    image: ghcr.io/certpilot/gateway-selfsigned:${GATEWAY_VERSION:-0.3.0}
     container_name: certpilot-gateway-selfsigned
     restart: unless-stopped
     volumes:
@@ -84,7 +84,7 @@ services:
       - "--tls-ca=/app/pki/ca.pem"
 
   gateway-acme:
-    image: ghcr.io/certpilot/gateway-acme:${GATEWAY_VERSION:-0.2.0}
+    image: ghcr.io/certpilot/gateway-acme:${GATEWAY_VERSION:-0.3.0}
     container_name: certpilot-gateway-acme
     restart: unless-stopped
     volumes:
@@ -105,7 +105,7 @@ services:
     #   - "80:80"
 
   gateway-vault:
-    image: ghcr.io/certpilot/gateway-vault:${GATEWAY_VERSION:-0.2.0}
+    image: ghcr.io/certpilot/gateway-vault:${GATEWAY_VERSION:-0.3.0}
     container_name: certpilot-gateway-vault
     restart: unless-stopped
     volumes:

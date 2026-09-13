@@ -78,6 +78,11 @@ somebody else's name.
 | `validity_days` | Supplied. The requester does not choose |
 | `max_validity_days` | The ceiling, for when they may |
 | `require_metadata` | Which `metadata_fields` a request must answer. Per-template, unlike the estate-wide `is_required` |
+| `ca_profile` | The CA's own template — a Vault role, an ACME profile (draft-ietf-acme-profiles), an AWS Private CA template ARN. Empty means the account's default |
+| `key_usage`, `extended_key_usage` | Declared key usage, in RFC 5280's own field names (`digitalSignature`, `serverAuth`, ...). Enforced where a gateway builds the certificate itself; elsewhere refused at save time if this deployment cannot make the CA produce it — see [below](#ca-profiles-key-usage-and-what-actually-enforces-them) |
+| `basic_constraints_ca` | Whether this template issues a CA certificate. Enforced only where a gateway builds the certificate itself |
+| `extension_passthrough` | `NONE` (default), `LISTED`, or `ALL` — whether a CSR's own extensions reach the certificate. `NONE` everywhere that matters: an extension copied out of a CSR is an attacker-controlled field in a signed certificate |
+| `conformance` | `ENFORCE` or `REPORT` — what happens when an issued certificate does not match what was asked for. See [below](#issue-then-check) |
 | `version` | Bumped when a rule changes, never by a rename |
 
 **Zero means unconstrained**, everywhere a number appears. A column defaulting
@@ -232,8 +237,72 @@ the key is somewhere else and only its holder can rotate it.
 
 ---
 
-## What does not consult a template yet
+## CA profiles, key usage, and what actually enforces them
 
-**Key usage and EKU.** The fields are not on the template yet, and for ACME and
-Vault CertPilot could only select a profile and verify the result afterwards
-rather than enforce it — the CA decides. Phase 13.
+Most real CAs have their own template concept — a Vault role, an ACME profile,
+an AWS Private CA template ARN — and until Phase 13, `ca_profile` existed on
+this object and nothing read it. `key_usage` and `extended_key_usage` did not
+exist at all, because CertPilot cannot enforce either on a CA whose own profile
+decides them, and adding a field nothing enforces is the exact failure this
+whole line of work exists to remove.
+
+**`ca_profile` selects the CA's own template**, carried through on every issuance
+and renewal. One CA account now serves as many Vault roles or ACME profiles as
+an operator wants to name, instead of one account — and one copy of its
+credentials — per role.
+
+An unadvertised profile is refused when the template is saved, checked against
+the CA's *live* directory rather than a list compiled into this codebase:
+Let's Encrypt withdrew its `shortlived` profile on 8 July 2026, which is exactly
+the case a compiled-in list gets wrong the day after it ships.
+
+**Whether `key_usage`/`extended_key_usage` are enforced, verified, or refused
+outright depends entirely on which CA the template points at:**
+
+| Provider | What happens |
+|:---|:---|
+| selfsigned | Enforced directly — the gateway builds the certificate, so what the template says is exactly what the certificate carries |
+| Vault | Refused at save time unless the selected role's own flags can produce it. Read from the role (`server_flag`, `client_flag`, `key_usage`, ...), not sent to Vault and hoped for — **Vault ignores key usage passed in an issue/sign request body entirely**, confirmed against a running server before this was built |
+| ACME | Refused at save time, unconditionally. The profile decides in a way no gateway here can predict, and the message names which profiles the directory advertises instead |
+
+See [status.md](status.md#what-is-checked-before-issuance-what-is-only-checked-after)
+for the equivalent table covering every enforcement boundary, not only this one.
+
+## Issue, then check
+
+CertPilot cannot enforce key usage, extended key usage, validity, or even the
+requested names on a CA whose own template decides them. Sending a request and
+storing whatever came back, unchecked, would be a control that passes while
+enforcing nothing — reintroduced at the very last step. The honest answer:
+parse what actually came back and compare it against what was asked for, after
+every issuance and every renewal.
+
+**What is compared, and what happens on a mismatch — not one answer for all of
+them:**
+
+| Divergence | Class | On a mismatch |
+|:---|:---|:---|
+| Key type, key size | BLOCK | Refused. Recording it would launder an unauthorised key into something that looks authorised |
+| SANs | BLOCK | Refused. A certificate covering names other than what was authorised is not the certificate that was authorised, whichever direction it differs |
+| Validity, shorter than asked | REPORT | Recorded. Every public CA caps lifetime; a 47-day certificate where 90 were requested is the CA being correct |
+| Validity, longer than asked | BLOCK | Refused. A CA issuing beyond the requested lifetime is misconfigured or is not the CA that was expected |
+| A subject field the CA added | REPORT | Recorded, with the addition named. Refusing would make CertPilot unusable against any CA that adds an OU by policy; hiding it would make the template's subject a fiction |
+
+**`conformance: ENFORCE | REPORT`** is the switch, on the template, deciding
+whether a BLOCK-class finding actually refuses. `REPORT`-class findings are
+always recorded and never refuse, whatever the template says — neither was ever
+the class that setting exists to catch.
+
+The right strictness differs by CA, so the default differs too: **`ENFORCE`**
+for a new template against a CA this deployment runs (Vault, selfsigned) — a
+mismatch there is a misconfiguration worth refusing. **`REPORT`** for a new
+template against a public CA (ACME), and for every template saved before this
+existed — a default that would fail every renewal against Let's Encrypt on
+upgrade is not a default. An explicit choice on either side is never overridden.
+
+A refused certificate is revoked where the gateway supports it, best-effort —
+a gateway that cannot revoke must not turn "this certificate was wrong" into
+"and now nobody can be told about it".
+
+Findings are stored on the certificate whether or not they blocked anything,
+because `conformance: REPORT` means recording them, not discarding them.

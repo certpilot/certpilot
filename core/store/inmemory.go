@@ -412,6 +412,14 @@ func (m *MemoryStore) UpdateCertificate(ctx context.Context, cert *Certificate) 
 		if stored.GrantID == nil {
 			stored.GrantID = prev.GrantID
 		}
+		// Matches the COALESCE in PostgresStore.UpdateCertificate for the same
+		// reason: #30's conformance check runs once, and every other writer —
+		// UpdateCertificateMetadata, the posture assessor, the ARI poller —
+		// carries no opinion about it. nil here means untouched, not emptied;
+		// an explicit empty slice (findings resolved to none) still overwrites.
+		if stored.ConformanceFindings == nil {
+			stored.ConformanceFindings = prev.ConformanceFindings
+		}
 	}
 	m.certificates[cert.ID] = stored
 	return nil

@@ -150,11 +150,14 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 		// The two are the same here — that is what the grant and the template
 		// between them checked — but passing the validated set means a gateway
 		// that trusts its caller is trusting a decision that was actually made.
-		Domains:        decision.Domains,
-		KeyType:        decision.KeyType,
-		KeySize:        int32(decision.KeySize),
-		ValidityDays:   int32(decision.ValidityDays),
-		ProviderConfig: config,
+		Domains:          decision.Domains,
+		KeyType:          decision.KeyType,
+		KeySize:          int32(decision.KeySize),
+		ValidityDays:     int32(decision.ValidityDays),
+		ProviderConfig:   config,
+		CaProfile:        decision.CAProfile,
+		KeyUsage:         decision.KeyUsage,
+		ExtendedKeyUsage: decision.ExtendedKeyUsage,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("the CA refused this request: %w", err)
@@ -180,7 +183,32 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 			account.ProviderType)
 	}
 
-	cert, err := i.record(ctx, agent, grant, decision, req, info, resp)
+	// Issue, then check — #30. Same reasoning as the human path: a gateway
+	// that cannot enforce a declared key usage or a validity ceiling must not
+	// have its answer trusted uninspected.
+	findings, err := issuance.VerifyConformance(decision, resp.Certificate.CertificatePem)
+	if err != nil {
+		return nil, fmt.Errorf("issued certificate could not be checked for conformance: %w", err)
+	}
+	if blocking := issuance.Enforced(decision.Template, findings); len(blocking) > 0 {
+		messages := make([]string, 0, len(blocking))
+		for _, f := range blocking {
+			messages = append(messages, f.Message)
+		}
+		if _, revokeErr := gateway.Client.RevokeCertificate(ctx, &providerv1.RevokeCertificateRequest{
+			CertificatePem:        resp.Certificate.CertificatePem,
+			ProviderCertificateId: resp.ProviderCertificateId,
+			ProviderConfig:        config,
+		}); revokeErr != nil {
+			slog.Warn("could not revoke a certificate that failed conformance under an ENFORCE template",
+				"template", decision.Template.Slug, "agent", agent.Name, "error", revokeErr)
+		}
+		return nil, fmt.Errorf(
+			"template %q requires ENFORCE conformance and the CA did not honour the request: %s",
+			decision.Template.Slug, strings.Join(messages, "; "))
+	}
+
+	cert, err := i.record(ctx, agent, grant, decision, req, info, resp, findings)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +232,7 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 // key is on a host and we could not produce it if we were ordered to".
 func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.TemplateGrant,
 	decision *issuance.Decision, req Request, info *x509util.CertInfo,
-	resp *providerv1.IssueCertificateResponse) (*store.Certificate, error) {
+	resp *providerv1.IssueCertificateResponse, findings []store.ConformanceFinding) (*store.Certificate, error) {
 
 	notBefore, notAfter := info.NotBefore, info.NotAfter
 	certPEM := string(resp.Certificate.CertificatePem)
@@ -235,11 +263,12 @@ func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.Te
 		TemplateID:      &templateID,
 		TemplateVersion: &templateVersion,
 		// Which binding permitted it, which the human path has no equivalent of yet.
-		GrantID:          &grantID,
-		CertificatePEM:   &certPEM,
-		DiscoveredVia:    "AGENT",
-		KeyCustody:       store.KeyCustodyAgent,
-		KeyHolderAgentID: &holder,
+		GrantID:             &grantID,
+		CertificatePEM:      &certPEM,
+		DiscoveredVia:       "AGENT",
+		KeyCustody:          store.KeyCustodyAgent,
+		KeyHolderAgentID:    &holder,
+		ConformanceFindings: findings,
 	}
 	if len(resp.Certificate.ChainPem) > 0 {
 		chain := string(resp.Certificate.ChainPem)

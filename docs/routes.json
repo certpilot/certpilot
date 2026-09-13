@@ -1652,6 +1652,13 @@
           "doc": "ARISupported is three-valued on purpose. Nil means nobody has asked yet; false means the CA was asked and does not publish renewal information. Collapsing those would make a CA that has never been checked look identical to one that has nothing to say."
         },
         {
+          "name": "conformance_findings",
+          "type": "ConformanceFinding[]",
+          "go_type": "[]ConformanceFinding",
+          "required": false,
+          "doc": "ConformanceFindings is what #30's post-issuance check found, if anything: the returned certificate compared against what the template asked for. Empty means either nothing was checked (most of an inventory predates this) or nothing was found — the two are not distinguished, for the same reason TemplateID is null rather than false for a certificate issued before templates existed."
+        },
+        {
           "name": "verification_state",
           "type": "string",
           "go_type": "string",
@@ -1910,7 +1917,7 @@
           "type": "string",
           "go_type": "string",
           "required": false,
-          "doc": "CAProfile names the CA's own template when it has one — a Vault role, an ACME profile, an AWS Private CA template ARN. Nothing reads it yet."
+          "doc": "CAProfile names the CA's own template when it has one — a Vault role, an ACME profile, an AWS Private CA template ARN. Carried through to the gateway on every issuance and renewal; see core/engine/issuance."
         },
         {
           "name": "subject_mode",
@@ -1999,6 +2006,47 @@
           "type": "boolean",
           "go_type": "bool",
           "required": false
+        },
+        {
+          "name": "key_usage",
+          "type": "string[]",
+          "go_type": "[]string",
+          "required": false,
+          "doc": "── Key usage, extended key usage, extension passthrough ──────────── Deliberately last, and deliberately narrow — see #31. Empty means unconstrained, the same convention as everything else here."
+        },
+        {
+          "name": "extended_key_usage",
+          "type": "string[]",
+          "go_type": "[]string",
+          "required": false
+        },
+        {
+          "name": "basic_constraints_ca",
+          "type": "boolean",
+          "go_type": "bool",
+          "required": false,
+          "doc": "BasicConstraintsCA is enforced only where a gateway builds the certificate itself. See docs/status.md for which do."
+        },
+        {
+          "name": "extension_passthrough",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "ExtensionPassthrough governs whether a CSR's own extensions reach the certificate. NONE is the default everywhere that matters — Google CAS, EJBCA and AWS all default the equivalent setting off, because an extension copied out of a CSR is an attacker-controlled field in a signed certificate."
+        },
+        {
+          "name": "passthrough_oids",
+          "type": "string[]",
+          "go_type": "[]string",
+          "required": false,
+          "doc": "PassthroughOIDs is read only when ExtensionPassthrough is LISTED."
+        },
+        {
+          "name": "conformance",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "Conformance decides what happens when an issued certificate does not match what this template asked for — see #30 and core/engine/issuance/conform.go. ENFORCE refuses and, where possible, revokes; REPORT records the certificate with the mismatch attached as a finding. The right choice differs by CA, which is why this is a template property rather than a global setting."
         },
         {
           "name": "require_metadata",
@@ -5654,6 +5702,46 @@
             "type": "string[]",
             "go_type": "[]string",
             "required": false
+          },
+          {
+            "name": "key_usage",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false,
+            "doc": "KeyUsage and ExtendedKeyUsage — see #31. Deliberately no binding vocabulary check here: which names are valid depends on the CA this template points at (selfsigned enforces the full x509 vocabulary; ACME and Vault refuse the field entirely), so validate checks it against the account rather than a static list."
+          },
+          {
+            "name": "extended_key_usage",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          },
+          {
+            "name": "basic_constraints_ca",
+            "type": "boolean",
+            "go_type": "bool",
+            "required": false
+          },
+          {
+            "name": "extension_passthrough",
+            "type": "string",
+            "go_type": "string",
+            "required": false,
+            "constraint": "one of NONE, LISTED, ALL"
+          },
+          {
+            "name": "passthrough_oids",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          },
+          {
+            "name": "conformance",
+            "type": "string",
+            "go_type": "*string",
+            "required": false,
+            "constraint": "one of ENFORCE, REPORT",
+            "doc": "Conformance — see #30. A pointer so omitting it on create can default by CA type (ENFORCE for a private CA, REPORT otherwise) rather than always falling back to the column's own REPORT default, which would make every new template against a CA this deployment controls silently unenforced until an operator noticed and changed it."
           }
         ]
       },
@@ -5897,6 +5985,46 @@
             "type": "string[]",
             "go_type": "[]string",
             "required": false
+          },
+          {
+            "name": "key_usage",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false,
+            "doc": "KeyUsage and ExtendedKeyUsage — see #31. Deliberately no binding vocabulary check here: which names are valid depends on the CA this template points at (selfsigned enforces the full x509 vocabulary; ACME and Vault refuse the field entirely), so validate checks it against the account rather than a static list."
+          },
+          {
+            "name": "extended_key_usage",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          },
+          {
+            "name": "basic_constraints_ca",
+            "type": "boolean",
+            "go_type": "bool",
+            "required": false
+          },
+          {
+            "name": "extension_passthrough",
+            "type": "string",
+            "go_type": "string",
+            "required": false,
+            "constraint": "one of NONE, LISTED, ALL"
+          },
+          {
+            "name": "passthrough_oids",
+            "type": "string[]",
+            "go_type": "[]string",
+            "required": false
+          },
+          {
+            "name": "conformance",
+            "type": "string",
+            "go_type": "*string",
+            "required": false,
+            "constraint": "one of ENFORCE, REPORT",
+            "doc": "Conformance — see #30. A pointer so omitting it on create can default by CA type (ENFORCE for a private CA, REPORT otherwise) rather than always falling back to the column's own REPORT default, which would make every new template against a CA this deployment controls silently unenforced until an operator noticed and changed it."
           }
         ]
       },
@@ -6103,6 +6231,14 @@
         },
         {
           "status": 502,
+          "shape": "object",
+          "keys": [
+            {
+              "name": "conformance_findings",
+              "type": "any",
+              "required": false
+            }
+          ],
           "errors": [
             "gateway reported success but returned no certificate"
           ]

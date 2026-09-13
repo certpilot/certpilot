@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -256,11 +257,14 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 	}
 
 	issueReq := &providerv1.IssueCertificateRequest{
-		Domains:        allDomains,
-		KeyType:        input.KeyType,
-		KeySize:        int32(input.KeySize),
-		ValidityDays:   int32(input.ValidityDays),
-		ProviderConfig: providerConfig,
+		Domains:          allDomains,
+		KeyType:          input.KeyType,
+		KeySize:          int32(input.KeySize),
+		ValidityDays:     int32(input.ValidityDays),
+		ProviderConfig:   providerConfig,
+		CaProfile:        decision.CAProfile,
+		KeyUsage:         decision.KeyUsage,
+		ExtendedKeyUsage: decision.ExtendedKeyUsage,
 	}
 	if csrInfo != nil {
 		// With a CSR present the gateway signs the key it was given instead of
@@ -286,6 +290,44 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error": fmt.Sprintf("gateway returned data that is not a valid X.509 certificate: %v", err),
+		})
+		return
+	}
+
+	// 5b. Issue, then check — #30. CertPilot cannot enforce key usage or
+	// extended key usage on a CA whose own profile decides them, and cannot
+	// enforce anything on a public CA's validity cap. The only honest check
+	// left is comparing what came back against what was asked.
+	findings, err := issuance.VerifyConformance(decision, resp.Certificate.CertificatePem)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": fmt.Sprintf("issued certificate could not be checked for conformance: %v", err),
+		})
+		return
+	}
+	if blocking := issuance.Enforced(decision.Template, findings); len(blocking) > 0 {
+		messages := make([]string, 0, len(blocking))
+		for _, f := range blocking {
+			messages = append(messages, f.Message)
+		}
+		// Best-effort. A gateway that cannot revoke, or a CA account without
+		// revocation support, must not turn "this certificate was wrong" into
+		// "and now nobody can be told about it" — the refusal below still
+		// happens, and the certificate that should not exist is at least kept
+		// out of the inventory even if it lives on at the CA a little longer.
+		if _, revokeErr := gw.Client.RevokeCertificate(c.Request.Context(), &providerv1.RevokeCertificateRequest{
+			CertificatePem:        resp.Certificate.CertificatePem,
+			ProviderCertificateId: resp.ProviderCertificateId,
+			ProviderConfig:        providerConfig,
+		}); revokeErr != nil {
+			slog.Warn("could not revoke a certificate that failed conformance under an ENFORCE template",
+				"template", decision.Template.Slug, "error", revokeErr)
+		}
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": fmt.Sprintf(
+				"template %q requires ENFORCE conformance and the CA did not honour the request: %s",
+				decision.Template.Slug, strings.Join(messages, "; ")),
+			"conformance_findings": blocking,
 		})
 		return
 	}
@@ -368,6 +410,10 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 		// like any other, so provenance cannot answer "do we hold the key" —
 		// and that is the question deciding whether an export is even offered.
 		KeyCustody: keyCustody,
+		// Non-blocking findings from #30 — validity shorter than asked, or a
+		// subject field the CA added — reach here even under ENFORCE, because
+		// neither was ever the class that setting refuses.
+		ConformanceFindings: findings,
 	}
 
 	if err := h.store.CreateCertificate(c.Request.Context(), certRecord); err != nil {
