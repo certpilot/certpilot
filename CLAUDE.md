@@ -53,9 +53,12 @@ The gateways and both SDKs are separate repositories, resolved as dependencies.
 
 **The API reference is published as a separate site** from
 [`certpilot/certpilot-docs`](https://github.com/certpilot/certpilot-docs)
-(VitePress, GitHub Pages). Its endpoint tables are *generated* from
-`core/api/router.go` by `scripts/extract-routes.py` into `docs/routes.json`,
-which CI checks for staleness — so **run `make routes` after adding a route**.
+(VitePress, GitHub Pages). Its endpoint tables are *generated* into
+`docs/routes.json` by two passes: `scripts/extract-routes.py` reads
+`core/api/router.go` for what exists and who may call it, and
+`scripts/schemagen` reads the handlers for what to send and what comes back.
+CI checks it for staleness — so **run `make routes` after adding a route**.
+Only the second pass writes the file, so a failed run damages nothing.
 `docs/api-reference.md` stays here as the deeper per-resource guide.
 
 `core/engine/` holds the ten background engines: `pki` (CA health and issuer
