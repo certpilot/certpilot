@@ -3,9 +3,10 @@
 > **There is also a documentation site**, at
 > <https://certpilot.github.io/certpilot-docs/>, built from
 > [`certpilot-docs`](https://github.com/certpilot/certpilot-docs). Its endpoint
-> tables are generated from `core/api/router.go` via
-> [`scripts/extract-routes.py`](../scripts/extract-routes.py), so they cannot
-> drift from the router.
+> tables are generated from `core/api/router.go` and the handlers themselves,
+> via [`scripts/extract-routes.py`](../scripts/extract-routes.py) and
+> [`scripts/schemagen`](../scripts/schemagen/main.go), so they cannot drift
+> from the router.
 >
 > This file remains the deeper guide: it explains what each resource *means* —
 > discovery verdicts, ARI, the deployment queue's retry curve — which the

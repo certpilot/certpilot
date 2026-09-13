@@ -1,4 +1,4 @@
-.PHONY: test-store verify-profiles all build build-core build-agent test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes verify-profiles all build build-core build-agent test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -80,9 +80,25 @@ seed:
 ## router: what exists, and who may call it. schemagen reads the handlers:
 ## what to send, what comes back, and which refusals are possible. Neither
 ## question is answerable from the other file.
+##
+## One pipeline and one writer, deliberately. These used to be two commands
+## that both wrote docs/routes.json, so a schemagen failure left the first
+## pass's output on disk: valid JSON, every route listed, and none of the
+## request or response shapes the API reference is generated from (#50). Now
+## nothing touches the checked-in file until the second pass has succeeded.
+##
+## bash -o pipefail explicitly, not $(SHELL) and not .SHELLFLAGS. A pipeline
+## reports only its last command's status, so extract-routes.py can emit a
+## whole document, fail, and have make call the run a success. .SHELLFLAGS is
+## the usual way to fix that and it is silently ignored by GNU Make 3.81 —
+## which is what macOS ships, so the protection would have existed only on CI.
 routes:
-	python3 scripts/extract-routes.py docs/routes.json
-	$(GO) run scripts/schemagen/main.go docs/routes.json
+	bash -o pipefail -c 'python3 scripts/extract-routes.py | $(GO) run scripts/schemagen/main.go -o docs/routes.json'
+
+## Prove a failed `make routes` leaves docs/routes.json byte-identical. Runs
+## the real recipe with the generator rigged to fail, five different ways.
+test-routes:
+	./scripts/test-routes-atomicity.sh
 
 ## Prove every platform profile against the real service. Starts each one in a
 ## container, installs a certificate through the agent's own installer, and
@@ -244,6 +260,7 @@ help:
 	@echo ""
 	@echo "Docs"
 	@echo "  make routes                  Regenerate docs/routes.json from the router"
+	@echo "  make test-routes             Prove a failed regeneration damages nothing"
 	@echo "  make verify-profiles         Install to every platform, in containers"
 	@echo ""
 	@echo "Check"

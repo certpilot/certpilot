@@ -21,6 +21,7 @@ on:
       - 'pkg/agentauth/agentauth.go'
       - 'scripts/extract-routes.py'
       - 'scripts/schemagen/main.go'
+      - 'scripts/test-routes-atomicity.sh'
       - 'docs/routes.json'
       - 'Makefile'
   workflow_dispatch:
@@ -49,3 +50,10 @@ jobs:
             exit 1
           fi
           echo "Route inventory is current."
+
+      # Asserted rather than trusted, because the defect class is a step that
+      # reports failure while having already damaged the checked-in file. The
+      # script runs the real recipe with a generator rigged to fail, five
+      # different ways, and checks the inventory is byte-identical after each.
+      - name: A failing generator leaves the inventory alone
+        run: ./scripts/test-routes-atomicity.sh

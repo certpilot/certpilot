@@ -14,9 +14,17 @@
 // resolution failure below is therefore fatal — a request type this cannot
 // follow stops the build instead of quietly publishing an empty table.
 //
-// Reads and rewrites the route inventory in place:
+// Reads the route inventory on stdin and writes the finished one to -o:
 //
-//	go run scripts/schemagen/main.go docs/routes.json
+//	python3 scripts/extract-routes.py | go run scripts/schemagen/main.go -o docs/routes.json
+//
+// Deliberately not in place, and deliberately not the same file the first pass
+// wrote. When this one fails — which it is designed to do, loudly, on anything
+// it cannot resolve — the checked-in inventory has to be exactly what it was
+// before the command ran. An earlier version had extract-routes.py write the
+// target first and this one rewrite it, so a failure here left a file that was
+// valid JSON, listed every route, and was missing the half the API reference is
+// generated from (#50).
 package main
 
 import (
@@ -25,6 +33,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -111,10 +120,7 @@ type index struct {
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		fatal("usage: schemagen <routes.json>")
-	}
-	routesPath := os.Args[1]
+	outPath, inPath := parseArgs(os.Args[1:])
 
 	ix := &index{
 		fset:         token.NewFileSet(),
@@ -133,17 +139,17 @@ func main() {
 	// matched to the method that implements them.
 	vars := ix.handlerVars()
 
-	raw, err := os.ReadFile(routesPath)
+	raw, err := readInput(inPath)
 	if err != nil {
-		fatal("%v — run extract-routes.py first", err)
+		fatal("%v — the input is extract-routes.py's output", err)
 	}
 	var doc map[string]any
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		fatal("%s: %v", routesPath, err)
+		fatal("%s: %v", inPath, err)
 	}
 	routes, _ := doc["routes"].([]any)
 	if len(routes) == 0 {
-		fatal("%s has no routes", routesPath)
+		fatal("%s has no routes", inPath)
 	}
 
 	used := map[string]bool{}
@@ -206,7 +212,7 @@ func main() {
 	if err != nil {
 		fatal("%v", err)
 	}
-	if err := os.WriteFile(routesPath, append(out, '\n'), 0o644); err != nil {
+	if err := writeAtomic(outPath, append(out, '\n')); err != nil {
 		fatal("%v", err)
 	}
 	fmt.Printf("schemagen: %d routes described, %d inline handlers, %d models\n",
@@ -1115,6 +1121,73 @@ func statusCode(e ast.Expr) (int, bool) {
 	}
 	code, ok := statuses[sel.Sel.Name]
 	return code, ok
+}
+
+// parseArgs reads "-o <out>" and an optional input path, defaulting to stdin.
+//
+// -o is required rather than defaulting to the input path, because the whole
+// point of #50's fix is that the file this writes is never the file another
+// pass already wrote.
+func parseArgs(args []string) (out, in string) {
+	in = "-"
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "-o":
+			if i+1 >= len(args) {
+				fatal("-o needs a path")
+			}
+			out = args[i+1]
+			i++
+		case strings.HasPrefix(args[i], "-o="):
+			out = strings.TrimPrefix(args[i], "-o=")
+		case strings.HasPrefix(args[i], "-"):
+			if args[i] != "-" {
+				fatal("unknown flag %q", args[i])
+			}
+			in = "-"
+		default:
+			in = args[i]
+		}
+	}
+	if out == "" {
+		fatal("usage: schemagen -o <out.json> [in.json]   (input defaults to stdin)")
+	}
+	return out, in
+}
+
+func readInput(path string) ([]byte, error) {
+	if path == "-" {
+		return io.ReadAll(os.Stdin)
+	}
+	return os.ReadFile(path)
+}
+
+// writeAtomic writes beside the target and renames over it, so a reader never
+// sees a half-written inventory and a crash mid-write leaves the old one.
+//
+// The same rule agent/install.go follows for a certificate, for the same
+// reason: the failure being avoided is not "the write errored", it is "the
+// write errored after destroying what was there".
+func writeAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) // no-op once the rename has succeeded
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	// CreateTemp makes 0600; this file is checked in and read by everything.
+	if err := os.Chmod(tmp.Name(), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 func fatal(format string, args ...any) {
