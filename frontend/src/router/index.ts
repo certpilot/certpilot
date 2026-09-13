@@ -6,6 +6,7 @@ import CertificatesView from '@/views/CertificatesView.vue'
 import GatewaysView from '@/views/GatewaysView.vue'
 import DiscoveryView from '@/views/DiscoveryView.vue'
 import PoliciesView from '@/views/PoliciesView.vue'
+import TemplatesView from '@/views/TemplatesView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import DisplayView from '@/views/DisplayView.vue'
 import LoginView from '@/views/LoginView.vue'
@@ -58,6 +59,12 @@ const routes: RouteRecordRaw[] = [
   { path: '/gateways', name: 'gateways', component: GatewaysView, meta: { title: 'Gateways' } },
   { path: '/discovery', name: 'discovery', component: DiscoveryView, meta: { title: 'Discovery' } },
   { path: '/policies', name: 'policies', component: PoliciesView, meta: { title: 'Policies' } },
+  {
+    path: '/templates',
+    name: 'templates',
+    component: TemplatesView,
+    meta: { title: 'Templates' },
+  },
   { path: '/settings', name: 'settings', component: SettingsView, meta: { title: 'Settings' } },
   {
     // The unattended wall screen. No sidebar, no toolbar, nothing clickable that

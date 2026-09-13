@@ -434,6 +434,88 @@ export interface Policy {
   updated_at: string
 }
 
+/** core/store/models.go — CommonNameRule */
+export interface CommonNameRule {
+  /**
+   * Absent and false are different answers. A template that has never
+   * mentioned the common name has not decided it is optional.
+   */
+  required?: boolean
+  suffixes?: string[]
+  forbidden_patterns?: string[]
+}
+
+/** core/store/models.go — SANRules */
+export interface SANRules {
+  /** DNS, IP, email, URI. Empty means the template does not restrict them. */
+  types?: string[]
+  suffixes?: string[]
+  /** A pointer in Go, for the same reason `required` is above. */
+  allow_wildcards?: boolean
+  max_names?: number
+}
+
+/**
+ * core/store/models.go — CertificateTemplate
+ *
+ * Every numeric bound treats zero as "not constrained by this template". A
+ * default of 2048 would look safe and would be a rule nobody wrote.
+ */
+export interface CertificateTemplate {
+  id: string
+  /** The stable machine name. What a pipeline names; survives a rename. */
+  slug: string
+  name: string
+  description?: string
+  /** Bumped when a rule changes, never by a rename. */
+  version: number
+  is_enabled: boolean
+
+  ca_account_id: string
+  ca_profile?: string
+
+  subject_mode: 'SUPPLIED' | 'CONSTRAINED'
+  subject_defaults: Record<string, string>
+  common_name_rule: CommonNameRule
+  san_rules: SANRules
+
+  allowed_key_types: string[]
+  rsa_min_bits: number
+  rsa_max_bits: number
+  ecdsa_curves: string[]
+  csr_required: boolean
+  key_custody_required: 'ANY' | 'CERTPILOT' | 'AGENT' | 'EXTERNAL'
+
+  validity_days: number
+  max_validity_days: number
+  renew_before_days: number
+  auto_renew: boolean
+
+  require_metadata: string[]
+  default_environment?: string
+  default_team?: string
+  default_tags: string[]
+
+  created_at: string
+  updated_at: string
+}
+
+/** core/store/models.go — TemplateGrant */
+export interface TemplateGrant {
+  id: string
+  name: string
+  template_id: string
+  subject_kind: 'AGENT' | 'ROLE' | 'TEAM' | 'USER'
+  agent_id?: string
+  label_selector?: Record<string, string>
+  role?: string
+  team?: string
+  user_id?: string
+  names: string[]
+  is_enabled: boolean
+  revoked_at?: string
+}
+
 /** Gateway summary from GET /api/v1/gateways — core/api/ca_accounts.go */
 export interface GatewaySummary {
   name: string

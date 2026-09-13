@@ -73,12 +73,31 @@ so remaining-days cells rendered in the ordinary text colour; a chip coloured
 critical but labelled `ISSUED`; multi-line sentences set in an uppercase tracked
 label style; a filter `<select>` bound to an absent key rendering blank.
 
-Chrome cannot click. To photograph a panel that needs interaction, temporarily
-patch the component to open it, screenshot, then **restore from a copy you saved
-first** and grep to prove the harness is gone. Never commit one.
+`--screenshot` cannot click. Over CDP it can: `Runtime.evaluate` with an
+expression that finds the element and calls `.click()` opens whatever needs
+opening, and nothing in the tree has to be touched.
 
-The system is in dark mode, and headless Chrome inherits it, so the light theme
-cannot be photographed here. Say so rather than implying it was checked.
+```js
+await send('Runtime.evaluate', {
+  expression: `[...document.querySelectorAll('tbody tr[role=button]')]
+    .find(r => r.textContent.includes('Internal mTLS'))?.click()`,
+})
+```
+
+The older advice — patch the component to open the panel, screenshot, restore
+from a copy saved first, grep to prove the harness is gone — still works and is
+still the fallback for something genuinely unreachable. It is no longer the
+first thing to try, because a temporary edit to a real component is a thing that
+can be committed by accident and this is not.
+
+The system is in dark mode and `--screenshot` inherits it, so *this* method
+cannot photograph the light theme. Say so rather than implying it was checked.
+
+The CDP method above can. `Emulation.setEmulatedMedia` with
+`prefers-color-scheme` forces either theme regardless of the system, and it
+works whether or not the page needs a session — so a view was shot in both
+themes by pointing the same script at it twice. Reach for CDP rather than
+`--screenshot` whenever the theme matters, which is any change to a surface.
 
 ### Live-testing a gateway against a real CA
 
