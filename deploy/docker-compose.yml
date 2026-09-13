@@ -49,12 +49,21 @@ services:
       timeout: 5s
       retries: 3
 
+  # ── Gateways ────────────────────────────────────────────────────────────────
+  #
+  # Pulled rather than built. Each gateway is its own repository now, publishing
+  # its own image, and the contract between this core and any of them is
+  # provider.v1 over the network — which is what makes a gateway somebody else
+  # wrote as usable here as these three.
+  #
+  # Pin with GATEWAY_VERSION. The default moves when these compose files are
+  # updated and not before, so a `docker compose pull` cannot change which
+  # gateway a working deployment is running.
+
   # The gateway that needs no account anywhere, which is what makes a first run
   # possible without registering with a CA.
   gateway-selfsigned:
-    build:
-      context: ..
-      dockerfile: deploy/docker/gateway-selfsigned.Dockerfile
+    image: ghcr.io/certpilot/gateway-selfsigned:${GATEWAY_VERSION:-0.2.0}
     container_name: certpilot-gateway-selfsigned
     restart: unless-stopped
     volumes:
@@ -66,9 +75,7 @@ services:
       - "--tls-ca=/app/pki/ca.pem"
 
   gateway-acme:
-    build:
-      context: ..
-      dockerfile: deploy/docker/gateway-acme.Dockerfile
+    image: ghcr.io/certpilot/gateway-acme:${GATEWAY_VERSION:-0.2.0}
     container_name: certpilot-gateway-acme
     restart: unless-stopped
     volumes:
@@ -89,9 +96,7 @@ services:
     #   - "80:80"
 
   gateway-vault:
-    build:
-      context: ..
-      dockerfile: deploy/docker/gateway-vault.Dockerfile
+    image: ghcr.io/certpilot/gateway-vault:${GATEWAY_VERSION:-0.2.0}
     container_name: certpilot-gateway-vault
     restart: unless-stopped
     volumes:

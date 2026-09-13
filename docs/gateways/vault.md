@@ -238,9 +238,11 @@ else. See [monitoring.md](../monitoring.md#ca-health).
 
 ```bash
 vault server -dev -dev-root-token-id=certpilot-dev-root &
+git clone https://github.com/certpilot/certpilot-gateway-vault
+cd certpilot-gateway-vault
 ./scripts/lab-vault.sh
 eval "$(./scripts/lab-vault.sh --env)"
-go test ./gateways/vault/ -run Live -v
+go test ./... -run Live -v
 ```
 
 The script builds a root, two issuing CAs — one healthy, one three weeks from

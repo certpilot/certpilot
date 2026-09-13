@@ -26,6 +26,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -35,10 +36,15 @@ import (
 )
 
 const (
-	apiDir    = "core/api"
-	storeDir  = "core/store"
-	routerGo  = "core/api/router.go"
-	agentAuth = "pkg/agentsdk/agentauth/agentauth.go"
+	apiDir   = "core/api"
+	storeDir = "core/store"
+	routerGo = "core/api/router.go"
+
+	// agentSDK is a dependency now rather than a directory. #44 moved it to its
+	// own repository, so the file this reads lives in the module cache and its
+	// path depends on the version core/go.mod resolves.
+	agentSDK      = "github.com/certpilot/certpilot-agent-sdk"
+	agentAuthFile = "agentauth/agentauth.go"
 )
 
 // ── Output shapes ─────────────────────────────────────────────────────────
@@ -216,6 +222,7 @@ func main() {
 // which sends the reader looking at their key material rather than at their
 // spelling.
 func authSchemes() map[string]any {
+	agentAuth := filepath.Join(mustModuleDir(agentSDK), agentAuthFile)
 	src, err := os.ReadFile(agentAuth)
 	if err != nil {
 		fatal("%v", err)
@@ -363,30 +370,103 @@ func importMap(f *ast.File) map[string]string {
 	return out
 }
 
-// inTreeModules maps a module path to where that module's source sits in this
-// tree, for the modules this repository builds.
+// sourceModules maps a module path prefix to where that module's source sits.
 //
-// There used to be one prefix and a `strings.TrimPrefix`. #42 split pkg into
-// three modules whose paths are the repositories they will live in rather than
-// the directories they sit in, so the mapping is no longer a trim — and a type
-// that moved to an SDK reported as "outside this module", which is true of the
-// path and false of the source.
+// An empty value means "in this tree, at the path that follows the prefix".
+// Anything else is resolved through the module cache, because the two SDKs are
+// separate repositories now — #43 and #44 — and a type that lives in one of
+// them is genuinely outside this checkout while still being source this
+// generator has to read.
+//
+// It has changed shape twice for the same underlying reason. It was one prefix
+// and a strings.TrimPrefix; #42 split pkg into three modules whose paths were
+// the repositories they would live in, and a type that had moved reported as
+// "outside this module" — true of the path and false of the source. Now they
+// have actually moved, and the answer is a lookup rather than a mapping to a
+// directory that no longer exists.
 //
 // Request types live in five packages and counting, so the import list of the
 // file that binds them is what says where to look. Anything genuinely outside
 // is reported rather than skipped.
-var inTreeModules = map[string]string{
+var sourceModules = map[string]string{
 	"github.com/certpilot/certpilot/":             "",
-	"github.com/certpilot/certpilot-gateway-sdk/": "pkg/gatewaysdk/",
-	"github.com/certpilot/certpilot-agent-sdk/":   "pkg/agentsdk/",
+	"github.com/certpilot/certpilot-gateway-sdk/": agentSDKCache,
+	"github.com/certpilot/certpilot-agent-sdk/":   agentSDKCache,
 }
 
-// inTreeDir resolves an import path to a directory, or reports that it cannot.
-func inTreeDir(path string) (string, bool) {
-	for prefix, dir := range inTreeModules {
-		if strings.HasPrefix(path, prefix) {
-			return dir + strings.TrimPrefix(path, prefix), true
+// agentSDKCache marks a prefix whose source is resolved through `go list`
+// rather than being a path in this tree.
+const agentSDKCache = "\x00module-cache"
+
+// moduleDirs caches `go list -m` answers. The command is not fast and the same
+// module is asked for once per type that lives in it.
+var moduleDirs = map[string]string{}
+
+// mustModuleDir resolves a module path to the directory holding its source,
+// through the module cache, and fails loudly rather than returning a guess.
+//
+// Run from core/, which is the module that requires both SDKs. Running it from
+// the repository root would ask a go.work-rooted question and get a different
+// answer, or none.
+func mustModuleDir(modPath string) string {
+	if dir, ok := moduleDirs[modPath]; ok {
+		return dir
+	}
+	dir := listModuleDir(modPath)
+	if dir == "" {
+		// `go list -m -f {{.Dir}}` answers with an empty string, not an error,
+		// for a module that is required but not yet in the cache. That is the
+		// normal state of a fresh checkout, so downloading is part of resolving
+		// rather than an error path — the first CI run after the SDKs moved out
+		// failed here, on a clean runner, having worked on a laptop that had
+		// already downloaded them.
+		out, err := runInCore("go", "mod", "download", modPath)
+		if err != nil {
+			fatal("could not download %s, which holds source this generator reads: %v\n%s",
+				modPath, err, out)
 		}
+		dir = listModuleDir(modPath)
+	}
+	if dir == "" {
+		fatal("go list still reports no directory for %s after downloading it", modPath)
+	}
+	moduleDirs[modPath] = dir
+	return dir
+}
+
+// listModuleDir asks where a module's source is, returning "" when the answer
+// is "nowhere yet".
+func listModuleDir(modPath string) string {
+	out, err := runInCore("go", "list", "-m", "-f", "{{.Dir}}", modPath)
+	if err != nil {
+		fatal("could not locate the source of %s, which is a dependency now rather than "+
+			"a directory in this tree: %v\n%s", modPath, err, out)
+	}
+	return strings.TrimSpace(out)
+}
+
+// runInCore runs a go command from core/, the module that requires both SDKs.
+// Running from the repository root would ask a go.work-rooted question and get
+// a different answer, or none.
+func runInCore(name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = "core"
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+// inTreeDir resolves an import path to a directory on disk, or reports that it
+// cannot. The name is historical: it now resolves out-of-tree sources too.
+func inTreeDir(path string) (string, bool) {
+	for prefix, where := range sourceModules {
+		if !strings.HasPrefix(path, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(path, prefix)
+		if where == agentSDKCache {
+			return filepath.Join(mustModuleDir(strings.TrimSuffix(prefix, "/")), rest), true
+		}
+		return where + rest, true
 	}
 	return "", false
 }

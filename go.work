@@ -3,10 +3,5 @@ go 1.26.6
 use (
 	./agent
 	./core
-	./gateways/acme
-	./gateways/selfsigned
-	./gateways/vault
 	./pkg
-	./pkg/agentsdk
-	./pkg/gatewaysdk
 )

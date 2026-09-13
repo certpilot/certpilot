@@ -102,9 +102,10 @@ themes by pointing the same script at it twice. Reach for CDP rather than
 ### Live-testing a gateway against a real CA
 
 Vault is installed via `brew tap hashicorp/tap` (it is no longer in
-homebrew-core). `scripts/lab-vault.sh` builds a root, a healthy intermediate, a
+homebrew-core). `scripts/lab-vault.sh`, in the Vault gateway's repository,
+builds a root, a healthy intermediate, a
 deliberately-expiring one, a `no_store` role and an AppRole; `--env` prints the
-variables `gateways/vault/live_test.go` looks for. Those tests skip unless
+variables its `live_test.go` looks for. Those tests skip unless
 `CERTPILOT_TEST_VAULT_ADDR`, `_ROLE_ID` and `_SECRET_ID` are set.
 
 Facts about Vault that cost time to learn:
@@ -168,7 +169,7 @@ fails the build if one appears.
 
 ## Adding a gateway
 
-The contract is `proto/provider/v1/provider.proto`, implemented by three
+The contract is [`provider.proto`](https://github.com/certpilot/certpilot-gateway-sdk/blob/main/proto/provider/v1/provider.proto), implemented by three
 gateways already; `docs/writing-a-gateway.md` walks it end to end.
 
 Points that matter:
@@ -180,8 +181,10 @@ Points that matter:
 - The core-to-gateway channel carries CSRs, private keys and CA credentials, so
   it is mutually authenticated by default. `make dev-certs` writes development
   material; `--insecure` is loopback-only and warns loudly.
-- Each gateway is its own module. Add it to `go.work`, the `MODULES` list in the
-  Makefile, and a Dockerfile.
+- Each gateway is its own **repository** now, with its own module, Dockerfile
+  and published image. Nothing is added to `go.work` or the `MODULES` list —
+  the core depends on `certpilot-gateway-sdk` and reaches a gateway over the
+  network, and `make dev` fetches the self-signed one at a pinned release.
 
 A gateway holds **no credential of its own**. Each CA account carries the
 identity it issues under, so the process is authorised to sign nothing.

@@ -44,7 +44,7 @@ Six Go modules in a workspace (`go.work`, Go 1.26.6) plus a Vue frontend.
 |:---|:---|
 | `pkg/` | Shared: `x509util`, `secrets` (envelope encryption), `grpckit` (mTLS), generated protobuf |
 | `core/` | The control plane. API, store, plugin manager, and ten engines |
-| `gateways/{selfsigned,acme,vault}/` | CA adapters, each its own module and process, speaking one gRPC contract |
+| *(separate repositories)* | CA adapters, each its own repository, module, image and process, speaking one gRPC contract: [selfsigned](https://github.com/certpilot/certpilot-gateway-selfsigned), [acme](https://github.com/certpilot/certpilot-gateway-acme), [vault](https://github.com/certpilot/certpilot-gateway-vault) |
 | `agent/` | Host agent: generates keys locally, sends CSRs, installs and reloads |
 | `frontend/` | Vue 3 + Vite + Tailwind 4 + Pinia |
 | `migrations/` | 35 numbered `.sql` files, applied by `certpilot-core --migrate` |

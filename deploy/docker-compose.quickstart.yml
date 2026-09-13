@@ -73,9 +73,7 @@ services:
     command: ["--migrate", "--migrations=/app/migrations"]
 
   gateway-selfsigned:
-    build:
-      context: ..
-      dockerfile: deploy/docker/gateway-selfsigned.Dockerfile
+    image: ghcr.io/certpilot/gateway-selfsigned:${GATEWAY_VERSION:-0.2.0}
     depends_on:
       certs:
         condition: service_completed_successfully
