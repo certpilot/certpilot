@@ -138,6 +138,65 @@ silence, which meant a typo and compliance looked identical.
 The rule parsed and constrains nothing — `{"max_days": 0}`, an empty
 `allowed_key_types`. Somebody believes that policy is protecting them.
 
+**`Certificate request refused by its template`**
+
+A `403` whose `detail` says which rule. A policy is the estate-wide floor; a
+template is the rules for one kind of certificate, and both apply. The common
+ones:
+
+| | |
+|:---|:---|
+| `key type RSA is not one template "X" issues (ECDSA)` | `allowed_key_types` |
+| `curve P-521 is not one template "X" issues (P-256, P-384)` | `ecdsa_curves` |
+| `an RSA key of 2048 bits was asked for and template "X" requires at least 3072` | `rsa_min_bits` |
+| `name "a.elsewhere.net" is outside the suffixes template "X" allows` | `common_name_rule.suffixes` or `san_rules.suffixes` |
+| `wildcard name "*.example.com" is not permitted by template "X"` | `san_rules.allow_wildcards` |
+| `3 names were asked for and template "X" allows at most 2` | `san_rules.max_names` |
+| `the signing request carries ip name "10.0.0.1", and template "X" permits only DNS` | `san_rules.types` |
+| `template "X" requires change_ticket, which this request does not answer` | `require_metadata` |
+| `template "X" issues only against a signing request` | `csr_required` |
+| `template "X" issues only certificates whose key is held by AGENT` | `key_custody_required` |
+
+**`the signing request asks for O="A" and template "X" supplies O="B"`**
+
+`subject_mode` is `SUPPLIED` and the CSR disagrees. CertPilot cannot rewrite a
+signed request — it is passed to the CA as it stands — so refusing is the only
+enforcement available. Regenerate the CSR with the subject the template
+supplies, or issue under a template whose `subject_mode` is `CONSTRAINED`.
+
+**`this request asks for a CA certificate (basicConstraints CA:TRUE)`**
+
+Also `keyCertSign`. Refused rather than stripped, on every path, because a
+client asking for it is either broken or hostile and both deserve an error
+rather than a certificate that silently is not what they asked for.
+
+**`no certificate template named "X"`**
+
+A `400`, not a `403`: the request named something that does not exist. Templates
+resolve by slug or by uuid — `GET /api/v1/certificate-templates`.
+
+**`template "X" is disabled, so nothing may be issued under it`**
+
+`is_enabled` is false. Disabling is the safe way to retire a template, because
+deleting one that grants still name is refused.
+
+**`neither template_id nor ca_account_id was given`**
+
+One of the two has to be present. Naming no template resolves to the default
+template for the CA account, which constrains nothing.
+
+**`this template could never issue a certificate`** (on save)
+
+A `400` when writing the template, not when using it. Every key the template
+permits is refused by a `BLOCK` policy, so nothing it allows could ever be
+issued. The message names the policy. Widen the template or change the policy.
+
+**`template "X" is still named by N grant(s)`**
+
+A `409` on delete. A **revoked** grant still refers to the template it was
+written against, and that record is part of why a certificate exists. Delete the
+grants first, or disable the template instead.
+
 **`policy "X" requires approval, but this build has no approval workflow`**
 
 There is no approvals table and no endpoint that can approve or reject. Remove
