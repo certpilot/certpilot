@@ -70,27 +70,6 @@ func normalizeEnvironment(environment string) (string, error) {
 		environment, strings.Join(certificateEnvironments, ", "))
 }
 
-// dedupeNames removes repeats while preserving order, comparing without regard
-// to case because DNS names are case-insensitive and "APP.example.com" and
-// "app.example.com" are one name.
-func dedupeNames(names []string) []string {
-	seen := make(map[string]bool, len(names))
-	out := make([]string, 0, len(names))
-	for _, n := range names {
-		n = strings.TrimSpace(n)
-		if n == "" {
-			continue
-		}
-		key := strings.ToLower(n)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		out = append(out, n)
-	}
-	return out
-}
-
 // boolQuery reads an explicit opt-in from the query string.
 //
 // Only "true" counts. A parameter that is present but says something else is

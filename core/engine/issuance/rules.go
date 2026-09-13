@@ -312,6 +312,14 @@ func hasSuffix(name string, suffixes []string) bool {
 	return false
 }
 
+// dedupe removes repeats while preserving order, comparing without regard to
+// case because DNS names are case-insensitive and "APP.example.com" and
+// "app.example.com" are one name.
+//
+// CAB Forum rules require the common name to also appear as a SAN, so nearly
+// every client sends it in both fields — and the certificate came back listing
+// the same name twice, which the inventory then reported as "one extra name".
+// Harmless in the certificate, wrong on every screen that counts them.
 func dedupe(names []string) []string {
 	seen := make(map[string]bool, len(names))
 	out := make([]string, 0, len(names))
