@@ -242,7 +242,8 @@ async function removePolicy(policy: Policy) {
     <div role="alert" class="notice" data-tone="signal">
       <Sliders class="w-4 h-4 shrink-0" />
       <span class="text-xs">
-        Policies are evaluated on issuance only, not on renewal. Only
+        Evaluated on every issuance path, and again at renewal — a certificate whose key no
+        longer clears a floor is renewed with one that does. Only
         <span class="font-mono">BLOCK</span> refuses a request; other severities are returned
         alongside the certificate.
       </span>
