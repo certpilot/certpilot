@@ -120,6 +120,29 @@ The policy engine could not be consulted — usually the database. Refusing is
 deliberate: treating an evaluation failure as "no violations" would silently
 disable every policy at once.
 
+**`policy "X" uses rule type "Y", which this build cannot evaluate`**
+
+The policy names a rule this build does not implement. It is reported rather
+than skipped for the same reason as above: a policy that cannot be evaluated is
+otherwise indistinguishable from one that passed. Either the value predates a
+downgrade, or it was written directly into the database — the API only accepts
+rule types the engine implements.
+
+**`policy "X" has a rule_config that does not parse`**
+
+The JSON in `rule_config` is malformed. This used to disable the policy in
+silence, which meant a typo and compliance looked identical.
+
+**`policy "X" is enabled but sets no …`**
+
+The rule parsed and constrains nothing — `{"max_days": 0}`, an empty
+`allowed_key_types`. Somebody believes that policy is protecting them.
+
+**`policy "X" requires approval, but this build has no approval workflow`**
+
+There is no approvals table and no endpoint that can approve or reject. Remove
+the policy, or express the constraint as a rule that can be evaluated.
+
 **`"lab" is not one of production, staging, development`**
 
 `environment` is constrained by the schema. Refused at the API rather than

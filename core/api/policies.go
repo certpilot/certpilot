@@ -47,15 +47,23 @@ func (h *PolicyHandler) Get(c *gin.Context) {
 //
 // The binding tags carry the CHECK constraints that migration 001 put on this
 // table. Without them an unknown rule_type reaches PostgreSQL and comes back
-// as a raw SQLSTATE 23514, which tells an operator nothing about which of six
+// as a raw SQLSTATE 23514, which tells an operator nothing about which of the
 // values they should have sent.
+//
+// rule_type is deliberately narrower than the CHECK constraint. The column
+// still permits approval_required, because rows using it may already exist and
+// a migration that deleted somebody's policy would be worse than one that
+// refuses new ones. Nothing can approve or reject a request in this build, so
+// accepting a new policy that claims to gate on approval would be promising a
+// control that does not exist. The engine reports any surviving row rather than
+// passing it.
 type PolicyInput struct {
 	Name        string `json:"name" binding:"required"`
 	Description string `json:"description"`
 	// IsEnabled is a pointer so that omitting it leaves the column's default of
 	// true, rather than a Go zero value quietly creating every policy disabled.
 	IsEnabled     *bool  `json:"is_enabled"`
-	RuleType      string `json:"rule_type" binding:"required,oneof=key_size key_type ca_restriction max_lifetime naming approval_required"`
+	RuleType      string `json:"rule_type" binding:"required,oneof=key_size key_type ca_restriction max_lifetime naming"`
 	RuleConfig    string `json:"rule_config" binding:"required"`
 	DomainPattern string `json:"domain_pattern"`
 	Severity      string `json:"severity" binding:"omitempty,oneof=INFO WARNING BLOCK"`

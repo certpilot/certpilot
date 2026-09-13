@@ -211,7 +211,17 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 	// A policy engine that cannot be consulted must block the request. Treating
 	// an evaluation failure as "no violations" means a database blip silently
 	// disables every security policy at once.
-	violations, err := h.policyEng.EvaluateRequest(c.Request.Context(), allDomains, input.KeyType, input.KeySize, input.ValidityDays, caAccount.ProviderType)
+	violations, err := h.policyEng.EvaluateRequest(c.Request.Context(), policy.Request{
+		CommonName: input.CommonName,
+		Domains:    allDomains,
+		// Already replaced with the CSR's own values above when one was
+		// supplied, so a policy judges the key that will exist rather than the
+		// key the body claimed.
+		KeyType:        input.KeyType,
+		KeySize:        input.KeySize,
+		ValidityDays:   input.ValidityDays,
+		CAProviderType: caAccount.ProviderType,
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": fmt.Sprintf("could not evaluate security policy, refusing to issue: %v", err),
