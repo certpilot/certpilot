@@ -209,7 +209,9 @@ So a destination can name a platform instead:
 
 That fills in the paths, the modes, `nginx -t` and `nginx -s reload`.
 `certpilot-agent profiles` lists every platform; `certpilot-agent profiles
-nginx` prints exactly what one fills in and what it cannot do for you.
+nginx` prints exactly what one fills in and what it cannot do for you. There is
+also a page per platform in [platforms/](platforms/README.md), each one leading
+with the failure it prevents rather than the fields it sets.
 
 **A profile is a default, not a lock.** Estates move paths. Every field a
 profile supplies is one you may write down yourself, and yours wins — including

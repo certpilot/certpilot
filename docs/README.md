@@ -8,7 +8,12 @@ team inside an organisation.
 | | |
 |:---|:---|
 | [getting-started.md](getting-started.md) | The first fifteen minutes. No database or cloud account needed |
+| [platforms/](platforms/README.md) | **"I have forty nginx boxes and an F5 — does this help me."** One page per platform, each naming the failure first |
 | [architecture.md](architecture.md) | How the pieces fit, and the three decisions that shape everything else |
+
+Everything below this line is organised the way the software is, which is the
+right shape once you have chosen it and the wrong shape while you are deciding.
+[platforms/](platforms/README.md) is the other axis.
 
 ## Running it
 
