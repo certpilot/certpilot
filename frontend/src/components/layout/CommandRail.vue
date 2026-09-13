@@ -48,6 +48,9 @@ const nav = [
   { label: 'Gateways', path: '/gateways' },
   { label: 'Discovery', path: '/discovery' },
   { label: 'Policies', path: '/policies' },
+  // Next to Policies on purpose: the floor and the rules above it are one
+  // subject, and an operator looking at either wants the other in view.
+  { label: 'Templates', path: '/templates' },
   { label: 'Settings', path: '/settings' },
 ]
 

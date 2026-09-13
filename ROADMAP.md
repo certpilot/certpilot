@@ -1560,8 +1560,11 @@ Renewal re-evaluates too, which is what makes a rule change reach an estate
 that already exists rather than only governing certificates that do not exist
 yet.
 
-Left: a console view. `agent_grants` has been API-only since migration 020, and
-a control nobody can see is a control nobody reviews.
+The console shows every template: which CA signs it, what it would refuse —
+computed from its own rules rather than written by hand, so it cannot drift from
+them — and which grants name it. `agent_grants` had been API-only since
+migration 020, and a control nobody can see is a control nobody reviews;
+templates were not going to repeat that.
 
 ### Phase 13 — X.509 shape and CA profiles
 
