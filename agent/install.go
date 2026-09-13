@@ -70,6 +70,42 @@ type Destination struct {
 	ChainPath     string `json:"chain_path,omitempty"`
 	FullChainPath string `json:"fullchain_path,omitempty"`
 
+	// Format is what to write: PEM (the default, and what every destination
+	// wrote before this existed) or PKCS12.
+	//
+	// A keystore is one file holding the certificate, the chain and the key
+	// together, so cert_path is that file and key_path must be omitted — the
+	// key is inside it. Everything else about a destination is unchanged: the
+	// mode, the ownership, the check before the reload, and the rollback from a
+	// captured copy all work the same way, because a keystore is a different
+	// encoding and not a different kind of operation.
+	//
+	// PKCS12 and not JKS: Java 9 made PKCS#12 the default keystore type and
+	// every JDK since reads it natively, so this covers the modern JVM and the
+	// .pfx that Windows tooling and several appliances want. JKS is for the
+	// estate still on Java 8 and is a separate decision, because it needs a
+	// second third-party module in a binary that runs on every host.
+	Format string `json:"format,omitempty"`
+
+	// KeystorePassword is what opens the keystore. Exactly one of these two is
+	// required when Format is a keystore, and there is no default.
+	//
+	// It is worth being clear about what this is and is not. It is **not**
+	// protecting the key from anyone: the private key is already on this host,
+	// in PEM, written by this same installer, and whoever can read the keystore
+	// can read the key beside it. What it is, is a coordination value — Tomcat
+	// has it in server.xml, and the keystore will not open unless the two
+	// match.
+	//
+	// Which is why there is no default. `changeit` is what every Java tutorial
+	// uses; defaulting to it would be theatre with the added harm of looking
+	// like protection.
+	KeystorePassword string `json:"keystore_password,omitempty"`
+	// KeystorePasswordFile reads it from a file instead, for an operator who
+	// already keeps it in one for their application and should not have to copy
+	// it into a second place. Trailing whitespace is stripped; nothing else is.
+	KeystorePasswordFile string `json:"keystore_password_file,omitempty"`
+
 	Owner string `json:"owner,omitempty"`
 	Group string `json:"group,omitempty"`
 	// CertMode and KeyMode are octal strings — "0644", "0640". Defaulted rather
@@ -159,7 +195,11 @@ func (d *Destination) validate() error {
 	if d.Certificate == "" {
 		return fmt.Errorf("no certificate name — say which certificate belongs here")
 	}
-	if d.CertPath == "" || d.KeyPath == "" {
+	if d.keystore() {
+		if err := d.validateKeystore(); err != nil {
+			return err
+		}
+	} else if d.CertPath == "" || d.KeyPath == "" {
 		return fmt.Errorf("both cert_path and key_path are required")
 	}
 	for field, p := range map[string]string{
@@ -580,6 +620,19 @@ func (d *Destination) render(m *material) (*rendered, error) {
 	certMode, keyMode := d.modes()
 	out := &rendered{}
 
+	if d.keystore() {
+		// One file, at the key's mode, because it holds the key. Nothing else
+		// about this destination changes: the same capture, the same check
+		// before the reload, and the same restore from the captured copy if the
+		// reload fails.
+		body, err := encodeKeystore(d, m)
+		if err != nil {
+			return nil, err
+		}
+		out.files = append(out.files, targetFile{path: d.CertPath, mode: keyMode, content: body})
+		return out, nil
+	}
+
 	if d.combined() {
 		// Certificate, chain, then key, in one file at the key's mode. The
 		// order servers that want this layout expect, and the mode the layout
@@ -611,6 +664,11 @@ func (d *Destination) render(m *material) (*rendered, error) {
 // paths lists the files this destination writes, in the order it writes them.
 func (d *Destination) paths() []string {
 	out := []string{d.CertPath}
+	// A keystore is one file. Without this the list carries an empty string,
+	// and the "wrote ..." line an operator reads ends in a stray comma.
+	if d.keystore() {
+		return out
+	}
 	if !d.combined() {
 		out = append(out, d.KeyPath)
 	}

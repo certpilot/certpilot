@@ -211,6 +211,55 @@ Postgres actually reads it, and reloading, is the point.
 }
 ```
 
+### Keystores, for anything on the JVM
+
+A JVM reads a keystore, not a pair of PEM files, so a Tomcat, Jetty, Kafka or
+Elasticsearch estate was invisible to this agent until it could write one.
+
+```json
+{
+  "name": "tomcat",
+  "certificate": "app.example.com",
+  "format": "PKCS12",
+  "cert_path": "/opt/tomcat/conf/keystore.p12",
+  "keystore_password_file": "/opt/tomcat/conf/keystore.pass",
+  "key_mode": "0600",
+  "check": ["/opt/tomcat/bin/configtest.sh"],
+  "reload": ["/bin/systemctl", "reload", "tomcat"]
+}
+```
+
+`cert_path` is the keystore, and `key_path` must be omitted — the key is inside
+it, and naming a second path would write it to disk in the clear as well.
+`chain_path` does not apply either: the chain is stored as CA certificates,
+which is what a consumer asking the keystore for a chain expects. Everything
+else works exactly as it does for PEM — the mode, the ownership, the check
+before the reload, and the rollback from a captured copy if the reload fails.
+
+**PKCS#12 and not JKS.** Java 9 made PKCS#12 the default keystore type and every
+JDK since reads it natively, so this covers the modern JVM and the `.pfx` that
+Windows tooling and several appliances want. JKS is for an estate still on
+Java 8 and is not written by this build.
+
+#### About that password
+
+It is **not protecting the key from anyone**. The private key is already on this
+host — this agent generated it there — and whoever can read the keystore can
+read whatever else is in that directory.
+
+What it is, is a coordination value. Tomcat has it in `server.xml`, and the
+keystore will not open unless the two match. Which is why there is no default:
+`changeit` is what every Java tutorial uses, and defaulting to it would look
+like protection while being none.
+
+Give it as `keystore_password` inline, or `keystore_password_file` pointing at a
+file — the second exists so an operator who already keeps it in one for their
+application does not have to copy it into a second place. Exactly one, and
+omitting both is refused when the spec is read rather than when the install
+runs.
+
+---
+
 ```bash
 certpilot-agent install            # writes what has changed, checks, reloads
 certpilot-agent install --force    # rewrite and reload even when unchanged
