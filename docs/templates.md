@@ -181,12 +181,58 @@ migration.
 
 ---
 
-## What does not consult a template yet
+## Renewal
 
-**The renewal sweep.** It re-signs whatever a certificate already is, from the
-row, and consults neither the template nor the policy engine. Tightening a rule
-therefore changes what may be requested tomorrow and nothing about the estate.
-Tracked as [#28](https://github.com/certpilot/certpilot/issues/28).
+The renewal sweep is the only component that touches every managed certificate
+on a timer, so it is the only place a rule change can reach an estate that
+already exists. It reloads the template and asks what the rules require *today*.
+
+Renewal generates the key — the request carries no CSR — so a raised floor is
+something it can act on rather than only report:
+
+```
+renewing into conformance · RSA 2048 → 4096 bits,
+  the minimum template "drift-demo" now requires
+```
+
+Two rules govern that, and both are easy to get wrong in the direction that
+looks like progress:
+
+- **It never downgrades.** Asking a template for a key with the fields empty
+  yields its *minimum*, so an RSA-4096 certificate under a 2048 floor would be
+  rekeyed weaker. The rule is the larger of what it has and what is required
+- **It changes nothing it does not have to.** A certificate that already
+  satisfies its rules keeps exactly the key it has. Rotating RSA to ECDSA on a
+  renewal that did not need it is a change nobody asked for
+
+**A certificate with no template is still judged**, against the estate-wide
+floor. Most of an inventory predates templates, and exempting all of it would
+mean a policy change governed only certificates that did not exist yet.
+
+**What renewal cannot fix is reported, never refused.** A name outside a
+narrowed suffix rule cannot be dropped — the endpoints serving it expect it. So
+the certificate is renewed and `cert.renewed_nonconforming` is raised:
+
+```
+renewing a certificate that no longer satisfies its rules ·
+  carries "drift2.example.com", which is outside the suffixes
+  template "drift-demo" now allows (internal.example.com)
+```
+
+Refusing would be the alternative and it is worse: an expired certificate is a
+worse outcome than a non-conforming one, and a sweep that turned a policy
+tightening into an outage is how people learn to switch automation off.
+
+A renewal is an issuance, so `template_version` moves to the version that
+governed it. Leaving the version the original was issued under would make an
+auditor read a conforming certificate as a stale one.
+
+Agent and externally held certificates are excluded from the sweep entirely —
+the key is somewhere else and only its holder can rotate it.
+
+---
+
+## What does not consult a template yet
 
 **Key usage and EKU.** The fields are not on the template yet, and for ACME and
 Vault CertPilot could only select a profile and verify the result afterwards

@@ -326,6 +326,12 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 	// for type uuid` — after the CA has already signed.
 	caAccountID := caAccount.ID
 
+	// The rules this was issued under, recorded so renewal can ask whether they
+	// still hold. The version and not only the id, because a template's rules
+	// change and the record of which version governed this issuance must not.
+	templateID := decision.Template.ID
+	templateVersion := decision.Template.Version
+
 	notBefore, notAfter := info.NotBefore, info.NotAfter
 
 	keyCustody := store.KeyCustodyExternal
@@ -348,6 +354,8 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 		AutoRenew:           input.AutoRenew,
 		RenewalLeadDays:     input.RenewalLeadDays,
 		CAAccountID:         &caAccountID,
+		TemplateID:          &templateID,
+		TemplateVersion:     &templateVersion,
 		PrivateKeyEncrypted: privateKey,
 		CertificatePEM:      &certPEM,
 		ChainPEM:            chainPEM,

@@ -37,6 +37,19 @@ const (
 	TopicCertIssued    = "cert.issued"
 	TopicCertRenewed   = "cert.renewed"
 	TopicCertRenewFail = "cert.renewal_failed"
+	// TopicCertRenewedNonConforming carries a certificate that was renewed and
+	// no longer satisfies the rules it is governed by.
+	//
+	// Distinct from a failure on purpose. The renewal worked; what did not is
+	// the estate's compliance with a rule somebody has since tightened, and
+	// renewal cannot fix every kind — a name outside a narrowed suffix list
+	// cannot be dropped, because the endpoints serving it expect it.
+	//
+	// Refusing to renew would have been the alternative, and it is worse: an
+	// expired certificate is a worse outcome than a non-conforming one, and a
+	// sweep that turned a policy tightening into an outage is how people learn
+	// to switch automation off.
+	TopicCertRenewedNonConforming = "cert.renewed_nonconforming"
 	// TopicCertRenewalWindowMoved carries the CA changing its mind about when
 	// a certificate should be replaced.
 	//
