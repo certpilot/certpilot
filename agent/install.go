@@ -58,6 +58,13 @@ type Destination struct {
 	// host holds certificates for.
 	Certificate string `json:"certificate"`
 
+	// Profile names a platform — "nginx", "haproxy" — and fills in the rest of
+	// this struct from the catalogue in profile.go. Everything it supplies is a
+	// default: a field written down here wins, always, because estates move
+	// paths and a profile that could not be overridden would look supported
+	// while writing to somewhere nothing reads.
+	Profile string `json:"profile,omitempty"`
+
 	// Where the material goes. CertPath and KeyPath are required; the rest are
 	// written only if named, because different servers want different shapes.
 	//
@@ -184,6 +191,13 @@ func LoadInstallSpec(path string) (InstallSpec, error) {
 			return InstallSpec{}, fmt.Errorf("%s: two destinations are both called %q", path, d.Name)
 		}
 		seen[d.Name] = true
+		// Before validate, not after: a profile supplies cert_path, the check
+		// and the reload, and validating a destination that has not been
+		// filled in yet would refuse every profiled destination for having no
+		// paths in it.
+		if err := d.applyProfile(); err != nil {
+			return InstallSpec{}, fmt.Errorf("%s: destination %q: %w", path, d.Name, err)
+		}
 		if err := d.validate(); err != nil {
 			return InstallSpec{}, fmt.Errorf("%s: destination %q: %w", path, d.Name, err)
 		}
