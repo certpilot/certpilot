@@ -534,6 +534,16 @@ variable-length string — so it needs a `CPS2` envelope with the old one still
 readable. Worth doing, and deliberately not bundled with the provider work,
 because a mistake in that code is unrecoverable loss of every stored key.
 
+**The private key permission guarantee is Unix-only.** The agent writes a
+private key `0600`, restores its previous ownership, and refuses a mode that
+would make it readable by any account on the host — `0640` with a group is
+allowed, because that is how it is normally and correctly done. All of that is
+Unix file modes and ownership, and it is the whole of how the guarantee is
+enforced. There is no Windows agent, and the code does not compile for Windows,
+so nothing is silently unprotected today. It is recorded here because it is the
+reason a Windows port is not a build flag: the guarantee has to be re-expressed
+as an ACL before an agent could run there and still make the same promise.
+
 **Deployment waves stop at the job level, not the estate level.** A wave holds
 per certificate. Two certificates rolling out at once do not coordinate, so
 "nothing reaches production while anything is failing in staging" is not

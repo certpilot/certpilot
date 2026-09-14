@@ -9,6 +9,7 @@ Its reason for existing is one sentence:
 
 Everything else here follows from that.
 
+- [Where it runs](#where-it-runs)
 - [What it does](#what-it-does)
 - [Enrolment](#enrolment)
 - [Grants](#grants)
@@ -17,6 +18,52 @@ Everything else here follows from that.
 - [Inventory](#inventory)
 - [Running it](#running-it)
 - [What can go wrong](#what-can-go-wrong)
+
+---
+
+## Where it runs
+
+The agent runs on **Linux**, under systemd. That is the only configuration it is
+built for, tested on, and released as.
+
+| Target | State |
+|:---|:---|
+| Linux | Supported. Every deployment profile is tested against it |
+| macOS, FreeBSD | Compiles, and is usable for development. Not tested, and the deployment profiles assume systemd |
+| Windows | Does not compile |
+
+The published container image is built on Alpine, every deployment profile
+reloads its service with `systemctl`, and the configuration paths the profiles
+write to are the Linux ones: `/etc/nginx`, `/etc/apache2`, `/etc/haproxy`.
+
+### Windows
+
+There is no Windows build, and the code does not currently compile for one:
+`agent/inventory.go` reads file ownership through `syscall.Stat_t`, which exists
+only on Unix. That single call is the smallest part of the problem.
+
+- **File permissions do not translate.** The agent enforces that a private key
+  is readable by its owner and nobody else, and refuses to write one that is
+  world-readable. Unix file modes have no Windows meaning, so that guarantee has
+  to be re-expressed as an ACL or it quietly stops applying.
+- **The Windows certificate store is not a file.** Installing means importing
+  through CryptoAPI, choosing a store, and binding the result to whatever
+  consumes it — IIS by thumbprint, and Exchange, ADFS and RDS each in their own
+  way.
+- **Rollback would have to be rebuilt.** The installer captures the previous
+  file and restores it when a reload fails. A store import has no equivalent
+  unless one is written.
+
+This is a port rather than a build flag, which is why it is tracked separately
+in [issue #38](https://github.com/certpilot/certpilot/issues/38).
+
+**Deploying to Windows hosts without the agent.** The core does not need the
+agent in order to deploy. A signed webhook target delivers the certificate to an
+endpoint you control, which can be a script on the Windows host. The agent's
+contract is also published, in
+[`certpilot-agent-sdk`](https://github.com/certpilot/certpilot-agent-sdk), so an
+agent written in another language is a first-class one — the core does not
+distinguish it from this binary.
 
 ---
 
@@ -400,7 +447,8 @@ certpilot-agent run --once         # one cycle, then exit — for cron or a unit
 certpilot-agent status             # what this host holds and when it last reported
 ```
 
-As a systemd unit:
+As a systemd unit — see [Where it runs](#where-it-runs) for the platforms
+this is supported on:
 
 ```ini
 [Unit]
