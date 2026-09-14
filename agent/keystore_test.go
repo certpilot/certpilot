@@ -98,25 +98,45 @@ func TestTheKeystoreOpensWithKeytool(t *testing.T) {
 		t.Skip("keytool is on PATH but no JDK is installed; the JDK-side assertion did not run")
 	}
 
-	state, served := t.TempDir(), t.TempDir()
-	held := heldOn(t, state, "app.example.com")
-	dest := Destination{
-		Name: "tomcat", Certificate: "app.example.com",
-		Format: FormatPKCS12, CertPath: filepath.Join(served, "keystore.p12"),
-		KeystorePassword: "not-changeit",
-	}
-	installer, _ := installerFor(t, dest, held)
-	if r := onlyResult(t, installer.Apply(context.Background(), nil)); r.Status != agentapi.InstallInstalled {
-		t.Fatalf("install: %s", r.Error)
-	}
+	// Both cases matter, and only a JDK can settle either. Without an alias the
+	// entry is unnamed and the JDK invents "1" from a counter, which is what
+	// every keystore written before keystore_alias existed looks like. With one,
+	// the name an application's configuration refers to has to be the name the
+	// JDK reports, or the connector looks at the right file and finds nothing.
+	for _, tc := range []struct {
+		name      string
+		alias     string
+		wantAlias string
+	}{
+		{"unnamed, as the JDK counts it", "", "1"},
+		{"named by the destination", "tomcat", "tomcat"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state, served := t.TempDir(), t.TempDir()
+			held := heldOn(t, state, "app.example.com")
+			dest := Destination{
+				Name: "tomcat", Certificate: "app.example.com",
+				Format: FormatPKCS12, CertPath: filepath.Join(served, "keystore.p12"),
+				KeystorePassword: "not-changeit",
+				KeystoreAlias:    tc.alias,
+			}
+			installer, _ := installerFor(t, dest, held)
+			if r := onlyResult(t, installer.Apply(context.Background(), nil)); r.Status != agentapi.InstallInstalled {
+				t.Fatalf("install: %s", r.Error)
+			}
 
-	out, err := exec.Command(keytool, "-list", "-keystore", dest.CertPath,
-		"-storetype", "PKCS12", "-storepass", "not-changeit").CombinedOutput()
-	if err != nil {
-		t.Fatalf("keytool could not read the keystore: %v\n%s", err, out)
-	}
-	if !strings.Contains(string(out), "PrivateKeyEntry") {
-		t.Errorf("keytool read the keystore and found no private key:\n%s", out)
+			out, err := exec.Command(keytool, "-list", "-v", "-keystore", dest.CertPath,
+				"-storetype", "PKCS12", "-storepass", "not-changeit").CombinedOutput()
+			if err != nil {
+				t.Fatalf("keytool could not read the keystore: %v\n%s", err, out)
+			}
+			if !strings.Contains(string(out), "PrivateKeyEntry") {
+				t.Fatalf("keytool read the keystore and found no private key:\n%s", out)
+			}
+			if want := "Alias name: " + tc.wantAlias; !strings.Contains(string(out), want) {
+				t.Errorf("keytool did not report %q:\n%s", want, out)
+			}
+		})
 	}
 }
 
