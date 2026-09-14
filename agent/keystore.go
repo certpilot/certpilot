@@ -85,7 +85,14 @@ func encodeKeystore(d *Destination, m *material) ([]byte, error) {
 		// Modern, not Legacy: LegacyRC2 and LegacyDES exist for reading files
 		// written decades ago, and writing one would hand an estate RC2 in
 		// 2026 to satisfy a JDK that has read the modern encoding since 9.
-		return pkcs12.Modern.Encode(key, leaf, chain, password)
+		pfx, err := pkcs12.Modern.Encode(key, leaf, chain, password)
+		if err != nil {
+			return nil, err
+		}
+		// Naming the entry is a second pass over what Encode produced, because
+		// go-pkcs12 has no way to pass an alias through. Returns pfx untouched
+		// when no alias was asked for.
+		return setKeystoreAlias(pfx, password, strings.TrimSpace(d.KeystoreAlias))
 	default:
 		return nil, fmt.Errorf(
 			"format %q is not one this build writes. PEM or PKCS12", d.Format)

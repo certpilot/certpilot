@@ -23,14 +23,15 @@ Everything else here follows from that.
 
 ## Where it runs
 
-The agent runs on **Linux**, under systemd. That is the only configuration it is
-built for, tested on, and released as.
+The agent's home is **Linux, under systemd**: that is what it is released as,
+what every deployment profile describes, and what the platform pages cover.
+It also builds and runs on Windows, with the limits set out below.
 
 | Target | State |
 |:---|:---|
 | Linux | Supported. Every deployment profile is tested against it |
+| Windows | Builds and runs for file destinations. No deployment profiles, and the certificate store is not written to — see [Windows](#windows) |
 | macOS, FreeBSD | Compiles, and is usable for development. Not tested, and the deployment profiles assume systemd |
-| Windows | Does not compile |
 
 The published container image is built on Alpine, every deployment profile
 reloads its service with `systemctl`, and the configuration paths the profiles
@@ -38,29 +39,45 @@ write to are the Linux ones: `/etc/nginx`, `/etc/apache2`, `/etc/haproxy`.
 
 ### Windows
 
-There is no Windows build, and the code does not currently compile for one:
-`agent/inventory.go` reads file ownership through `syscall.Stat_t`, which exists
-only on Unix. That single call is the smallest part of the problem.
+The agent runs on Windows and writes certificates to files there. What it does
+not do is write to the Windows certificate store, which is what IIS, Exchange,
+ADFS, NPS and RDS read from.
 
-- **File permissions do not translate.** The agent enforces that a private key
-  is readable by its owner and nobody else, and refuses to write one that is
-  world-readable. Unix file modes have no Windows meaning, so that guarantee has
-  to be re-expressed as an ACL or it quietly stops applying.
-- **The Windows certificate store is not a file.** Installing means importing
-  through CryptoAPI, choosing a store, and binding the result to whatever
-  consumes it — IIS by thumbprint, and Exchange, ADFS and RDS each in their own
-  way.
-- **Rollback would have to be rebuilt.** The installer captures the previous
-  file and restores it when a reload fails. A store import has no equivalent
-  unless one is written.
+**The private key guarantee is an ACL, not a mode.** Windows has no file modes.
+Go accepts a `0600` and ignores it, and the file inherits whatever its directory
+grants — under `ProgramData`, usually read access for every authenticated user
+on the machine. So the agent sets an explicit access control list on every key
+it writes: the account it runs as, `SYSTEM`, and the local administrators, with
+inheritance switched off. A certificate written at a world-readable mode is left
+alone, because the service reading it often runs as a different account.
 
-This is a port rather than a build flag, which is why it is tracked separately
-in [issue #38](https://github.com/certpilot/certpilot/issues/38).
+SYSTEM and Administrators are on that list deliberately. A key no administrator
+can read is not safer — an administrator can take ownership of it in one
+command — but it is unbackuppable and invisible to the endpoint tooling every
+Windows estate runs. What the ACL removes is *other ordinary accounts*.
 
-**Deploying to Windows hosts without the agent.** The core does not need the
-agent in order to deploy. A signed webhook target delivers the certificate to an
-endpoint you control, which can be a script on the Windows host. The agent's
-contract is also published, in
+**No deployment profiles.** Every profile in the catalogue describes a Linux
+service: `systemctl` to reload, `/etc/nginx` and `/etc/haproxy` to write to.
+Naming one on Windows is refused, with a message saying to set `cert_path`,
+`key_path`, `check` and `reload` on the destination instead.
+
+**No `owner` or `group`.** Both are Unix file ownership. They are refused when
+the spec is read rather than accepted and ignored, because an operator who sets
+them believes a service account can read a key it cannot.
+
+**The certificate store is not written to.** IIS binds a certificate by
+thumbprint from `LocalMachine\My` rather than reading a file, and Exchange,
+ADFS, NPS and RDS each have their own binding step. Importing also has no
+equivalent of the installer's rollback — capture the previous file, put it back
+if the reload fails — so it is a separate piece of work rather than a flag.
+Tracked in [issue #38](https://github.com/certpilot/certpilot/issues/38).
+
+So the Windows hosts this helps today are the ones whose software reads
+certificates from disk: nginx, Java applications, PostgreSQL, Node services.
+
+**Without the agent at all.** The core does not need it in order to deploy. A
+signed webhook target delivers the certificate to an endpoint you control, which
+can be a script on the Windows host. The agent's contract is also published, in
 [`certpilot-agent-sdk`](https://github.com/certpilot/certpilot-agent-sdk), so an
 agent written in another language is a first-class one — the core does not
 distinguish it from this binary.
@@ -337,6 +354,7 @@ Elasticsearch estate was invisible to this agent until it could write one.
   "format": "PKCS12",
   "cert_path": "/opt/tomcat/conf/keystore.p12",
   "keystore_password_file": "/opt/tomcat/conf/keystore.pass",
+  "keystore_alias": "tomcat",
   "key_mode": "0600",
   "check": ["/opt/tomcat/bin/configtest.sh"],
   "reload": ["/bin/systemctl", "reload", "tomcat"]
@@ -361,6 +379,26 @@ before the reload, and the rollback from a captured copy if the reload fails.
 JDK since reads it natively, so this covers the modern JVM and the `.pfx` that
 Windows tooling and several appliances want. JKS is for an estate still on
 Java 8 and is not written by this build.
+
+#### Naming the entry
+
+A keystore is a map, and Java looks entries up by name. `keystore_alias` is that
+name.
+
+Leave it out and the entry is written unnamed, which the JDK reports as `1`
+because it falls back to a counter. That is correct for a configuration that
+does not name an alias, and wrong for one that does: a Tomcat connector with
+`certificateKeyAlias="tomcat"` — the conventional value, and what
+`keytool -genkeypair -alias tomcat` produces — cannot find the key, while Tomcat
+still reports a successful startup. Tomcat has no configuration check, so
+nothing catches that until post-renewal verification reports the endpoint
+serving the old certificate.
+
+There is no default and no profile supplies one. The value has to match a
+configuration file this agent cannot read, so anything chosen here would be a
+guess, and a wrong guess is a host looking at the right file and finding nothing
+in it. Setting it on a PEM destination is refused when the spec is read, rather
+than accepted and ignored.
 
 #### About that password
 

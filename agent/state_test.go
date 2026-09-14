@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +50,28 @@ func TestTheDirectoryAndKeyAreOwnerOnly(t *testing.T) {
 		t.Fatalf("save: %v", err)
 	}
 
+	// Asked in the terms the platform actually enforces. A mode is the answer
+	// on Unix; on Windows every file reports 0666 whatever its ACL says, so a
+	// mode assertion here would pass on a world-readable key and fail on a
+	// correct one.
+	for _, name := range []string{keyFile, stateFile} {
+		path := filepath.Join(dir, name)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if err := keyIsPrivate(path, info); err != nil {
+			t.Errorf("%s is not private: %v", name, err)
+		}
+	}
+
+	if runtime.GOOS == "windows" {
+		// Windows directories have no mode either, and the ACL on this one is
+		// asserted by TestAPrivateKeyIsNotReadableByOtherAccounts in
+		// platform_windows_test.go, which runs on a real Windows kernel.
+		return
+	}
+
 	for path, want := range map[string]os.FileMode{
 		dir:                           0o700,
 		filepath.Join(dir, keyFile):   0o600,
@@ -71,6 +94,14 @@ func TestTheDirectoryAndKeyAreOwnerOnly(t *testing.T) {
 // machine. An agent that carried on after printing a warning would be an agent
 // whose warning nobody reads.
 func TestAReadableKeyIsRefusedRatherThanWarnedAbout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// os.Chmod cannot make a file readable on Windows, so this test cannot
+		// create the condition it is about. The equivalent — an identity key
+		// whose ACL grants Everyone — is
+		// TestAnIdentityKeyGrantingEveryoneIsRefused in
+		// platform_windows_test.go.
+		t.Skip("Unix file modes; the Windows equivalent is in platform_windows_test.go")
+	}
 	dir := t.TempDir()
 	_, priv, _ := agentauth.GenerateKey()
 	if err := SaveIdentity(dir, priv, State{AgentID: "a", Server: "s"}); err != nil {

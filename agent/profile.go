@@ -143,6 +143,12 @@ func (d *Destination) applyProfile() error {
 		// be a rule nobody could remember.
 		return d.expandPlaceholders()
 	}
+	if !profilesSupported() {
+		return fmt.Errorf(
+			"profile %q cannot be used on this platform: every deployment profile describes a Linux "+
+				"service, reloaded with systemctl and configured under /etc. Set cert_path, key_path, "+
+				"check and reload on this destination instead", d.Profile)
+	}
 	p, ok := LookupProfile(d.Profile)
 	if !ok {
 		return fmt.Errorf("no profile called %q — known profiles: %s",

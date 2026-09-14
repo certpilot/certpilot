@@ -99,6 +99,35 @@ jobs:
       # store, and the DB-backed paths are already covered by `tests` above.
       - run: make test-race
 
+  windows:
+    name: agent on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      # The agent's guarantee — a private key is readable by its owner and
+      # nobody else — is a file mode on Unix and an ACL on Windows, and only a
+      # real Windows kernel can say whether the ACL is right. Cross-compiling
+      # proves it builds, which is the easy half, and the half that would pass
+      # while every key on the host was readable by everyone.
+      #
+      # What runs here is the platform-specific behaviour and the identity
+      # store: the ACL that replaces the mode, the refusal of Unix ownership
+      # and of the Linux deployment profiles, an identity key granting
+      # Everyone being refused, and a destination naming C:\ paths being
+      # accepted. The rest of the suite is built !windows because its fixtures
+      # are Unix paths and Unix modes, not because the logic differs.
+      #
+      # Only the agent runs here. The core is a Linux service and is not
+      # claimed to run on Windows.
+      - name: The agent's tests, on Windows
+        run: go test ./agent/... -v
+        working-directory: ${{ github.workspace }}
+
   lint:
     name: lint
     runs-on: ubuntu-latest

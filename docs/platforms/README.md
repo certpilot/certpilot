@@ -69,9 +69,10 @@ tested, not because they are unsupported. The agent requires only a file path,
 a format, a check command and a reload command, which can be specified
 manually. See [agent.md](../agent.md) for the configuration format.
 
-**Windows.** The agent runs on Linux only and does not compile for Windows.
-Windows hosts are deployed to through a signed webhook or an agent written
-against the published contract — see
+**Windows.** The agent runs on Windows and writes certificates to files there,
+but none of the profiles above apply — each describes a Linux service reloaded
+with `systemctl` — and it does not write to the Windows certificate store, which
+is what IIS, Exchange and ADFS read from. See
 [where the agent runs](../agent.md#where-it-runs).
 
 **Appliances without a writable filesystem.** F5 BIG-IP and Azure Key Vault are
