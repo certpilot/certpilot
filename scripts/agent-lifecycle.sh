@@ -20,13 +20,18 @@
 #
 #   enrol → grant → request → install → report
 #
-#   ./scripts/agent-lifecycle.sh
+#   ./scripts/agent-lifecycle.sh                         the latest release
+#   AGENT_VERSION=v0.1.0 ./scripts/agent-lifecycle.sh    a particular one
 #   AGENT_BIN=/path/to/certpilot-agent ./scripts/agent-lifecycle.sh
 #
-# AGENT_BIN is the seam. It builds the agent from this tree by default; once the
-# agent lives in its own repository, pointing it at `go install
-# github.com/certpilot/certpilot-agent/cmd@$VERSION` turns this into the
-# compatibility matrix without changing anything else.
+#   AGENT_VERSIONS="v0.2.0 v0.1.0" ./scripts/agent-lifecycle.sh
+#       each of them in turn, writing the agent section of docs/compatibility.md
+#
+# The agent is no longer in this repository, so there is nothing here to build:
+# it is fetched from its own module at a released version, which is the only
+# version anybody actually runs. AGENT_BIN overrides that and is what the
+# agent's own CI uses to ask the question from its side — a binary built from
+# the commit under review, against this core.
 #
 # Exit status is the verdict.
 
@@ -57,6 +62,73 @@ CERT_NAME="web.lifecycle.test"
 # the second, and the pipeline fails. One awk, no pipe, no trap.
 GW_VERSION="${GW_VERSION:-$(awk '/^GW_VERSION/ {print $3; exit}' Makefile)}"
 AGENT_BIN="${AGENT_BIN:-}"
+
+# Which released agent to measure. `latest` is the right default for a check
+# run on a pull request — the question there is whether this core still works
+# with what people are running today.
+AGENT_MODULE="github.com/certpilot/certpilot-agent/cmd"
+AGENT_VERSION="${AGENT_VERSION:-latest}"
+OUT="${OUT:-docs/compatibility.md}"
+
+# ── The matrix, when one is asked for ─────────────────────────────────────────
+#
+# One run of this script per version, then the table. Self-invocation rather
+# than a loop around the body: the body is the part that has been checked line
+# by line against a real core, and wrapping it in a loop would mean re-checking
+# every assumption it makes about starting from nothing. A core restart per
+# version costs about twenty seconds, on a job that runs once a week.
+#
+# Only the agent section of the page is written. The gateway section above it
+# belongs to scripts/gateway-compatibility.sh, and the two are spliced together
+# by sentinel rather than by one script knowing the other's output.
+if [[ -n "${AGENT_VERSIONS:-}" ]]; then
+  rows=()
+  worst=0
+  for version in $AGENT_VERSIONS; do
+    printf '\n──── %s ────\n' "$version" >&2
+    # AGENT_BIN cleared as well as AGENT_VERSIONS: an AGENT_BIN inherited from
+    # the environment would make every row measure the same binary and report
+    # a matrix that agreed with itself about nothing.
+    if AGENT_VERSIONS= AGENT_VERSION="$version" AGENT_BIN= "$0"; then
+      rows+=("| \`certpilot-agent\` | $version | pass | enrolled, requested, installed; the core's fingerprint matches the file on disk |")
+    else
+      rows+=("| \`certpilot-agent\` | $version | **fail** | the lifecycle did not complete |")
+      worst=1
+    fi
+  done
+
+  section="$(
+    cat <<SECTION
+Whether this core still completes the whole agent lifecycle — enrol, grant,
+request, install, report — against a released agent. The last column is the
+check that cannot be satisfied by two systems that are merely both working: the
+SHA-256 the core recorded against the SHA-256 of the file actually on the host.
+
+| Agent | Version | Lifecycle | Detail |
+|:---|:---|:---|:---|
+$(printf '%s\n' "${rows[@]}")
+
+Generated $(date -u '+%Y-%m-%d') from core \`$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\`.
+SECTION
+  )"
+
+  SECTION_BODY="$section" OUT="$OUT" python3 - <<'SPLICE'
+import os, re, sys
+out, body = os.environ['OUT'], os.environ['SECTION_BODY']
+begin, end = '<!-- BEGIN agent-compatibility -->', '<!-- END agent-compatibility -->'
+try:
+    page = open(out, encoding='utf-8').read()
+except FileNotFoundError:
+    sys.exit(f"agent-lifecycle: {out} does not exist. Run scripts/gateway-compatibility.sh first — it writes the page this section goes into.")
+if begin not in page or end not in page:
+    sys.exit(f"agent-lifecycle: {out} has no agent-compatibility sentinels, so there is nowhere to put these rows.")
+start, stop = page.index(begin) + len(begin), page.index(end)
+open(out, 'w', encoding='utf-8').write(page[:start] + '\n' + body + '\n' + page[stop:])
+SPLICE
+
+  printf 'wrote the agent section of %s\n' "$OUT" >&2
+  exit "$worst"
+fi
 
 core_pid=""
 gw_pid=""
@@ -133,12 +205,17 @@ wait_for_port() {
 # ── The agent under test ──────────────────────────────────────────────────────
 
 if [[ -z "$AGENT_BIN" ]]; then
-  say "building the agent from this tree"
-  # GOWORK=off because the agent is a standalone module and building it as one
-  # is the thing being preserved. A build that quietly needed the workspace
-  # would be a regression this harness should notice.
-  ( cd "$ROOT/agent" && GOWORK=off go build -o "$BIN/certpilot-agent" ./cmd/ )
-  AGENT_BIN="$BIN/certpilot-agent"
+  say "fetching the agent at $AGENT_VERSION"
+  # GOWORK=off because this is a module outside the workspace, and `go install`
+  # of a versioned path refuses to run while a workspace is active.
+  #
+  # The binary arrives named after its package directory — `cmd` — because that
+  # is what `go install <module>/cmd@<version>` produces, and two versions
+  # installed in turn would otherwise overwrite each other under one name.
+  GOWORK=off GOBIN="$BIN" go install "$AGENT_MODULE@$AGENT_VERSION" \
+    || die "could not fetch $AGENT_MODULE@$AGENT_VERSION"
+  mv "$BIN/cmd" "$BIN/certpilot-agent-$AGENT_VERSION"
+  AGENT_BIN="$BIN/certpilot-agent-$AGENT_VERSION"
 fi
 [[ -x "$AGENT_BIN" ]] || die "no agent binary at $AGENT_BIN"
 say "agent: $("$AGENT_BIN" --version) ($AGENT_BIN)"

@@ -9,6 +9,7 @@ longer does.
 | Repository | Holds |
 |:---|:---|
 | `certpilot` | The core, the migrations, and the frontend |
+| `certpilot-agent` | The host agent, its deployment profiles, and its documentation |
 | `certpilot-docs` | The documentation site |
 | `certpilot-gateway-sdk` | The provider contract, published, plus the conformance probe |
 | `certpilot-agent-sdk` | The agent contract, published |
@@ -60,12 +61,30 @@ merely copied.
 **Compatibility is measured, not remembered.** A hand-maintained table of which
 versions work together is a claim nobody re-checks. `make compatibility` starts
 each released gateway and talks to it — the conformance probe from the gateway
-SDK, then a core built from this repository dialling it over mutual TLS — and
-writes [compatibility.md](compatibility.md) from what happened.
+SDK, then a core built from this repository dialling it over mutual TLS.
+`make agent-compatibility` runs the whole agent lifecycle against each released
+agent — enrol, grant, request, install, report — and compares the fingerprint
+the core recorded with the file actually on the host, which is the one check two
+systems that are merely both working cannot satisfy. Both write
+[compatibility.md](compatibility.md) from what happened.
 
-It runs weekly rather than only on pull requests, because the other half moves
-independently: a gateway can release on a Tuesday and break a core that has not
-changed at all, and no pull request here would ever run.
+They run weekly rather than only on pull requests, because the other halves move
+independently: a gateway or an agent can release on a Tuesday and break a core
+that has not changed at all, and no pull request here would ever run.
+
+**Both sides of the agent contract ask the question.** This repository runs the
+released agent against the core in every pull request; `certpilot-agent` runs
+the same harness — `scripts/agent-lifecycle.sh`, checked out from here — against
+an agent built from the commit under review. A contract between two
+repositories can be broken from either end, so it is checked from both.
+
+**Documentation follows the code.** The agent's guide and the ten platform
+pages live in `certpilot-agent`, not here, because prose about the system is
+updated by the person changing the system — and that stops being true the moment
+the prose is one repository away from the code it describes. The documentation
+site publishes from both repositories into one set of pages, so a link from a
+platform page to [the security model](security.md) still resolves; a page's
+source path is its identity there, not the repository it came from.
 
 **A third-party gateway has the same probe.** There is no plugin registry and no
 compatibility testing for gateways this project does not build, and saying so is

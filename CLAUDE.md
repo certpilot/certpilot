@@ -22,8 +22,8 @@ repeatedly, most memorably by making a heredoc write a file into the wrong
 directory and silently succeed.
 
 **`go build ./...` from the repo root does nothing useful.** This is a Go
-workspace with three modules — `core`, `agent`, `pkg`. Build and test from
-inside a module, or use the Makefile, which loops over them.
+workspace with two modules — `core` and `pkg`. Build and test from inside a
+module, or use the Makefile, which loops over them.
 
 **The frontend dev server is Vite on `:3000`, not 5173.** It proxies `/api` and
 `/healthz` to `:8080`.
@@ -38,15 +38,16 @@ literal — `grep foo *.go` fails when there are no `.go` files in the cwd.
 
 ## Layout
 
-Three Go modules in a workspace (`go.work`, Go 1.26.6) plus a Vue frontend.
-The gateways and both SDKs are separate repositories, resolved as dependencies.
+Two Go modules in a workspace (`go.work`, Go 1.26.6) plus a Vue frontend. The
+host agent, the gateways and both SDKs are separate repositories, resolved as
+dependencies.
 
 | Path | What it is |
 |:---|:---|
 | `pkg/` | Shared, and only what is genuinely shared: `config`, `secrets` (envelope encryption), `passwords`, `revocation`, `webhooksig` |
 | `core/` | The control plane. API, store, plugin manager, and ten engines |
 | *(separate repositories)* | CA adapters, each its own repository, module, image and process, speaking one gRPC contract: [selfsigned](https://github.com/certpilot/certpilot-gateway-selfsigned), [acme](https://github.com/certpilot/certpilot-gateway-acme), [vault](https://github.com/certpilot/certpilot-gateway-vault) |
-| `agent/` | Host agent: generates keys locally, sends CSRs, installs and reloads |
+| *(separate repository)* | [The host agent](https://github.com/certpilot/certpilot-agent): generates keys locally, sends CSRs, installs and reloads. `scripts/agent-lifecycle.sh` is what runs a released one against this core |
 | `frontend/` | Vue 3 + Vite + Tailwind 4 + Pinia |
 | `migrations/` | 39 numbered `.sql` files, applied by `certpilot-core --migrate` |
 | `docs/` | Written, current, and worth reading |
@@ -82,7 +83,7 @@ publish to an in-process broker (`core/events`) that feeds the SSE endpoint.
 ```bash
 make dev      # PostgreSQL + self-signed gateway + API + frontend, one terminal
 make seed     # fill a running instance with a realistic estate; idempotent
-make test     # all three modules
+make test     # both modules
 make lint     # gofmt + go vet + staticcheck
 make migrate  # apply outstanding migrations (never run automatically)
 make routes   # regenerate docs/routes.json after changing the router

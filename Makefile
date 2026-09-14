@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes verify-profiles compatibility agent-lifecycle all build build-core build-agent test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes compatibility agent-lifecycle agent-compatibility all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -10,10 +10,9 @@ STATE := .certpilot/state
 
 # Each component is its own Go module, so tooling has to iterate rather than
 # rely on a single ./... from the repository root.
-MODULES := pkg core agent
+MODULES := pkg core
 
-CORE_BIN  := $(BIN)/certpilot-core
-AGENT_BIN := $(BIN)/certpilot-agent
+CORE_BIN := $(BIN)/certpilot-core
 
 # The gateways live in their own repositories now and are run from a release
 # rather than built from this tree. Pinned, so `make dev` is reproducible and
@@ -26,13 +25,10 @@ GW_VAULT      := github.com/certpilot/certpilot-gateway-vault/cmd@$(GW_VERSION)
 # ── Build ────────────────────────────────────────────────
 all: build
 
-build: build-core build-agent
+build: build-core
 
 build-core:
 	$(GO) build -o $(CORE_BIN) ./core/cmd/
-
-build-agent:
-	$(GO) build -o $(AGENT_BIN) ./agent/cmd/
 
 # ── Setup ────────────────────────────────────────────────
 
@@ -100,35 +96,36 @@ routes:
 test-routes:
 	./scripts/test-routes-atomicity.sh
 
-## Prove every platform profile against the real service. Starts each one in a
-## container, installs a certificate through the agent's own installer, and
-## completes a TLS handshake to check the service is serving it after its own
-## reload — so a profile in the catalogue is a thing somebody ran, not a thing
-## somebody wrote down.
-##
-## Needs a container runtime. Nothing else in this Makefile does, which is why
-## this is its own target and not part of `make test`.
-##
-##   make verify-profiles              all of them
-##   make verify-profiles PROFILE=nginx
-verify-profiles:
-	./scripts/verify-profiles.sh $(PROFILE)
-
 ## Measure which released gateways this core still works with, and write
 ## docs/compatibility.md from what happened rather than from memory.
 compatibility:
 	./scripts/gateway-compatibility.sh $(GATEWAY)
 
 ## Does this core still work with the agent? Enrol, grant, request, install and
-## report, against a real core, a real gateway and a real agent binary.
+## report, against a real core, a real gateway and a real released agent.
 ##
 ## Nothing else asks this. The core tests its handlers, the agent tests its
 ## logic, and the contract between them is verified by neither.
 ##
 ##   make agent-lifecycle
+##   make agent-lifecycle AGENT_VERSION=v0.1.0
 ##   make agent-lifecycle AGENT_BIN=/path/to/certpilot-agent
 agent-lifecycle:
 	./scripts/agent-lifecycle.sh
+
+## The same question asked of every released agent, written into the agent
+## section of docs/compatibility.md beside the gateway rows.
+##
+## Run scripts/gateway-compatibility.sh first: it owns the page and this fills
+## in one section of it. `make compatibility agent-compatibility` does both in
+## the right order, which is what the weekly workflow runs.
+##
+## A list rather than one version, because the useful question is not "does the
+## newest work" but "which of the ones people are running still do".
+AGENT_VERSIONS ?= latest
+
+agent-compatibility:
+	AGENT_VERSIONS="$(AGENT_VERSIONS)" ./scripts/agent-lifecycle.sh
 
 run-core:
 	$(GO) run ./core/cmd/ --config=config.dev.yaml
@@ -264,7 +261,7 @@ help:
 	@echo "  make generate-kek            Print a new CERTPILOT_KEK"
 	@echo ""
 	@echo "Build"
-	@echo "  make build                   Build the core and the agent"
+	@echo "  make build                   Build the core"
 	@echo ""
 	@echo "Run (one per terminal)"
 	@echo "  make dev                      Start the complete local development stack"
@@ -277,8 +274,8 @@ help:
 	@echo "Docs"
 	@echo "  make routes                  Regenerate docs/routes.json from the router"
 	@echo "  make test-routes             Prove a failed regeneration damages nothing"
-	@echo "  make verify-profiles         Install to every platform, in containers"
 	@echo "  make agent-lifecycle         Enrol, request, install and report, end to end"
+	@echo "  make agent-compatibility     The same, for every released agent, into docs/"
 	@echo ""
 	@echo "Check"
 	@echo "  make test                    Run all tests"

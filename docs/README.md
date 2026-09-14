@@ -16,7 +16,7 @@ document how to automate that.
 | | |
 |:---|:---|
 | [getting-started.md](getting-started.md) | The first fifteen minutes. No database or cloud account needed |
-| [platforms/](platforms/README.md) | Supported platforms: configuration, commands and limitations for each |
+| [platforms/](https://github.com/certpilot/certpilot-agent/blob/main/docs/platforms/README.md) | Supported platforms: configuration, commands and limitations for each. In `certpilot-agent`, with the agent |
 | [architecture.md](architecture.md) | How the pieces fit, and the three decisions that shape everything else |
 
 ## Running it
@@ -36,7 +36,7 @@ document how to automate that.
 | [templates.md](templates.md) | What a kind of certificate looks like, who may ask for one, and the six rungs that decide |
 | [monitoring.md](monitoring.md) | CA health, expiry thresholds, alerting, acknowledgement, wall displays |
 | [deployment.md](deployment.md) | Getting a renewed certificate to the thing that serves it |
-| [agent.md](agent.md) | The host agent, and the private keys CertPilot never sees |
+| [agent.md](https://github.com/certpilot/certpilot-agent/blob/main/docs/agent.md) | The host agent, and the private keys CertPilot never sees. In `certpilot-agent`, with the agent |
 | [discovery.md](discovery.md) | Network scans, Certificate Transparency, cloud inventory |
 | [posture.md](posture.md) | Cryptographic posture, CNSA 2.0, CBOM export |
 
