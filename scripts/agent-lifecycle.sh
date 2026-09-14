@@ -343,7 +343,13 @@ pass "installed and reported"
 [[ -s "$WORK/served/cert.pem" && -s "$WORK/served/privkey.pem" ]] \
   || die "the destination files were not written"
 
-mode="$(stat -f '%Lp' "$WORK/served/privkey.pem" 2>/dev/null || stat -c '%a' "$WORK/served/privkey.pem")"
+# python3 rather than stat, which spells this differently on the two platforms
+# this runs on and does not fail cleanly between them. `stat -f` is the format
+# flag on BSD and means "filesystem status" on GNU, where it *succeeds* with
+# unrelated output — so a `stat -f … || stat -c …` fallback never reaches the
+# second form on Linux and compares a line about the filesystem to "600".
+mode="$(python3 -c 'import os, sys; print(format(os.stat(sys.argv[1]).st_mode & 0o777, "03o"))' \
+  "$WORK/served/privkey.pem")"
 [[ "$mode" == "600" ]] || die "the installed private key is mode $mode, not 600"
 pass "key written 0600"
 
