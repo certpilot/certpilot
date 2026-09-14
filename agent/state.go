@@ -70,16 +70,16 @@ type State struct {
 
 // DefaultStateDir is where the agent keeps its key and its identity.
 //
-// Under /var/lib when running as root, because that is where a system service's
-// state belongs and because it is not backed up to somebody's home directory by
-// accident. Under $HOME otherwise, so that trying the agent out does not
-// require privileges it will not need again.
+// Under /var/lib when running as root — ProgramData on Windows — because that
+// is where a system service's state belongs and because it is not backed up to
+// somebody's home directory by accident. Under $HOME otherwise, so that trying
+// the agent out does not require privileges it will not need again.
 func DefaultStateDir() string {
 	if dir := strings.TrimSpace(os.Getenv("CERTPILOT_AGENT_STATE")); dir != "" {
 		return dir
 	}
-	if os.Geteuid() == 0 {
-		return "/var/lib/certpilot-agent"
+	if privileged() {
+		return systemStateDir()
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

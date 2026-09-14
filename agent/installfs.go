@@ -180,6 +180,21 @@ func writeAtomic(path string, content []byte, mode os.FileMode, owner *ownership
 	if err := tmp.Chmod(mode); err != nil {
 		return err
 	}
+	// The same statement, made again in the terms the platform actually
+	// enforces. On Windows the Chmod above is accepted and ignored, and the
+	// file inherits whatever its directory grants — so "not readable by other
+	// accounts" has to be said as an ACL or it is not said at all. The rule is
+	// the mode's own: a file the mode does not make world-readable must not be
+	// world-readable in fact. On Unix this is a no-op, because the mode was
+	// the enforcement.
+	//
+	// Before the rename, for the reason the mode is set before the rename: a
+	// private key must never be briefly readable under its final name.
+	if mode&0o004 == 0 {
+		if err := restrictToOwner(tmpName, mode); err != nil {
+			return err
+		}
+	}
 	if owner.wanted() {
 		if err := owner.apply(tmpName); err != nil {
 			return err

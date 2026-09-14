@@ -225,6 +225,12 @@ func (d *Destination) validate() error {
 		}
 	}
 
+	if !ownershipSupported() && (strings.TrimSpace(d.Owner) != "" || strings.TrimSpace(d.Group) != "") {
+		return fmt.Errorf(
+			"owner and group are Unix file ownership, which this platform does not have. Remove them: " +
+				"the agent restricts a private key to the account it runs as, SYSTEM and the local administrators")
+	}
+
 	certMode, err := parseMode(d.CertMode, 0o644)
 	if err != nil {
 		return fmt.Errorf("cert_mode: %w", err)
