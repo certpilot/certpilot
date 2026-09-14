@@ -73,8 +73,63 @@ identically to PEM destinations.
   file supplies it.
 - **JKS keystores are not written.** PKCS#12 has been the default JVM keystore
   format since Java 9 and is read natively by all later versions. Deployments
-  requiring JKS can convert with
-  `keytool -importkeystore -srckeystore keystore.p12 -srcstoretype PKCS12 -destkeystore keystore.jks -deststoretype JKS`.
+  that still require JKS can convert the file after the agent writes it — see
+  [Converting to JKS](#converting-to-jks) below.
+
+## Converting to JKS
+
+The agent does not write JKS, and the JDK reports the format as deprecated on
+every read and write:
+
+> The JKS keystore uses a proprietary format. It is recommended to migrate to
+> PKCS12 which is an industry standard format.
+
+An application that still requires JKS — one on Java 8, or with a keystore type
+fixed in configuration nobody can change — can convert the file by making the
+conversion the destination's check command:
+
+```json
+{
+  "name": "tomcat",
+  "certificate": "app.example.com",
+  "profile": "tomcat",
+  "keystore_password_file": "/etc/certpilot/keystore-password",
+  "check": [
+    "/usr/bin/keytool", "-importkeystore", "-noprompt",
+    "-srckeystore", "/etc/certpilot/live/app.example.com/keystore.p12",
+    "-srcstoretype", "PKCS12",
+    "-srcstorepass:file", "/etc/certpilot/keystore-password",
+    "-srcalias", "1",
+    "-destalias", "tomcat",
+    "-destkeystore", "/etc/certpilot/live/app.example.com/keystore.jks",
+    "-deststoretype", "JKS",
+    "-deststorepass:file", "/etc/certpilot/keystore-password"
+  ]
+}
+```
+
+Four details make this work:
+
+- **The check runs after the keystore is written and before the service is
+  reloaded**, so the JKS file is always converted from the certificate that is
+  about to be loaded. A failed conversion stops the reload and restores the
+  previous keystore, which is the same protection every other destination has.
+- **`-srcalias 1`** is required. The agent's PKCS#12 entry carries no alias, so
+  Java names it `1`. `-destalias` then sets the name the configuration expects.
+- **`-noprompt` overwrites the existing entry** on every renewal. Without it
+  `keytool` asks whether to replace the alias and the conversion stalls.
+- **`-storepass:file` keeps the password out of the process table** and accepts
+  the same file `keystore_password_file` points at. Both the agent and `keytool`
+  ignore a trailing newline, so one file serves both.
+
+The configuration then names the JKS file and the alias:
+
+```xml
+<Certificate certificateKeystoreFile="/etc/certpilot/live/app.example.com/keystore.jks"
+             certificateKeystorePassword="..."
+             certificateKeystoreType="JKS"
+             certificateKeyAlias="tomcat" />
+```
 
 Last tested against Apache Tomcat 10.1.59 on JDK 21. See
 [agent.md](../agent.md).
