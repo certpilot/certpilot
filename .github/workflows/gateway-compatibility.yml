@@ -76,12 +76,20 @@ jobs:
       - name: The table is current
         if: github.event_name == 'pull_request'
         run: |
-          if ! git diff --quiet -- docs/compatibility.md; then
-            echo "::error::docs/compatibility.md is out of date. Run: ./scripts/gateway-compatibility.sh"
-            git --no-pager diff -- docs/compatibility.md
+          # Only the measured rows are compared.
+          #
+          # The footer records the date and the commit the table was generated
+          # from, and both change on every push. Diffing the whole file makes
+          # this check impossible to satisfy — it failed on its own first run
+          # for exactly that reason — which trains people to ignore it or to
+          # delete it. The rows are the claim; the provenance is not.
+          changed="$(git diff -U0 -- docs/compatibility.md | grep -E '^[+-]\|' || true)"
+          if [ -n "$changed" ]; then
+            echo "::error::The compatibility rows are out of date. Run: ./scripts/gateway-compatibility.sh"
+            printf '%s\n' "$changed"
             exit 1
           fi
-          echo "Compatibility table is current."
+          echo "Compatibility rows are current."
 
       # On a schedule there is no pull request to fail, so a change becomes one.
       - name: Open a pull request when it changed
