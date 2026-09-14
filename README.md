@@ -133,7 +133,7 @@ certificate, pointing at a real CA, and putting it on a wall.
 | **Watch** | Scheduled CA health sweeps with expiry thresholds, CRL freshness, and a real OCSP request whose signature and delegation are verified. Live updates over SSE |
 | **Find** | Network and CIDR scans, Certificate Transparency logs, and cloud inventory across ACM, Azure Key Vault, Google Cloud and Kubernetes secrets |
 | **Deploy** | Signed webhook, host agent, AWS ACM, Azure Key Vault, F5 BIG-IP — in declared waves, so a canary is one target rather than one per worker |
-| **Install** | The host agent installs to nine tested platforms by name: nginx, Apache, HAProxy, Caddy, Tomcat, PostgreSQL, MariaDB and MySQL, Postfix and Dovecot. Each writes the files, validates the configuration, reloads the service, and rolls back if the reload fails. Linux only. See **[supported platforms](docs/platforms/README.md)** |
+| **Install** | The host agent installs to ten tested platforms by name: nginx, Apache, HAProxy, Caddy, Tomcat, PostgreSQL, MariaDB and MySQL, Postfix, Dovecot, and IIS through the Windows certificate store. Each writes the files or imports to the store, validates the configuration, reloads the service, and rolls back if the reload fails. See **[supported platforms](https://github.com/certpilot/certpilot-agent/blob/main/docs/platforms/README.md)** |
 | **Prove** | A hash-chained audit log, CNSA 2.0 conformance per certificate, and CycloneDX 1.6 CBOM export |
 
 Full detail, including what is partial and what does not exist:
@@ -170,11 +170,12 @@ core depends on none of them at build time — only on the published contract:
 | [`certpilot-gateway-selfsigned`](https://github.com/certpilot/certpilot-gateway-selfsigned) | a local CA, for evaluating and for internal names |
 | [`certpilot-gateway-sdk`](https://github.com/certpilot/certpilot-gateway-sdk) | the contract, plus a conformance probe that checks yours against it |
 
-Separately, a **host agent** runs on the machines where certificates are served.
-It generates its own private keys and never sends them anywhere — CertPilot
-cannot produce them and does not claim to. It runs on Linux and on Windows,
-where it also installs into the certificate store IIS reads from; see [where it
-runs](docs/agent.md#where-it-runs). Its contract is published too, in
+Separately, a **host agent** runs on the machines where certificates are served,
+from [`certpilot-agent`](https://github.com/certpilot/certpilot-agent). It generates its own private keys and never sends
+them anywhere — CertPilot cannot produce them and does not claim to. It runs on
+Linux and on Windows, where it also installs into the certificate store IIS
+reads from; see [where it runs](https://github.com/certpilot/certpilot-agent/blob/main/docs/agent.md#where-it-runs). Its
+contract is published too, in
 [`certpilot-agent-sdk`](https://github.com/certpilot/certpilot-agent-sdk), so an
 agent can be a Kubernetes operator or a Python daemon rather than this binary.
 
@@ -196,8 +197,8 @@ the implementation.
 | [Security](docs/security.md) | Threat model, key custody, known gaps |
 | [Monitoring](docs/monitoring.md) | CA health, alerting, wall displays |
 | [Deployment](docs/deployment.md) | Getting a renewed certificate to what serves it |
-| [The agent](docs/agent.md) | Host agent, and the keys CertPilot never sees |
-| [Supported platforms](docs/platforms/README.md) | Configuration, commands and limitations for each platform |
+| [The agent](https://github.com/certpilot/certpilot-agent/blob/main/docs/agent.md) | Host agent, and the keys CertPilot never sees |
+| [Supported platforms](https://github.com/certpilot/certpilot-agent/blob/main/docs/platforms/README.md) | Configuration, commands and limitations for each platform |
 | [Discovery](docs/discovery.md) | Network scans, CT logs, cloud inventory |
 | [Posture](docs/posture.md) | CNSA 2.0 scoring and CBOM export |
 | [Vault gateway](docs/gateways/vault.md) | HashiCorp Vault PKI in depth |
@@ -241,13 +242,14 @@ make lint         # gofmt, go vet, staticcheck
 make routes       # regenerate the API route table after changing the router
 ```
 
-This is a Go workspace with three modules — `core`, `agent` and `pkg` — so
-`go build ./...` from the root does not work. Build from inside a module, or use
-the `make` targets.
+This is a Go workspace with two modules — `core` and `pkg` — so `go build ./...`
+from the root does not work. Build from inside a module, or use the `make`
+targets.
 
-The gateways are not built here. `make dev` and the compose files fetch them
-from their own releases, which is the same thing a gateway somebody else wrote
-would do.
+Neither the gateways nor the agent are built here. `make dev` and the compose
+files fetch the gateways from their own releases, and `make agent-lifecycle`
+fetches a released agent and runs the whole lifecycle against this core — which
+is the same thing a gateway or an agent somebody else wrote would do.
 
 **Go** 1.26 · Gin · pgx · gRPC · PostgreSQL · **Vue 3** · TypeScript ·
 Tailwind 4 · Chart.js

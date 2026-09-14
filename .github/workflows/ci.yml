@@ -99,49 +99,23 @@ jobs:
       # store, and the DB-backed paths are already covered by `tests` above.
       - run: make test-race
 
-  windows:
-    name: agent on Windows
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.work
-          cache-dependency-path: "**/go.sum"
-
-      # The agent's guarantee — a private key is readable by its owner and
-      # nobody else — is a file mode on Unix and an ACL on Windows, and only a
-      # real Windows kernel can say whether the ACL is right. Cross-compiling
-      # proves it builds, which is the easy half, and the half that would pass
-      # while every key on the host was readable by everyone.
-      #
-      # What runs here is the platform-specific behaviour and the identity
-      # store: the ACL that replaces the mode, the refusal of Unix ownership
-      # and of the Linux deployment profiles, an identity key granting
-      # Everyone being refused, and a destination naming C:\ paths being
-      # accepted. The rest of the suite is built !windows because its fixtures
-      # are Unix paths and Unix modes, not because the logic differs.
-      #
-      # Only the agent runs here. The core is a Linux service and is not
-      # claimed to run on Windows.
-      - name: The agent's tests, on Windows
-        run: go test ./agent/... -v
-        working-directory: ${{ github.workspace }}
-
   agent-lifecycle:
     name: agent to core, end to end
     runs-on: ubuntu-latest
 
     # The contract between the core and the agent is verified by neither half.
     # core/api/agents_test.go tests the core's handlers against the core's idea
-    # of the contract, agent/*_test.go tests the agent's logic against the
-    # agent's, there is no agent/client_test.go, and scripts/dev.sh never starts
-    # an agent. This job is the only thing that runs one against the other.
+    # of the contract, the agent's tests — in its own repository now — test its
+    # logic against the agent's, and scripts/dev.sh never starts an agent. This
+    # job is the only thing in this repository that runs one against the other.
     #
-    # It matters more the moment the agent moves to its own repository, which is
-    # what it was built ahead of — the same problem the gateways have, and the
-    # reason gateway-compatibility.yml exists. AGENT_BIN is the seam: it builds
-    # from this tree today and takes a released binary later.
+    # It runs the *released* agent, because that is the one people have. The
+    # other direction is asked in certpilot-agent's own CI, which points this
+    # same harness at an agent built from the commit under review. Either side
+    # can break a contract between two repositories, so both sides ask.
+    #
+    # The weekly job in compatibility.yml asks it of every released version and
+    # records the answer; this one asks it of the latest, on every pull request.
     #
     # No database service. The core runs on its in-memory store here, which is
     # the right trade for this job: what is being tested is a wire contract, and
@@ -168,90 +142,6 @@ jobs:
             tail -80 "$f"
             echo "::endgroup::"
           done
-
-  iis:
-    name: IIS end to end
-    runs-on: windows-latest
-
-    # The bar every deployment profile is held to, applied to the first one that
-    # is not a Linux service. `make verify-profiles` starts the real service in
-    # a container, installs a certificate through the agent's own installer, and
-    # completes a TLS handshake proving the service served it. IIS cannot be run
-    # in a container, so it is run here instead — and the claim in the catalogue
-    # that this profile was verified against IIS is checked against the web
-    # server actually on this runner, so that it cannot quietly become a claim
-    # about a version nobody has used.
-    #
-    # This does not shell out to a Makefile target, unlike every Linux job. The
-    # Windows images do not ship make, which is why the agent's own Windows job
-    # above calls `go test` directly too.
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.work
-          cache-dependency-path: "**/go.sum"
-
-      - name: Install IIS
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          # Web-Scripting-Tools is the WebAdministration PowerShell module, which
-          # is what the profile's bind command imports. Without it the binding
-          # step fails with "module not found" on a host that has IIS.
-          Install-WindowsFeature -Name Web-Server, Web-Scripting-Tools -IncludeManagementTools
-          if ((Get-Service W3SVC).Status -ne 'Running') { Start-Service W3SVC }
-
-      - name: Give Default Web Site an https binding with no certificate on it
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Import-Module WebAdministration
-          # Deliberately no certificate. The agent's job is to put one on an
-          # existing binding — it does not create sites or bindings, because
-          # that means choosing a port, an address and whether SNI is on. A
-          # fixture that pre-bound a certificate would leave the part that
-          # matters untested.
-          New-WebBinding -Name 'Default Web Site' -Protocol https -Port 443 -IPAddress '*'
-          Get-WebBinding -Name 'Default Web Site' | Format-List
-
-      - name: Install, renew and roll back against the running server
-        shell: powershell
-        run: |
-          # No $ErrorActionPreference here, unlike the steps around it. `go test`
-          # writes to stderr, and under Stop PowerShell turns a native command's
-          # stderr into a terminating error — which would fail this step on a
-          # passing test run. The exit status is the verdict, so it is read.
-          go test -tags iis -run TestIISServesWhatTheAgentInstalls -v ./agent/...
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: The catalogue's claim is about this machine
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $line = Select-String -Path agent/profiles_catalogue.go -Pattern 'Verified:\s+"IIS ([^"]+)"'
-          if (-not $line) { Write-Error "the iis profile records no verification"; exit 1 }
-          $claim = $line.Matches[0].Groups[1].Value
-
-          $version = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\InetStp' -Name VersionString).VersionString `
-            -replace '^Version\s*', ''
-          $caption = (Get-CimInstance Win32_OperatingSystem).Caption
-          if ($caption -notmatch 'Server (\d{4})') { Write-Error "unrecognised Windows: $caption"; exit 1 }
-          $year = $Matches[1]
-
-          Write-Host "claim:  IIS $claim"
-          Write-Host "runner: IIS $version on Windows Server $year"
-          if ($claim -notlike "*$version*" -or $claim -notlike "*Server $year*") {
-            # Built first, then formatted. PowerShell binds -f tighter than +,
-            # so formatting a concatenation formats only its second half — which
-            # is how this message first reached a log reading "verified against
-            # 'IIS {0}'". A message that is only ever printed when something is
-            # already wrong is the worst place for a second thing to be wrong.
-            $message = "the catalogue says this profile was verified against 'IIS {0}', and what " +
-              "just ran it was IIS {1} on Windows Server {2}. Update the Verified line."
-            Write-Error ($message -f $claim, $version, $year)
-            exit 1
-          }
 
   lint:
     name: lint

@@ -1,7 +1,6 @@
 go 1.26.6
 
 use (
-	./agent
 	./core
 	./pkg
 )

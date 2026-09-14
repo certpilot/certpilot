@@ -7,6 +7,11 @@ name: Tell the docs site
 # earliest, and only if somebody merged the pull request the cron opened.
 #
 # This closes it to minutes. One dispatch, no build, no checkout of the site.
+#
+# The payload names this repository as well as the commit. The site publishes
+# pages from more than one now — the agent's guide and the platform pages live
+# in certpilot-agent — and it pins only the repository that dispatched, because
+# that is the only one with a merge the CDN may not have caught up with yet.
 on:
   push:
     branches: [main]
@@ -51,7 +56,7 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/certpilot/certpilot-docs/dispatches \
-            -d "$(printf '{"event_type":"upstream-docs-changed","client_payload":{"sha":"%s"}}' "$GITHUB_SHA")")"
+            -d "$(printf '{"event_type":"upstream-docs-changed","client_payload":{"repo":"certpilot","sha":"%s"}}' "$GITHUB_SHA")")"
 
           # 204 is the documented success. Anything else is reported with the
           # body, because a 403 here means a token problem and a 404 means the

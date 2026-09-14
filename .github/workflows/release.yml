@@ -28,9 +28,10 @@ jobs:
     # images.yml builds these on every pull request and pushes none of them,
     # which was the right shape while a gateway sat in the same tree and the
     # compose files built everything from source. It is not any more: the
-    # gateways publish their own images from their own repositories, and a
-    # quickstart that pulls three of five services and builds the other two is
-    # a quickstart that still needs a Go toolchain to try.
+    # gateways and the agent publish their own images from their own
+    # repositories, and a quickstart that pulls three of five services and
+    # builds the other two is a quickstart that still needs a Go toolchain to
+    # try.
     #
     # So building stays on the pull request, where it catches a broken
     # Dockerfile before it merges, and publishing happens here.
@@ -41,9 +42,6 @@ jobs:
           - name: core
             dockerfile: deploy/docker/core.Dockerfile
             context: .
-          - name: agent
-            dockerfile: deploy/docker/agent.Dockerfile
-            context: agent
           - name: frontend
             dockerfile: deploy/docker/frontend.Dockerfile
             context: .
@@ -73,10 +71,14 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          # Per image, because they no longer agree. The core replaces ../pkg
-          # and so needs the workspace root; the frontend needs it for
-          # deploy/docker/nginx.conf. The agent requires nothing from this
-          # repository and is built from its own module.
+          # The core replaces ../pkg and so needs the workspace root; the
+          # frontend needs it for deploy/docker/nginx.conf. Kept as a matrix
+          # field rather than hard-coded, because the next image to need
+          # something else should not have to reintroduce it.
+          #
+          # ghcr.io/certpilot/agent is published from certpilot-agent now. Same
+          # image name, new source repository, so nothing that pulls it had to
+          # change.
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true

@@ -209,8 +209,9 @@ See [gateways/vault.md](gateways/vault.md) and
 
 ### Agent
 
-One binary, [`agent/cmd`](../agent), running on the machines where certificates
-are actually served. It is not a gateway and does not speak gRPC — it makes
+One binary, [`certpilot-agent`](https://github.com/certpilot/certpilot-agent),
+running on the machines where certificates are actually served. Its own
+repository, for the reason in Decision 1: it is a process, not a package. It is not a gateway and does not speak gRPC — it makes
 signed HTTPS requests to the core's `/api/v1/agent/*` routes.
 
 The distinction that matters: **the agent generates its own private keys and
@@ -370,13 +371,12 @@ wrong about something that is working perfectly.
 
 ## Modules
 
-A Go workspace with three modules:
+A Go workspace with two modules:
 
 ```
 pkg/                shared, and only what is genuinely shared:
                     config, secrets, passwords, revocation, webhooksig
 core/               the control plane
-agent/              the host agent
 ```
 
 `go build ./...` from the repository root does not work — it is a workspace,
@@ -391,6 +391,12 @@ published separately:
 |:---|:---|
 | [`certpilot-gateway-sdk`](https://github.com/certpilot/certpilot-gateway-sdk) | `provider.v1`, `grpckit`, `x509util`, `crypto`, and the `.proto` they are generated from |
 | [`certpilot-agent-sdk`](https://github.com/certpilot/certpilot-agent-sdk) | `agentapi`, `agentauth`, and `SIGNING.md` — the signing scheme specified independently of the Go |
+
+`agent/` used to be a third module here. It is
+[`certpilot-agent`](https://github.com/certpilot/certpilot-agent) now, for the
+same reason as the gateways: nothing in this repository imported it, it required
+nothing from this repository, and the contract between them is the published
+agent SDK rather than a directory next door.
 
 The core depends on both as ordinary modules, with no `replace` directive, which
 is the property that proves they were published rather than copied. The three

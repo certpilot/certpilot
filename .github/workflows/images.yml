@@ -20,7 +20,6 @@ on:
       - '**/go.mod'
       - '**/go.sum'
       - 'core/**'
-      - 'agent/**'
       - 'pkg/**'
       - 'frontend/**'
       - 'migrations/**'
@@ -47,9 +46,6 @@ jobs:
           - name: core
             dockerfile: deploy/docker/core.Dockerfile
             context: .
-          - name: agent
-            dockerfile: deploy/docker/agent.Dockerfile
-            context: agent
           - name: frontend
             dockerfile: deploy/docker/frontend.Dockerfile
             context: .
@@ -62,17 +58,16 @@ jobs:
       - name: Build ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
-          # Per image, because they no longer agree. The core replaces ../pkg,
-          # so a context rooted at its module cannot resolve its own dependency;
-          # the frontend needs the root for deploy/docker/nginx.conf. The agent
-          # needs neither and is built from its own module.
+          # Still per image, though both remaining ones use the root: the core
+          # replaces ../pkg, so a context rooted at its module cannot resolve
+          # its own dependency, and the frontend needs the root for
+          # deploy/docker/nginx.conf. Kept as a matrix field because the moment
+          # it is collapsed to a constant is the moment the next image that
+          # needs something else has to reintroduce it.
           #
-          # The gateways used to be built here as well and no longer are. They
-          # are separate repositories publishing their own images, and each one
-          # builds from a context of its own module — which is what dropping the
-          # replace directives bought. The agent's replace was dead rather than
-          # load-bearing: it pointed at a module the agent does not require and
-          # has never imported.
+          # The gateways and the agent used to be built here and no longer are.
+          # Each is a separate repository publishing its own image from a
+          # context of its own module.
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: false
