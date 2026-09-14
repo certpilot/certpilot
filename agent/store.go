@@ -395,6 +395,13 @@ func (i *Installer) applyStore(ctx context.Context, d Destination, m *material,
 		return out
 	}
 
+	// Nothing to do, and worth being exact about what that means. It means the
+	// store holds this certificate under this destination's name — not that
+	// anything is serving it. A file destination can check the second half by
+	// reading the file back; there is no equivalent here, and re-binding on
+	// every cycle to find out would be this agent fighting whoever last changed
+	// a binding on purpose. Post-renewal verification in the core is what
+	// notices an endpoint serving something else.
 	if previous == thumbprint && !force {
 		out.Status = agentapi.InstallInstalled
 		out.Detail = fmt.Sprintf(

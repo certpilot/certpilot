@@ -132,10 +132,13 @@ func openStore(sn storeName) (windows.Handle, error) {
 		uintptr(unsafe.Pointer(name)),
 	)
 	if err != nil {
-		return 0, fmt.Errorf(
-			"could not open %s: %w. Writing to a LocalMachine store needs an elevated process; the "+
-				"agent normally runs as a service, which is elevated, and does not when it is being "+
-				"tried out from a shell", sn, err)
+		if sn.location == "LocalMachine" {
+			return 0, fmt.Errorf(
+				"could not open %s: %w. Writing to a LocalMachine store needs an elevated process — "+
+					"the agent is elevated when it runs as a service and is not when it is being tried "+
+					"out from an ordinary shell", sn, err)
+		}
+		return 0, fmt.Errorf("could not open %s: %w", sn, err)
 	}
 	return handle, nil
 }

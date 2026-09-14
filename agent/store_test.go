@@ -577,6 +577,24 @@ func TestADestinationWithNoBindSaysNothingWasRePointed(t *testing.T) {
 	}
 }
 
+// A destination for a name this host has not been granted. Reported from
+// paths() rather than from cert_path, which a store destination leaves empty —
+// "nothing has been written to " with the sentence ending there reads like a
+// defect in the agent rather than a typo in the spec.
+func TestAStoreDestinationForACertificateThisHostDoesNotHoldSaysWhereNothingWent(t *testing.T) {
+	dest := iisDestination()
+	dest.Certificate = "not.granted.example.com"
+	inst, _, _ := storeInstaller(t, dest)
+
+	got := onlyInstallation(t, inst.Apply(context.Background(), nil))
+	if got.Status != agentapi.InstallUnfulfilled {
+		t.Fatalf("status = %s", got.Status)
+	}
+	if !strings.Contains(got.Detail, `imported into LocalMachine\My`) {
+		t.Errorf("the report does not say where nothing went: %q", got.Detail)
+	}
+}
+
 // ── Verify, against a real listener ─────────────────────────
 
 func TestVerifyRecognisesTheCertificateItIsServed(t *testing.T) {

@@ -455,9 +455,17 @@ func (i *Installer) applyOne(ctx context.Context, d Destination, force bool) age
 		// Not an error and not silence. This host has been configured to
 		// install something it has not been granted, which is a fact only this
 		// process can observe and almost always one character in a hostname.
+		//
+		// Worded from paths() rather than from CertPath, which a store
+		// destination leaves empty — "nothing has been written to " with the
+		// sentence ending there is a report that reads like a bug in the agent
+		// rather than a typo in the spec.
+		where := "written to " + strings.Join(d.paths(), ", ")
+		if d.toStore() {
+			where = "imported into " + d.Store
+		}
 		out.Detail = fmt.Sprintf(
-			"this host holds no certificate for %s, so nothing has been written to %s",
-			d.Certificate, d.CertPath)
+			"this host holds no certificate for %s, so nothing has been %s", d.Certificate, where)
 		return out
 	}
 
