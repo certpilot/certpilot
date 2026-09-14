@@ -8,7 +8,8 @@ This difference is why Java deployments are often excluded from certificate
 automation: the certificate arrives as PEM and must be converted with
 `openssl pkcs12 -export` or `keytool` before use, with the correct alias, chain
 order and password. The agent performs this conversion, writing the keystore
-directly from the private key generated on the host.
+directly from the private key generated on the host. Its one gap is the entry
+alias, described under [Limitations](#limitations).
 
 ## Configuration
 
@@ -51,6 +52,16 @@ identically to PEM destinations.
   rotation interrupts connections. Schedule renewals accordingly.
 - **No configuration check is available.** Tomcat provides no equivalent of
   `nginx -t`.
+- **The keystore entry has no alias.** The agent writes the entry without a
+  `friendlyName` attribute, so Java names it `1`. Omit `certificateKeyAlias`
+  from the `<Certificate>` element, as the example above does, and Tomcat uses
+  the first entry. Setting it to anything else — `tomcat` is the conventional
+  value, and is what `keytool -genkeypair -alias tomcat` produces — leaves the
+  connector unable to find the key, and **Tomcat still reports a successful
+  startup**. With no configuration check for this platform, nothing catches it
+  until post-renewal verification reports the endpoint is not serving the new
+  certificate. Tracked in
+  [issue #65](https://github.com/certpilot/certpilot/issues/65).
 - **Verify the service unit name.** The profile specifies `tomcat10`, which is
   correct for Debian 12. Installations using `tomcat9`, a Red Hat package, or a
   Tomcat installed from the upstream archive require a different command.
