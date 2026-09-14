@@ -249,6 +249,14 @@ func remainingPlaceholder(path string) string {
 func DetectProfiles() []Profile {
 	var found []Profile
 	for _, p := range catalogue {
+		// Only the ones that could be used here. A path is a weak enough signal
+		// already; reporting a platform whose profile applyProfile then refuses
+		// would be offering somebody a suggestion the next step rejects — and on
+		// Windows an absolute Unix path is resolved against the current drive,
+		// so C:\etc\nginx\nginx.conf is a file that can exist.
+		if !p.RunsHere() {
+			continue
+		}
 		for _, path := range p.Detect {
 			if _, err := os.Stat(path); err == nil {
 				found = append(found, p)

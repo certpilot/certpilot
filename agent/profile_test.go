@@ -205,6 +205,17 @@ func absoluteOn(goos string) func(string) bool {
 	return func(path string) bool { return strings.HasPrefix(path, "/") }
 }
 
+// Detection is a prompt for a person, so it must not prompt for something the
+// next step refuses. On Windows an absolute Unix path is resolved against the
+// current drive, which makes C:\etc\nginx\nginx.conf a file that can exist.
+func TestDetectionOnlyReportsProfilesThatCanBeUsedHere(t *testing.T) {
+	for _, p := range DetectProfiles() {
+		if !p.RunsHere() {
+			t.Errorf("profile %q was detected on this host and would be refused if it were named", p.Name)
+		}
+	}
+}
+
 // A store profile has to produce a destination the installer will accept, and
 // that is checked on the platform it describes — but the shape of what it
 // carries can be checked anywhere, and the failure it prevents is silent. A
