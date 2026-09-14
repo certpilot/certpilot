@@ -1,24 +1,15 @@
 # HAProxy
 
-HAProxy wants something nothing else wants: the certificate, its chain and the
-private key concatenated into **one file**, in that order. That single
-requirement is why HAProxy hosts are where this project keeps finding private
-keys at mode 0644 — somebody assembled the file by hand with `cat`, and the
-mode came from whichever fragment was copied last.
+HAProxy requires the certificate, its chain and the private key to be
+concatenated into a single file, in that order. This differs from every other
+platform in this section and is a common source of error: files assembled
+manually with `cat` frequently inherit the permissions of the last file copied,
+which results in a private key readable by any account on the host.
 
-And like every other server here, it reads that file when it starts. A renewal
-on disk is not a renewal in the process.
+Like other services here, HAProxy reads this file at startup. A renewed
+certificate on disk has no effect until HAProxy is reloaded.
 
-## What CertPilot does
-
-The agent recognises that layout as a first-class thing rather than an
-accident. Setting `cert_path` and `key_path` to the same file makes the
-installer write certificate, chain and key in that order, **at the key's mode**
-— so the combined file is 0640, not 0644, without anybody having to remember.
-
-```bash
-certpilot-agent profiles haproxy
-```
+## Configuration
 
 ```json
 { "name": "edge", "certificate": "www.example.com", "profile": "haproxy" }
@@ -28,23 +19,32 @@ certpilot-agent profiles haproxy
 bind :443 ssl crt /etc/certpilot/live/www.example.com/haproxy.pem
 ```
 
-`haproxy -c -f /etc/haproxy/haproxy.cfg` runs before anything reloads, and the
-previous file goes back if the reload fails.
+The profile sets `cert_path` and `key_path` to the same file. The agent
+recognises this as the combined layout, writes the certificate, chain and key
+in the required order, and applies the private key's file mode (`0640`) to the
+combined file rather than the certificate's.
 
-## What it does not do
+## What the agent does
 
-- **The reload is `systemctl reload haproxy`**, and this is the one profile
-  where that is not a shortcut. HAProxy has no in-process reload: the seamless
-  one hands the listening sockets to a new process, and on a packaged host
-  systemd is what holds them. On a host without systemd, replace that line with
-  whatever starts HAProxy. What systemd actually sends is `USR2` to the master
-  process.
-- **Check the `-f` path.** The profile names `/etc/haproxy/haproxy.cfg`. If
-  this host reads a different file, validating the wrong one is worse than not
-  validating at all — change it.
-- **It does not manage `crt-list`.** A frontend selecting among many
-  certificates by SNI needs a destination per certificate; the list itself is
-  yours.
+The agent writes the combined file, validates the configuration with
+`haproxy -c -f /etc/haproxy/haproxy.cfg`, reloads the service, and restores the
+previous file if the reload fails.
 
-Verified against HAProxy 2.6.12 from the Debian package. See
+## Limitations
+
+- **The reload command is `systemctl reload haproxy`.** HAProxy has no
+  in-process reload: a seamless reload transfers the listening sockets to a new
+  process, and on a packaged host systemd holds those sockets. Debian's unit
+  file implements this by sending `SIGUSR2` to the master process. On a host
+  that does not use systemd, replace this command with the equivalent for that
+  service manager.
+- **Verify the configuration path in the check command.** The profile specifies
+  `/etc/haproxy/haproxy.cfg`. If this host reads a different file, update the
+  destination accordingly — validating a file the service does not use provides
+  no protection.
+- **The agent does not manage `crt-list` files.** A frontend selecting among
+  multiple certificates by SNI requires one destination per certificate; the
+  list itself is maintained separately.
+
+Last tested against HAProxy 2.6.12 (Debian package). See
 [agent.md](../agent.md).

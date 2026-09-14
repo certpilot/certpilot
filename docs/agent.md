@@ -186,18 +186,16 @@ When to renew comes from `renew_after` in the grant's response.
 
 ## Installing where the server reads
 
-Getting a certificate is not the point. Putting it where nginx, HAProxy or
-Postgres actually reads it, and reloading, is the point.
+Obtaining a certificate is only the first step. It must then be written to the
+location the service reads, with the correct ownership and permissions, and the
+service must be reloaded.
 
-### Name the platform, not the four fields
+### Platform profiles
 
-The machinery to serve a platform is a path, a format, a command that validates
-the configuration, and a command that reloads the service. Four fields — and
-until there was a catalogue of them, an operator evaluating this for a Tomcat
-estate read "there is an agent" and had to work out for themselves whether it
-applied, where the honest answer was "yes, if you write the spec by hand".
-
-So a destination can name a platform instead:
+Installing a certificate for a given platform requires four values: a file
+path, a file format, a command that validates the configuration, and a command
+that reloads the service. A profile supplies all four, so a destination can
+name the platform instead of specifying them individually:
 
 ```json
 {
@@ -207,23 +205,22 @@ So a destination can name a platform instead:
 }
 ```
 
-That fills in the paths, the modes, `nginx -t` and `nginx -s reload`.
-`certpilot-agent profiles` lists every platform; `certpilot-agent profiles
-nginx` prints exactly what one fills in and what it cannot do for you. There is
-also a page per platform in [platforms/](platforms/README.md), each one leading
-with the failure it prevents rather than the fields it sets.
+That supplies the file paths, the file modes, and the `nginx -t` and
+`nginx -s reload` commands. Run `certpilot-agent profiles` to list the
+platforms, or `certpilot-agent profiles nginx` to see exactly what one profile
+supplies and what it does not cover. [platforms/](platforms/README.md)
+documents each platform's configuration requirements and limitations.
 
-**A profile is a default, not a lock.** Estates move paths. Every field a
-profile supplies is one you may write down yourself, and yours wins — including
-`"reload": []`, which says this destination reloads by some other means and is
-left alone rather than filled back in. A profile that could not be overridden
-would be worse than no profile, because it would look supported while writing
-to somewhere nothing reads.
+**A profile provides defaults, which can be overridden.** Any field written in
+the destination takes precedence over the profile's value. This includes an
+explicitly empty list: `"reload": []` indicates that the destination is
+reloaded by some other means, and the profile's reload command is not
+substituted. Deployments that keep certificates in non-standard locations are
+therefore still able to use a profile for the remaining fields.
 
-`{{ .Certificate }}` in any path is replaced with the certificate's name, in
-your own paths as well as a profile's. It is the only placeholder, and anything
-else in braces is refused when the file is read — a file called
-`{{ .Name }}.crt` is not something to discover from a failed handshake.
+`{{ .Certificate }}` in any path is replaced with the certificate's name. It is
+the only placeholder supported, and any other text in double braces is rejected
+when the file is read, rather than written to disk as a literal filename.
 
 | Profile | Platform | Verified against |
 |:---|:---|:---|
@@ -237,24 +234,25 @@ else in braces is refused when the file is read — a file called
 | `postfix` | Postfix | Postfix 3.7.11, Debian package |
 | `dovecot` | Dovecot | Dovecot 2.3.19.1, Debian package |
 
-"Verified against" means something specific here. `make verify-profiles` starts
-that service in a container, hands it a **different** certificate to boot with,
-installs through this agent's own `install --offline`, runs the profile's own
-check and reload, and then completes a TLS handshake from outside to confirm
-the service is serving the installed certificate and sending its chain. A
-profile that has not done that is not in the table.
+Each profile is tested by `make verify-profiles`, which starts the service in a
+container with one certificate, installs a different one using the agent, runs
+the profile's check and reload commands, and then opens a TLS connection from
+outside the container to confirm the service returns the newly installed
+certificate and its chain. Profiles that have not passed this test are not
+included.
 
-### Detection is a prompt, not a decision
+### Detection
 
 ```bash
 certpilot-agent profiles --detect
 ```
 
-reports which of those platforms look installed here. Read that literally: it
-means a configuration file exists where that platform usually keeps one. It
-does **not** mean the profile's paths are the ones your service reads — your
-configuration decides that, and nothing in the agent has looked at it. The
-agent never acts on detection; it prints it for a person to check.
+Reports which of these platforms appear to be installed on the host. The result
+indicates that a configuration file exists in the location that platform
+normally uses. It does not confirm that the profile's paths match the ones the
+running service reads, which is determined by that service's own configuration.
+The agent does not act on detection; the output is intended for review by an
+administrator.
 
 ### Or write it out in full
 

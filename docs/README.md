@@ -3,10 +3,11 @@
 An open-source PKI and certificate lifecycle manager, built for the central PKI
 team inside an organisation.
 
-Public TLS certificates are capped at 200 days as of March 2026, 100 days from
-March 2027 and 47 days from March 2029 — the schedule the CA/Browser Forum
-adopted in [ballot SC-081v3][sc081]. At 47 days that is eight renewals a year
-per certificate. These pages are about doing that without a person in the loop.
+Public TLS certificate lifetimes are capped at 200 days as of March 2026, 100
+days from March 2027 and 47 days from March 2029, under the schedule adopted by
+the CA/Browser Forum in [ballot SC-081v3][sc081]. At a 47-day maximum, each
+certificate requires renewal approximately eight times per year. These pages
+document how to automate that.
 
 [sc081]: https://cabforum.org/2025/04/11/ballot-sc081v3-introduce-schedule-of-reducing-validity-and-data-reuse-periods/
 
@@ -15,12 +16,8 @@ per certificate. These pages are about doing that without a person in the loop.
 | | |
 |:---|:---|
 | [getting-started.md](getting-started.md) | The first fifteen minutes. No database or cloud account needed |
-| [platforms/](platforms/README.md) | **"I have forty nginx boxes and an F5 — does this help me."** One page per platform, each naming the failure first |
+| [platforms/](platforms/README.md) | Supported platforms: configuration, commands and limitations for each |
 | [architecture.md](architecture.md) | How the pieces fit, and the three decisions that shape everything else |
-
-Everything below this line is organised the way the software is, which is the
-right shape once you have chosen it and the wrong shape while you are deciding.
-[platforms/](platforms/README.md) is the other axis.
 
 ## Running it
 

@@ -3,18 +3,18 @@
 This walks through running CertPilot locally and issuing a certificate — first
 from the self-signed gateway, then from a real ACME CA.
 
-## Why bother
+## Background
 
-Since March 2026 a public TLS certificate may be valid for at most 200 days.
-That becomes 100 days in March 2027 and 47 days in March 2029, on the schedule
-the CA/Browser Forum adopted in [ballot SC-081v3][sc081]; domain validation
-reuse falls to 10 days alongside it.
+Since March 2026, a public TLS certificate may be valid for a maximum of 200
+days. This falls to 100 days in March 2027 and 47 days in March 2029, under the
+schedule adopted by the CA/Browser Forum in [ballot SC-081v3][sc081]. Domain
+validation reuse periods are reduced to 10 days over the same period.
 
-At 47 days each certificate is renewed eight times a year. Whatever handles
-that today — a calendar reminder, a runbook, one person who remembers — stops
-working on a date that is already fixed, and the first step of the schedule has
-already passed. That is the problem this exists for; the rest of this page is
-how to try it.
+At a 47-day maximum, each certificate requires renewal approximately eight
+times per year. Manual processes — a calendar reminder, a documented procedure,
+or an individual responsible for tracking expiry — do not scale to that
+frequency. The remainder of this page covers installing and evaluating
+CertPilot.
 
 [sc081]: https://cabforum.org/2025/04/11/ballot-sc081v3-introduce-schedule-of-reducing-validity-and-data-reuse-periods/
 
