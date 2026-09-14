@@ -187,10 +187,17 @@ func (d *Destination) validateStore() error {
 			"format says what to write to a file, and a store destination writes none. The material " +
 				"is handed to Windows as PKCS#12 in memory, which is the only encoding the store accepts")
 	}
-	if strings.TrimSpace(d.CertMode) != "" || strings.TrimSpace(d.KeyMode) != "" {
+	// owner and group are here rather than left to the ownershipSupported check
+	// in validate(), which a store destination returns before reaching. Without
+	// this they are accepted in silence — and an operator who writes an owner
+	// believes a service account can use a key it cannot, which is the exact
+	// failure that refusal exists to prevent.
+	if strings.TrimSpace(d.Owner) != "" || strings.TrimSpace(d.Group) != "" ||
+		strings.TrimSpace(d.CertMode) != "" || strings.TrimSpace(d.KeyMode) != "" {
 		return fmt.Errorf(
-			"cert_mode and key_mode are file modes, and a store destination writes no file. The " +
-				"private key is held by Windows, and who may use it is the key's own access control list")
+			"owner, group, cert_mode and key_mode all describe a file, and this destination writes no " +
+				"file for them to apply to. The private key is held by Windows, and who may use it is " +
+				"the key's own access control list")
 	}
 	if strings.TrimSpace(d.KeystorePassword) != "" || strings.TrimSpace(d.KeystorePasswordFile) != "" {
 		return fmt.Errorf(

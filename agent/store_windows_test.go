@@ -298,11 +298,12 @@ func TestAStoreDestinationRefusesWhatItWouldIgnore(t *testing.T) {
 		{"cert_path", func(d *Destination) { d.CertPath = `C:\certpilot\cert.pem` }, "writes no file at all"},
 		{"key_path", func(d *Destination) { d.KeyPath = `C:\certpilot\privkey.pem` }, "writes no file at all"},
 		{"format", func(d *Destination) { d.Format = FormatPKCS12 }, "writes none"},
-		{"key_mode", func(d *Destination) { d.KeyMode = "0600" }, "writes no file"},
+		{"key_mode", func(d *Destination) { d.KeyMode = "0600" }, "all describe a file"},
 		{"keystore_password", func(d *Destination) { d.KeystorePassword = "changeit" }, "generates and discards"},
 		{"keystore_alias", func(d *Destination) { d.KeystoreAlias = "tomcat" }, "found by thumbprint"},
 		{"check", func(d *Destination) { d.Check = []string{`C:\check.exe`} }, "no `nginx -t` for a certificate store"},
-		{"owner", func(d *Destination) { d.Owner = "IIS_IUSRS" }, "does not have"},
+		{"owner", func(d *Destination) { d.Owner = "IIS_IUSRS" }, "all describe a file"},
+		{"group", func(d *Destination) { d.Group = "IIS_IUSRS" }, "all describe a file"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := Destination{

@@ -30,7 +30,7 @@ It also builds and runs on Windows, with the limits set out below.
 | Target | State |
 |:---|:---|
 | Linux | Supported. Every deployment profile is tested against it |
-| Windows | Builds and runs for file destinations. No deployment profiles, and the certificate store is not written to — see [Windows](#windows) |
+| Windows | Supported for file destinations and for the certificate store, which is what IIS reads. The Linux deployment profiles do not apply — see [Windows](#windows) |
 | macOS, FreeBSD | Compiles, and is usable for development. Not tested, and the deployment profiles assume systemd |
 
 The published container image is built on Alpine, every deployment profile
@@ -39,9 +39,9 @@ write to are the Linux ones: `/etc/nginx`, `/etc/apache2`, `/etc/haproxy`.
 
 ### Windows
 
-The agent runs on Windows and writes certificates to files there. What it does
-not do is write to the Windows certificate store, which is what IIS, Exchange,
-ADFS, NPS and RDS read from.
+The agent runs on Windows, writes certificates to files there, and imports into
+the Windows certificate store, which is what IIS, Exchange, ADFS, Network Policy
+Server and Remote Desktop Services read from.
 
 **The private key guarantee is an ACL, not a mode.** Windows has no file modes.
 Go accepts a `0600` and ignores it, and the file inherits whatever its directory
@@ -56,24 +56,45 @@ can read is not safer — an administrator can take ownership of it in one
 command — but it is unbackuppable and invisible to the endpoint tooling every
 Windows estate runs. What the ACL removes is *other ordinary accounts*.
 
-**No deployment profiles.** Every profile in the catalogue describes a Linux
-service: `systemctl` to reload, `/etc/nginx` and `/etc/haproxy` to write to.
-Naming one on Windows is refused, with a message saying to set `cert_path`,
-`key_path`, `check` and `reload` on the destination instead.
+**The Linux deployment profiles do not apply.** Every profile in the catalogue
+except `iis` describes a Linux service: `systemctl` to reload, `/etc/nginx` and
+`/etc/haproxy` to write to. Naming one on Windows is refused, with a message
+saying to set `cert_path`, `key_path`, `check` and `reload` on the destination
+instead. `certpilot-agent profiles` lists every platform on every host and marks
+the ones that are for another.
 
 **No `owner` or `group`.** Both are Unix file ownership. They are refused when
 the spec is read rather than accepted and ignored, because an operator who sets
 them believes a service account can read a key it cannot.
 
-**The certificate store is not written to.** IIS binds a certificate by
-thumbprint from `LocalMachine\My` rather than reading a file, and Exchange,
-ADFS, NPS and RDS each have their own binding step. Importing also has no
-equivalent of the installer's rollback — capture the previous file, put it back
-if the reload fails — so it is a separate piece of work rather than a flag.
-Tracked in [issue #38](https://github.com/certpilot/certpilot/issues/38).
+**The certificate store.** A destination may name a `store` instead of
+`cert_path` and `key_path`. The agent imports the certificate, its chain and the
+key as PKCS#12 built in memory — nothing is written to disk — then runs a `bind`
+command with the new thumbprint substituted into it.
 
-So the Windows hosts this helps today are the ones whose software reads
-certificates from disk: nginx, Java applications, PostgreSQL, Node services.
+The binding is a command rather than something the agent knows, because there
+are five of them: IIS binds against a site binding, Exchange takes
+`Enable-ExchangeCertificate` with a service list, and ADFS, NPS and RDS each
+have their own cmdlet. The `iis` profile supplies the IIS one, so the common
+case is `"profile": "iis"`.
+
+Two things about it differ from every other destination and are covered in full
+on the [IIS page](platforms/iis.md):
+
+- **There is no check.** Nothing on Windows reports in advance whether a binding
+  that has not been made yet will work. `verify` is offered instead: after
+  binding, the agent connects to the endpoint and confirms the certificate being
+  served is the one just installed. It runs afterwards, which is weaker than
+  `nginx -t` and is the strongest honest thing available here.
+- **Rollback returns the binding before removing the certificate.** Importing
+  displaces nothing, so there is nothing to capture and put back; what changed is
+  which thumbprint the binding names. Removing a certificate a binding still
+  names would turn a service serving the wrong certificate into one serving
+  none.
+
+So the Windows hosts this helps are both kinds: the ones whose software reads
+certificates from disk — nginx, Java applications, PostgreSQL, Node services —
+and the ones that read from the store.
 
 **Without the agent at all.** The core does not need it in order to deploy. A
 signed webhook target delivers the certificate to an endpoint you control, which
