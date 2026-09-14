@@ -147,9 +147,18 @@ func TestSetKeystoreAliasRoundTrips(t *testing.T) {
 			t.Errorf("chain entry %d changed", i)
 		}
 	}
-	a, ok1 := afterKey.(*ecdsa.PrivateKey)
-	b, ok2 := beforeKey.(*ecdsa.PrivateKey)
-	if !ok1 || !ok2 || a.D.Cmp(b.D) != 0 {
+	// Compared as encoded keys rather than by reaching into the struct:
+	// ecdsa.PrivateKey.D is deprecated in Go 1.26, and marshalling is what the
+	// keystore did with the key in the first place.
+	beforeDER, err := x509.MarshalPKCS8PrivateKey(beforeKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterDER, err := x509.MarshalPKCS8PrivateKey(afterKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(beforeDER, afterDER) {
 		t.Error("the private key changed")
 	}
 }
