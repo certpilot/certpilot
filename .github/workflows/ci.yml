@@ -128,6 +128,47 @@ jobs:
         run: go test ./agent/... -v
         working-directory: ${{ github.workspace }}
 
+  agent-lifecycle:
+    name: agent to core, end to end
+    runs-on: ubuntu-latest
+
+    # The contract between the core and the agent is verified by neither half.
+    # core/api/agents_test.go tests the core's handlers against the core's idea
+    # of the contract, agent/*_test.go tests the agent's logic against the
+    # agent's, there is no agent/client_test.go, and scripts/dev.sh never starts
+    # an agent. This job is the only thing that runs one against the other.
+    #
+    # It matters more the moment the agent moves to its own repository, which is
+    # what it was built ahead of — the same problem the gateways have, and the
+    # reason gateway-compatibility.yml exists. AGENT_BIN is the seam: it builds
+    # from this tree today and takes a released binary later.
+    #
+    # No database service. The core runs on its in-memory store here, which is
+    # the right trade for this job: what is being tested is a wire contract, and
+    # the store-backed paths have a suite of their own.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Enrol, request, install, report
+        run: make agent-lifecycle
+
+      # The logs of a failed run say which half was wrong, and they are gone
+      # with the runner otherwise.
+      - name: The logs, if it failed
+        if: failure()
+        run: |
+          for f in .agentlife/core.log .agentlife/gateway.log \
+                   .agentlife/request.log .agentlife/run.log; do
+            [ -s "$f" ] || continue
+            echo "::group::$f"
+            tail -80 "$f"
+            echo "::endgroup::"
+          done
+
   iis:
     name: IIS end to end
     runs-on: windows-latest
