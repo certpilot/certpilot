@@ -321,7 +321,7 @@ a literal filename.
 | `mariadb` | MariaDB and MySQL | MariaDB 10.11.18, Debian package |
 | `postfix` | Postfix | Postfix 3.7.11, Debian package |
 | `dovecot` | Dovecot | Dovecot 2.3.19.1, Debian package |
-| `iis` | Microsoft IIS | IIS 10.0 on Windows Server 2022 |
+| `iis` | Microsoft IIS | IIS 10.0 on Windows Server 2025 |
 
 Each Linux profile is tested by `make verify-profiles`, which starts the service
 in a container with one certificate, installs a different one using the agent,

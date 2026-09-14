@@ -237,5 +237,5 @@ Windows runner instead, to the same standard:
 The job also checks the version recorded in the profile against the version of
 IIS on the runner, so the claim cannot become one about a machine nobody used.
 
-Last tested against IIS 10.0 on Windows Server 2022. See
+Last tested against IIS 10.0 on Windows Server 2025. See
 [agent.md](../agent.md).

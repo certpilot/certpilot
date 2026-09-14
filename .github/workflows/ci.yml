@@ -201,8 +201,14 @@ jobs:
           Write-Host "claim:  IIS $claim"
           Write-Host "runner: IIS $version on Windows Server $year"
           if ($claim -notlike "*$version*" -or $claim -notlike "*Server $year*") {
-            Write-Error ("the catalogue says this profile was verified against 'IIS {0}', and what just " +
-              "ran it was IIS {1} on Windows Server {2}. Update the Verified line." -f $claim, $version, $year)
+            # Built first, then formatted. PowerShell binds -f tighter than +,
+            # so formatting a concatenation formats only its second half — which
+            # is how this message first reached a log reading "verified against
+            # 'IIS {0}'". A message that is only ever printed when something is
+            # already wrong is the worst place for a second thing to be wrong.
+            $message = "the catalogue says this profile was verified against 'IIS {0}', and what " +
+              "just ran it was IIS {1} on Windows Server {2}. Update the Verified line."
+            Write-Error ($message -f $claim, $version, $year)
             exit 1
           }
 

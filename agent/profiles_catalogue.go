@@ -407,7 +407,7 @@ var catalogue = []Profile{
 				"IIS,SMTP`. None of the four has been run by this project, and they are " +
 				"listed here as a shape to copy rather than as a supported platform.",
 		},
-		Verified: "IIS 10.0 on Windows Server 2022",
+		Verified: "IIS 10.0 on Windows Server 2025",
 	},
 }
 
