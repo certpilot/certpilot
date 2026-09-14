@@ -1,3 +1,16 @@
+//go:build !windows
+
+// Unix only, because the fixtures in here are Unix: destination paths like
+// /etc/ssl/a.crt, which validate() correctly refuses on Windows as relative,
+// and assertions on file modes, which Go reports as 0666 for every file on
+// Windows whatever its ACL says.
+//
+// The logic being tested is platform-independent and is covered here. What
+// differs on Windows — the ACL that replaces the mode, the refusal of Unix
+// ownership and of Linux deployment profiles, and a destination naming
+// C:\... paths — is covered by platform_windows_test.go, which runs on a real
+// Windows runner in CI.
+
 package agent
 
 import (

@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/certpilot/certpilot-agent-sdk/agentapi"
@@ -239,7 +238,7 @@ func inspect(path string) *Discovered {
 		Kind:                 kind,
 		CertificateCount:     len(certs),
 		Mode:                 fmt.Sprintf("%04o", info.Mode().Perm()),
-		Owner:                ownerOf(info),
+		Owner:                ownerOf(path, info),
 		ModifiedAt:           info.ModTime(),
 		PrivateKeyInSameFile: keyInFile != nil,
 	}
@@ -417,14 +416,6 @@ func isAuthority(cert *x509.Certificate) bool {
 		return false
 	}
 	return len(cert.DNSNames) == 0 && len(cert.IPAddresses) == 0
-}
-
-func ownerOf(info os.FileInfo) string {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return ""
-	}
-	return fmt.Sprintf("%d:%d", stat.Uid, stat.Gid)
 }
 
 // configDirectives maps a server's way of naming a certificate to the regexp
