@@ -31,6 +31,41 @@ alias, described under [Limitations](#limitations).
 `key_path` is omitted. The private key is contained in the keystore, and
 specifying a second path would write it to disk unencrypted as well.
 
+### Naming the keystore entry
+
+A keystore is a map, and Java looks entries up by name. The agent leaves the
+entry unnamed unless told otherwise, and an unnamed entry is one the JDK calls
+`1`. A connector configured with `certificateKeyAlias="tomcat"` — the
+conventional value, and what `keytool -genkeypair -alias tomcat` produces —
+then cannot find the key. Tomcat reports a successful startup regardless, and
+this is the platform with no configuration check, so nothing catches it until
+post-renewal verification reports the endpoint is serving the old certificate.
+
+Set `keystore_alias` to whatever the configuration names:
+
+```json
+{
+  "name": "tomcat",
+  "certificate": "app.example.com",
+  "profile": "tomcat",
+  "keystore_password_file": "/etc/certpilot/keystore-password",
+  "keystore_alias": "tomcat"
+}
+```
+
+```xml
+<Certificate certificateKeystoreFile="/etc/certpilot/live/app.example.com/keystore.p12"
+             certificateKeystorePassword="..."
+             certificateKeystoreType="PKCS12"
+             certificateKeyAlias="tomcat" />
+```
+
+The two values must match exactly. There is no default, because the agent
+cannot read `server.xml` and a guess that is wrong produces a connector looking
+at the right file and finding nothing in it. Leaving it unset keeps the entry
+unnamed, which is what every keystore written before this field existed looks
+like.
+
 **A keystore password is required and has no default.** The value must match
 the one configured in `server.xml`. Supply it with `keystore_password`, or with
 `keystore_password_file` pointing at a file that already contains it. The
@@ -52,16 +87,10 @@ identically to PEM destinations.
   rotation interrupts connections. Schedule renewals accordingly.
 - **No configuration check is available.** Tomcat provides no equivalent of
   `nginx -t`.
-- **The keystore entry has no alias.** The agent writes the entry without a
-  `friendlyName` attribute, so Java names it `1`. Omit `certificateKeyAlias`
-  from the `<Certificate>` element, as the example above does, and Tomcat uses
-  the first entry. Setting it to anything else — `tomcat` is the conventional
-  value, and is what `keytool -genkeypair -alias tomcat` produces — leaves the
-  connector unable to find the key, and **Tomcat still reports a successful
-  startup**. With no configuration check for this platform, nothing catches it
-  until post-renewal verification reports the endpoint is not serving the new
-  certificate. Tracked in
-  [issue #65](https://github.com/certpilot/certpilot/issues/65).
+- **The entry is unnamed unless `keystore_alias` says otherwise.** Java then
+  names it `1`. That is fine when `certificateKeyAlias` is omitted, as the
+  first example above does, and wrong for any configuration that names an
+  alias — see [Naming the keystore entry](#naming-the-keystore-entry).
 - **Verify the service unit name.** The profile specifies `tomcat10`, which is
   correct for Debian 12. Installations using `tomcat9`, a Red Hat package, or a
   Tomcat installed from the upstream archive require a different command.
@@ -114,8 +143,9 @@ Four details make this work:
   reloaded**, so the JKS file is always converted from the certificate that is
   about to be loaded. A failed conversion stops the reload and restores the
   previous keystore, which is the same protection every other destination has.
-- **`-srcalias 1`** is required. The agent's PKCS#12 entry carries no alias, so
-  Java names it `1`. `-destalias` then sets the name the configuration expects.
+- **`-srcalias`** names the entry to read from the PKCS#12 file: `1` when the
+  destination leaves `keystore_alias` unset, or that value when it is set.
+  `-destalias` then sets the name the configuration expects.
 - **`-noprompt` overwrites the existing entry** on every renewal. Without it
   `keytool` asks whether to replace the alias and the conversion stalls.
 - **`-storepass:file` keeps the password out of the process table** and accepts
