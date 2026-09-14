@@ -40,10 +40,13 @@ jobs:
         include:
           - name: core
             dockerfile: deploy/docker/core.Dockerfile
+            context: .
           - name: agent
             dockerfile: deploy/docker/agent.Dockerfile
+            context: agent
           - name: frontend
             dockerfile: deploy/docker/frontend.Dockerfile
+            context: .
 
     steps:
       - uses: actions/checkout@v4
@@ -70,10 +73,11 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          # The repository root, not the module: this is a Go workspace and
-          # core and agent both replace ../pkg. The frontend needs the root too,
-          # for deploy/docker/nginx.conf.
-          context: .
+          # Per image, because they no longer agree. The core replaces ../pkg
+          # and so needs the workspace root; the frontend needs it for
+          # deploy/docker/nginx.conf. The agent requires nothing from this
+          # repository and is built from its own module.
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}

@@ -18,7 +18,14 @@ on:
       - 'core/store/**'
       - 'core/server/middleware/auth.go'
       - 'core/server/middleware/display_token.go'
-      - 'pkg/agentauth/agentauth.go'
+      # Not a file in this repository any more. schemagen reads agentauth.go
+      # out of the module cache, so what the published reference says about the
+      # agent's headers is decided by the version core/go.mod resolves — and
+      # this list watched `pkg/agentauth/agentauth.go`, which #44 deleted when
+      # the SDK moved to its own repository. Bumping the SDK has therefore been
+      # able to change routes.json with this job never running, which is the
+      # drift it exists to catch.
+      - 'core/go.mod'
       - 'scripts/extract-routes.py'
       - 'scripts/schemagen/main.go'
       - 'scripts/test-routes-atomicity.sh'

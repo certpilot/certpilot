@@ -46,10 +46,13 @@ jobs:
         include:
           - name: core
             dockerfile: deploy/docker/core.Dockerfile
+            context: .
           - name: agent
             dockerfile: deploy/docker/agent.Dockerfile
+            context: agent
           - name: frontend
             dockerfile: deploy/docker/frontend.Dockerfile
+            context: .
 
     steps:
       - uses: actions/checkout@v4
@@ -59,16 +62,18 @@ jobs:
       - name: Build ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
-          # The repository root: this is a Go workspace and core and agent both
-          # replace ../pkg, so a context rooted at a module cannot resolve its
-          # own dependency. The frontend needs the root too, for
-          # deploy/docker/nginx.conf.
+          # Per image, because they no longer agree. The core replaces ../pkg,
+          # so a context rooted at its module cannot resolve its own dependency;
+          # the frontend needs the root for deploy/docker/nginx.conf. The agent
+          # needs neither and is built from its own module.
           #
           # The gateways used to be built here as well and no longer are. They
           # are separate repositories publishing their own images, and each one
           # builds from a context of its own module — which is what dropping the
-          # replace directives bought.
-          context: .
+          # replace directives bought. The agent's replace was dead rather than
+          # load-bearing: it pointed at a module the agent does not require and
+          # has never imported.
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: false
           load: true
