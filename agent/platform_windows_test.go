@@ -231,3 +231,39 @@ func TestAnIdentityKeyGrantingEveryoneIsRefused(t *testing.T) {
 		t.Errorf("the error does not explain the problem: %v", err)
 	}
 }
+
+// TestALinuxProfileIsRefusedHere.
+//
+// The catalogue describes Linux services: systemctl to reload, /etc to write
+// to. Applying one on Windows would fill a destination with paths that
+// validate() then rejects as not absolute, and "cert_path must be an absolute
+// path, not /etc/certpilot/..." is a confusing way to learn that the nginx
+// profile is not about nginx on Windows.
+func TestALinuxProfileIsRefusedHere(t *testing.T) {
+	d := Destination{
+		Name: "web", Certificate: "www.example.com", Profile: "nginx",
+	}
+	err := d.applyProfile()
+	if err == nil {
+		t.Fatal("a Linux deployment profile was accepted on Windows")
+	}
+	if !strings.Contains(err.Error(), "describes a Linux service") {
+		t.Errorf("the message does not explain it: %v", err)
+	}
+}
+
+// TestADestinationWithWindowsPathsIsAccepted.
+//
+// The counterpart to the test above: without a profile, a destination that
+// names Windows paths is ordinary and must validate.
+func TestADestinationWithWindowsPathsIsAccepted(t *testing.T) {
+	d := Destination{
+		Name:        "app",
+		Certificate: "www.example.com",
+		CertPath:    `C:\ProgramData\CertPilot\live\www.example.com\cert.pem`,
+		KeyPath:     `C:\ProgramData\CertPilot\live\www.example.com\privkey.pem`,
+	}
+	if err := d.validate(); err != nil {
+		t.Fatalf("a Windows destination was refused: %v", err)
+	}
+}

@@ -250,3 +250,14 @@ func aclTrustees(acl *windows.ACL) []*windows.SID {
 	}
 	return out
 }
+
+// profilesSupported reports whether the deployment profile catalogue applies
+// here.
+//
+// It does not. Every profile in it names a Linux service — systemctl to reload,
+// /etc/nginx and /etc/haproxy to write to — and none of those exist on Windows.
+// Applying one would fill a destination with paths validate() then refuses as
+// not absolute, which is a confusing way to learn that nginx on Windows is not
+// what the nginx profile describes. A destination on Windows names its own
+// paths and commands.
+func profilesSupported() bool { return false }

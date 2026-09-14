@@ -62,3 +62,8 @@ func keyIsPrivate(path string, info os.FileInfo) error {
 	}
 	return nil
 }
+
+// profilesSupported reports whether the deployment profile catalogue applies
+// here. Every profile in it reloads with systemctl and writes under /etc, so:
+// yes on Unix, and see platform_windows.go for why not there.
+func profilesSupported() bool { return true }
