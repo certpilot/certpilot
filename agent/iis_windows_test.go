@@ -75,10 +75,28 @@ func TestIISServesWhatTheAgentInstalls(t *testing.T) {
 
 	var first, second string
 
+	// Every certificate this test imports, removed when all three parts are
+	// done rather than as each one finishes.
+	//
+	// t.Cleanup inside a subtest runs when that subtest ends. Registering the
+	// removal there took the certificate the third part has to roll back to out
+	// of the store before the third part ran, and the result looked exactly
+	// like a broken rollback: IIS still serving the certificate that failed.
+	// The agent had behaved correctly — asked to bind a thumbprint the store no
+	// longer held, it could not, left the new certificate in place rather than
+	// leaving a binding naming nothing, and said so. A fixture that can produce
+	// that reading of a correct implementation is worse than no fixture.
+	var installed []string
+	t.Cleanup(func() {
+		for _, thumbprint := range installed {
+			_ = windowsStore{}.remove(machine, thumbprint)
+		}
+	})
+
 	t.Run("a first install is bound and served", func(t *testing.T) {
 		held, thumbprint := storeHeld(t, t.TempDir(), iisName)
 		first = thumbprint
-		cleanUp(t, machine, thumbprint)
+		installed = append(installed, thumbprint)
 
 		status, detail := install(t, destination(t, iisAddr), held)
 		if status != agentapi.InstallInstalled {
@@ -104,7 +122,7 @@ func TestIISServesWhatTheAgentInstalls(t *testing.T) {
 		}
 		held, thumbprint := storeHeld(t, t.TempDir(), iisName)
 		second = thumbprint
-		cleanUp(t, machine, thumbprint)
+		installed = append(installed, thumbprint)
 
 		status, detail := install(t, destination(t, iisAddr), held)
 		if status != agentapi.InstallInstalled {
@@ -127,8 +145,17 @@ func TestIISServesWhatTheAgentInstalls(t *testing.T) {
 		if second == "" {
 			t.Skip("the renewal did not complete")
 		}
+		// The precondition, checked rather than assumed. Without the
+		// certificate this part rolls back to, the agent is right to refuse to
+		// bind it and the assertions below would be reading a correct refusal
+		// as a broken rollback.
+		if !inStore(t, machine, second) {
+			t.Fatalf("%s is not in %s, so there is nothing for the rollback to return to; "+
+				"the fixture is wrong rather than the rollback", second, machine)
+		}
+
 		held, thumbprint := storeHeld(t, t.TempDir(), iisName)
-		cleanUp(t, machine, thumbprint)
+		installed = append(installed, thumbprint)
 
 		// Verified against a port nothing is listening on, so the check cannot
 		// pass however well the binding worked. The binding itself is real and
@@ -139,15 +166,19 @@ func TestIISServesWhatTheAgentInstalls(t *testing.T) {
 			t.Fatalf("a certificate nothing could be shown to serve was reported as %s: %s", status, detail)
 		}
 
+		// The agent's own account first. If it says the binding could not be put
+		// back, the assertion below will fail too, and knowing which of the two
+		// happened is the difference between a rollback that did not run and
+		// one that ran and did not take.
+		if !strings.Contains(detail, "put back") {
+			t.Errorf("the agent does not report putting the binding back: %q", detail)
+		}
 		if served := whatIISIsServing(t); served != second {
 			t.Fatalf("after a failed install IIS is serving %s; it was serving %s before and should be again",
 				served, second)
 		}
 		if inStore(t, machine, thumbprint) {
 			t.Errorf("the certificate that failed was left in %s", machine)
-		}
-		if !strings.Contains(detail, "put back") {
-			t.Errorf("the report does not say what was done about it: %q", detail)
 		}
 	})
 }
