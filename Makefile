@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes verify-profiles all build build-core build-agent test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes verify-profiles compatibility all build build-core build-agent test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -113,6 +113,11 @@ test-routes:
 ##   make verify-profiles PROFILE=nginx
 verify-profiles:
 	./scripts/verify-profiles.sh $(PROFILE)
+
+## Measure which released gateways this core still works with, and write
+## docs/compatibility.md from what happened rather than from memory.
+compatibility:
+	./scripts/gateway-compatibility.sh $(GATEWAY)
 
 run-core:
 	$(GO) run ./core/cmd/ --config=config.dev.yaml

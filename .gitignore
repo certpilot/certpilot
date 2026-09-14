@@ -81,3 +81,7 @@ Thumbs.db
 *.log
 skills-lock.json
 .verify-work/
+
+# Working directory for scripts/gateway-compatibility.sh: a built core, a
+# development PKI and the gateway binaries it installs to talk to.
+.compat/

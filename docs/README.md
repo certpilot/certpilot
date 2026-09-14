@@ -46,12 +46,14 @@ document how to automate that.
 |:---|:---|
 | [gateways/vault.md](gateways/vault.md) | HashiCorp Vault PKI |
 | [writing-a-gateway.md](writing-a-gateway.md) | Adding support for a CA, in any language |
+| [compatibility.md](compatibility.md) | Which released gateways this core works with, measured weekly |
 | [api-reference.md](api-reference.md) | Every endpoint |
 
 ## Elsewhere
 
 | | |
 |:---|:---|
+| [repositories.md](repositories.md) | What each repository is called, and what holds them together |
 | [../README.md](../README.md) | What CertPilot is and why |
 | [../ROADMAP.md](../ROADMAP.md) | What has been built, in order, and what has not |
 | [../SECURITY.md](../SECURITY.md) | Reporting a vulnerability |
