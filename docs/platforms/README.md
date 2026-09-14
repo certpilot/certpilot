@@ -1,80 +1,75 @@
-# By platform
+# Supported platforms
 
-The rest of `docs/` is organised the way the software is: a page for the
-posture subsystem, a page for the renewal queue, a page for the agent. That is
-the right shape for somebody who has already chosen CertPilot and needs to
-operate it.
+CertPilot's host agent installs certificates on the platforms listed below.
+Each page covers the configuration required, the commands the agent runs, and
+the limitations that apply.
 
-It is the wrong shape for somebody deciding, because nobody arrives with a
-question about the posture subsystem. They arrive with *"I have forty nginx
-boxes and an F5, does this help me."*
-
-These pages answer that, one platform at a time. Each one names the failure
-first, says what CertPilot does about it, gives the commands, and says what it
-does not handle.
-
-| | | |
+| Platform | Type | Notes |
 |:---|:---|:---|
-| [nginx](nginx.md) | Web | Reloads without dropping a connection |
-| [Apache httpd](apache.md) | Web | Graceful restart finishes in-flight requests |
-| [HAProxy](haproxy.md) | Web | Wants one file, certificate and key together |
-| [Caddy](caddy.md) | Web | Manages its own certificates unless told not to |
-| [Apache Tomcat](tomcat.md) | Java | Reads a keystore, not PEM |
-| [PostgreSQL](postgresql.md) | Database | Reloads the certificate without a restart |
-| [MariaDB and MySQL](mariadb.md) | Database | `FLUSH SSL`, since 10.4 and 8.0.16 |
-| [Postfix](postfix.md) | Mail | The certificate every other mail server sees |
-| [Dovecot](dovecot.md) | Mail | The certificate every mail client checks |
+| [nginx](nginx.md) | Web server | Reloads without dropping connections |
+| [Apache httpd](apache.md) | Web server | Graceful restart completes in-flight requests |
+| [HAProxy](haproxy.md) | Load balancer | Requires certificate and key in a single file |
+| [Caddy](caddy.md) | Web server | Requires `auto_https off` |
+| [Apache Tomcat](tomcat.md) | Java application server | Requires a PKCS#12 keystore |
+| [PostgreSQL](postgresql.md) | Database | Reloads without a restart |
+| [MariaDB and MySQL](mariadb.md) | Database | Reloads via `FLUSH SSL` |
+| [Postfix](postfix.md) | Mail transfer agent | Certificate presented on port 25 |
+| [Dovecot](dovecot.md) | IMAP and POP3 server | Certificate presented to mail clients |
 
-## What "supported" means on these pages
+A platform is listed here only after it has been tested. Platforms that have
+not been tested are not listed, which does not mean they cannot be used — see
+[Unlisted platforms](#unlisted-platforms) below.
 
-Every platform listed has been **installed to**. Not unit-tested: run.
-`make verify-profiles` starts that service in a container, hands it one
-certificate to boot with, installs a *different* one through the agent's own
-installer, runs the platform's own check and reload commands, and then
-completes a TLS handshake from outside to confirm the service is serving the
-installed certificate and sending its chain.
+## How platforms are tested
 
-A platform that has not done that does not get a page here. That rule is the
-whole reason these pages are worth reading: an unverified asset is how a
-quickstart comes to describe a container image nobody ever built.
+Each platform is tested automatically by `make verify-profiles`. For each one,
+the test:
 
-## What a check command actually catches
+1. Starts the service in a container with an initial certificate.
+2. Installs a second, different certificate using the agent.
+3. Runs the platform's configuration check and reload commands.
+4. Opens a TLS connection from outside the container and confirms the service
+   returns the newly installed certificate and its chain.
 
-Every profile that has a check command runs it before anything is told to pick
-the new material up, and the rollback is real. But they do not all catch the
-same things, and the differences were measured rather than assumed:
+The versions each platform was last tested against are recorded in the agent
+and shown by `certpilot-agent profiles <name>`.
 
-| | Missing certificate file | Certificate and key not a pair | Syntax error |
+## Configuration check coverage
+
+Before reloading a service, the agent runs that platform's configuration check
+command. If the check fails, the previous certificate is restored and the
+service is not reloaded.
+
+Check commands differ in what they detect. The table below records results
+measured by running each check against a live instance in three states.
+
+| Check command | Missing certificate file | Certificate and key mismatch | Syntax error |
 |:---|:---|:---|:---|
-| nginx `-t` | caught | caught | caught |
-| Apache `configtest` | caught | **not caught** | caught |
-| HAProxy `-c` | caught | caught | caught |
-| Caddy `validate` | caught | caught | caught |
-| Dovecot `doveconf -n` | **not caught** | **not caught** | caught |
-| Postfix `check` | **not caught** | **not caught** | caught |
-| PostgreSQL | *no check command exists* | | |
-| MariaDB | *no check command exists* | | |
-| Tomcat | *no check command exists* | | |
+| nginx `-t` | Detected | Detected | Detected |
+| Apache `configtest` | Detected | **Not detected** | Detected |
+| HAProxy `-c` | Detected | Detected | Detected |
+| Caddy `validate` | Detected | Detected | Detected |
+| Dovecot `doveconf -n` | **Not detected** | **Not detected** | Detected |
+| Postfix `check` | **Not detected** | **Not detected** | Detected |
+| PostgreSQL | No check command available | | |
+| MariaDB and MySQL | No check command available | | |
+| Apache Tomcat | No check command available | | |
 
-Measured, not inferred: each check was run against a real instance with a
-certificate path that does not exist, with a certificate and key that are not a
-pair, and with a deliberate syntax error, and the table is the exit codes.
-
-A gap in that table is not a reason to avoid the platform. It is the reason
-[post-renewal verification](../deployment.md) exists: it re-probes the endpoint
-from outside and answers the only question that matters, which is what the
+Where a check command does not detect a fault, or does not exist,
+[post-renewal verification](../deployment.md) provides the backstop: it
+reconnects to the endpoint after deployment and reports the certificate the
 service is actually serving.
 
-## What is not here
+## Unlisted platforms
 
-**Anything with no verified profile.** Jetty, Kafka, Elasticsearch, Traefik,
-Redis, Prometheus, LiteSpeed and the rest are absent because nobody has run
-them, not because they cannot work — the agent installs to a path and runs a
-command, and that is all most of them need. Write the four fields by hand;
-[agent.md](../agent.md) has the shape.
+**Platforms without a tested profile.** Jetty, Kafka, Elasticsearch, Traefik,
+Redis, Prometheus and LiteSpeed are not listed because they have not been
+tested, not because they are unsupported. The agent requires only a file path,
+a format, a check command and a reload command, which can be specified
+manually. See [agent.md](../agent.md) for the configuration format.
 
-**Windows.** The agent is Linux-only and nothing about it pretends otherwise.
+**Windows.** The agent runs on Linux only.
 
-**Appliances that have no filesystem you can write to.** An F5 BIG-IP or an
-Azure Key Vault is reached over its API by the core's own deployers, not by
-this agent — [deployment.md](../deployment.md) covers those.
+**Appliances without a writable filesystem.** F5 BIG-IP and Azure Key Vault are
+updated through their APIs by CertPilot Core rather than by the host agent. See
+[deployment.md](../deployment.md).

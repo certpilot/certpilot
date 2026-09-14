@@ -48,17 +48,16 @@ So CertPilot watches authorities first and certificates second.
 
 ## Why
 
-Certificate validity is collapsing, on a schedule that has already started. The
-CA/Browser Forum's [ballot SC-081v3][sc081] took the maximum lifetime of a
-public TLS certificate to **200 days in March 2026** — that one has happened —
-and takes it to **100 days in March 2027** and **47 days in March 2029**, with
-domain validation reuse falling to 10 days alongside it.
+Maximum certificate lifetimes are being reduced on a published schedule. Under
+the CA/Browser Forum's [ballot SC-081v3][sc081], the maximum validity of a
+public TLS certificate fell to **200 days in March 2026**, and falls to **100
+days in March 2027** and **47 days in March 2029**. Domain validation reuse
+periods are reduced on the same schedule, to 10 days.
 
-The number that matters is not 47. It is what 47 does to a process: eight
-renewals a year for every certificate, so an estate of ten thousand is over two
-hundred renewals every day, continuously, forever. A 398-day certificate is
-something a competent team renews by hand with a calendar reminder. A 47-day
-certificate is not, and the date that makes it not is already fixed.
+At a 47-day maximum, each certificate is renewed approximately eight times a
+year. An estate of ten thousand certificates therefore requires around 200
+renewals per day. Manual renewal processes that are adequate for 398-day
+certificates do not scale to this, and the dates are already set.
 
 [sc081]: https://cabforum.org/2025/04/11/ballot-sc081v3-introduce-schedule-of-reducing-validity-and-data-reuse-periods/
 
@@ -134,6 +133,7 @@ certificate, pointing at a real CA, and putting it on a wall.
 | **Watch** | Scheduled CA health sweeps with expiry thresholds, CRL freshness, and a real OCSP request whose signature and delegation are verified. Live updates over SSE |
 | **Find** | Network and CIDR scans, Certificate Transparency logs, and cloud inventory across ACM, Azure Key Vault, Google Cloud and Kubernetes secrets |
 | **Deploy** | Signed webhook, host agent, AWS ACM, Azure Key Vault, F5 BIG-IP — in declared waves, so a canary is one target rather than one per worker |
+| **Install** | The host agent installs to nine tested platforms by name: nginx, Apache, HAProxy, Caddy, Tomcat, PostgreSQL, MariaDB and MySQL, Postfix and Dovecot. Each writes the files, validates the configuration, reloads the service, and rolls back if the reload fails. See **[supported platforms](docs/platforms/README.md)** |
 | **Prove** | A hash-chained audit log, CNSA 2.0 conformance per certificate, and CycloneDX 1.6 CBOM export |
 
 Full detail, including what is partial and what does not exist:
@@ -195,6 +195,7 @@ the implementation.
 | [Monitoring](docs/monitoring.md) | CA health, alerting, wall displays |
 | [Deployment](docs/deployment.md) | Getting a renewed certificate to what serves it |
 | [The agent](docs/agent.md) | Host agent, and the keys CertPilot never sees |
+| [Supported platforms](docs/platforms/README.md) | Configuration, commands and limitations for each platform |
 | [Discovery](docs/discovery.md) | Network scans, CT logs, cloud inventory |
 | [Posture](docs/posture.md) | CNSA 2.0 scoring and CBOM export |
 | [Vault gateway](docs/gateways/vault.md) | HashiCorp Vault PKI in depth |

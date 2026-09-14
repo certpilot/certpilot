@@ -1,28 +1,24 @@
 # Dovecot
 
-This is the certificate that produces support tickets. Every phone, laptop and
-desktop mail client in the organisation checks it on every connection, and they
-all check it properly — unlike a browser, a mail client has no "proceed anyway"
-that most people will find. An expired IMAP certificate is not a degraded
-experience; it is several hundred people whose mail stopped working at the same
-minute, and none of them know why.
+Dovecot presents its certificate to every mail client in the organisation, and
+mail clients validate it strictly. Unlike a web browser, most mail clients
+provide no straightforward way to proceed past a certificate error. An expired
+IMAP certificate therefore affects all users simultaneously and is usually
+reported as a general mail outage.
 
-There is also a syntax trap here that costs an afternoon the first time.
-Dovecot's setting is not a path — it is a redirection:
+Dovecot's configuration syntax for certificate paths differs from other
+services and is a common source of error. The value is a file reference, not a
+path:
 
 ```
 ssl_cert = </etc/certpilot/live/mail.example.com/fullchain.pem
 ```
 
-The `<` means "read the file". Without it, Dovecot treats the path as the
-certificate itself and fails in a way that reads like a corrupt certificate,
-which sends you looking at the certificate.
+The `<` character instructs Dovecot to read the file. Without it, Dovecot
+treats the path itself as the certificate data and reports an error that
+resembles a corrupt certificate.
 
-## What CertPilot does
-
-```bash
-certpilot-agent profiles dovecot
-```
+## Configuration
 
 ```json
 { "name": "imap", "certificate": "mail.example.com", "profile": "dovecot" }
@@ -34,21 +30,24 @@ ssl_cert = </etc/certpilot/live/mail.example.com/fullchain.pem
 ssl_key  = </etc/certpilot/live/mail.example.com/privkey.pem
 ```
 
-`doveconf -n` parses the whole configuration before anything reloads, then
-`doveadm reload` picks the new material up without dropping connections.
+## What the agent does
 
-## What it does not do
+The agent writes the certificate and key, validates the configuration with
+`doveconf -n`, and reloads with `doveadm reload`. Existing connections are not
+dropped.
 
-- **`doveconf -n` does not open the certificate.** It catches syntax errors,
-  which is what makes it usable as a check, and a path that does not exist
-  passes it.
-- **Clients keep the old certificate until they reconnect.** A mail client
-  holding an IMAP IDLE connection keeps it across a reload, so a rotation is
-  not visible to the estate immediately. This is normally what you want; it
-  does mean "did it work" cannot be answered by asking a client that was
-  already connected.
-- **Postfix and Dovecot are separate destinations**, even on a host where they
-  serve the same name from the same file. Two services, two reloads.
+## Limitations
 
-Verified against Dovecot 2.3.19.1 from the Debian package, on port 993. See
+- **`doveconf -n` does not open the certificate.** It parses the configuration
+  and reports syntax errors, which is what makes it usable as a check. A path
+  that does not exist, or a certificate and key that do not match, will pass.
+- **Clients continue to use the previous certificate until they reconnect.** A
+  client holding an IMAP IDLE connection retains it across a reload, so the new
+  certificate is not presented to the entire estate immediately. Confirming a
+  rotation therefore requires a new connection rather than an existing one.
+- **Postfix and Dovecot are separate destinations**, even where both serve the
+  same hostname from the same certificate. Each service is configured and
+  reloaded independently.
+
+Last tested against Dovecot 2.3.19.1 (Debian package), on port 993. See
 [agent.md](../agent.md).

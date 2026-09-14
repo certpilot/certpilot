@@ -1,33 +1,26 @@
 # Caddy
 
-Caddy is the one platform here that normally does this job itself, and does it
-well. It gets its own certificates over ACME, renews them, and needs nothing
-from anybody. The reason this page exists is the estate where it must not:
-where the CA is internal, or the name is not publicly resolvable, or policy
-says certificates come from one place and that place is not Let's Encrypt.
+Caddy obtains and renews its own certificates over ACME by default, and in most
+deployments requires no external certificate management. This page applies to
+deployments where that is not appropriate: an internal certificate authority, a
+name that is not publicly resolvable, or a policy requiring all certificates to
+be issued from one source.
 
-In that estate Caddy fails in two ways that both look like success.
+Two behaviours require attention in that configuration.
 
-**It will go and get its own anyway.** Unless `auto_https off` is set, the
-certificate you installed is on disk, correct, and never served — Caddy has its
-own and prefers it. Nothing logs an error, because nothing is wrong from
-Caddy's point of view.
+**Caddy will obtain its own certificate unless told not to.** With
+`auto_https` at its default setting, the installed certificate is present on
+disk but never served, because Caddy prefers the one it obtained itself. No
+error is logged, as this is normal operation from Caddy's perspective.
 
-**`caddy reload` does nothing after a rotation.** Caddy compares the
-configuration it is handed against the one it is running, and a rotated
-certificate does not change the Caddyfile. So it logs `"config is unchanged"`,
-does no work, and **exits 0** — the install reports success, the file on disk is
-new, and the certificate on the wire is the old one until something restarts
-the process.
+**`caddy reload` does not reload certificates when the configuration is
+unchanged.** Caddy compares the submitted configuration against the running
+one. A renewed certificate does not alter the Caddyfile, so Caddy logs
+`config is unchanged`, takes no action, and exits with status 0. The
+installation is reported as successful while the previously loaded certificate
+remains in use.
 
-## What CertPilot does
-
-The profile ships `--force` on the reload, which is the entire fix for the
-second problem, and this page is the fix for the first.
-
-```bash
-certpilot-agent profiles caddy
-```
+## Configuration
 
 ```json
 { "name": "web", "certificate": "www.example.com", "profile": "caddy" }
@@ -43,18 +36,26 @@ https://www.example.com {
 }
 ```
 
-`caddy validate` runs before the reload; the previous files go back if it
-fails.
+The `tls` directive takes a certificate file and a key file. The certificate
+file must contain the intermediates, so reference `fullchain.pem` rather than
+`cert.pem`.
 
-## What it does not do
+## What the agent does
 
-- **It cannot reload through a disabled admin API.** `caddy reload` talks to
-  `localhost:2019`. With `admin off`, nothing can reload Caddy in place and a
-  restart is the only option.
-- **It does not turn off `auto_https` for you.** That is a line in your
-  Caddyfile, and a tool that edited it would be a tool that could silently stop
-  a working ACME setup.
-- **If Caddy is managing its own certificates, do not install to it.** Two
-  systems renewing the same thing is worse than either alone.
+The agent writes the certificate and key, runs `caddy validate`, reloads with
+`caddy reload --force`, and restores the previous files if the reload fails.
 
-Verified against Caddy 2.11.4. See [agent.md](../agent.md).
+The `--force` flag addresses the second behaviour described above. Without it,
+certificate rotation has no effect.
+
+## Limitations
+
+- **The reload requires the admin API.** `caddy reload` connects to
+  `localhost:2019`. If the admin endpoint is disabled, Caddy cannot be reloaded
+  in place and a restart is required.
+- **The agent does not modify the Caddyfile.** `auto_https off` must be set by
+  an administrator.
+- **Do not install to Caddy if it is managing its own certificates.** Two
+  systems renewing the same certificate is less reliable than either alone.
+
+Last tested against Caddy 2.11.4. See [agent.md](../agent.md).

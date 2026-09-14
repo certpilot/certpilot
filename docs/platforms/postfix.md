@@ -1,26 +1,18 @@
 # Postfix
 
-Port 25 is where your mail server presents a certificate to every other mail
-server on the internet, and it is the certificate nobody is tracking. The
-reason is that SMTP between servers is *opportunistic* by default: if the
-certificate has expired, or the chain is incomplete, the sending server shrugs
-and delivers the mail anyway, in the clear. Nothing bounces. Nothing is logged
-anywhere you are looking. The only signal is that your mail quietly stopped
-being encrypted in transit.
+Postfix presents its certificate on port 25 to every other mail server it
+exchanges mail with. Expiry of this certificate does not produce an obvious
+failure: SMTP between servers uses opportunistic TLS by default, so a sending
+server that cannot validate the certificate delivers the message unencrypted
+rather than rejecting it. No bounce is generated and no error is recorded at
+the receiving end.
 
-That changes the moment anybody publishes MTA-STS or DANE, or a partner
-enforces TLS on their side — then the same expired certificate is a delivery
-failure, and it arrives as "we stopped receiving your email" rather than as an
-alert.
+The consequence changes if MTA-STS or DANE is in use, or if a partner
+organisation enforces TLS. In those cases the same expired certificate causes
+delivery failures, typically reported by the sender rather than detected
+locally.
 
-## What CertPilot does
-
-Treats it like any other certificate: inventoried, monitored, renewed, and
-installed where Postfix reads it.
-
-```bash
-certpilot-agent profiles postfix
-```
+## Configuration
 
 ```json
 { "name": "mta", "certificate": "mail.example.com", "profile": "postfix" }
@@ -31,25 +23,31 @@ smtpd_tls_cert_file = /etc/certpilot/live/mail.example.com/fullchain.pem
 smtpd_tls_key_file  = /etc/certpilot/live/mail.example.com/privkey.pem
 ```
 
-`postfix check` runs first, then `postfix reload`, which restarts the smtpd
-processes without stopping the queue — mail in flight is not lost and the
-listener does not drop.
+Postfix has no separate setting for intermediate certificates; they belong in
+the same file as the leaf certificate.
 
-The key stays `0600` and root-owned. Postfix runs smtpd chrooted and
-unprivileged, but the master reads the certificate before dropping privileges,
-so it does not need to be readable by the `postfix` user.
+The private key is written with mode `0600` and owned by root. The Postfix
+master process reads the certificate before `smtpd` drops privileges and enters
+its chroot, so the `postfix` user does not require access to the key.
 
-## What it does not do
+## What the agent does
 
-- **`postfix check` does not check the certificate.** It validates file
+The agent writes the certificate and key, runs `postfix check`, and runs
+`postfix reload`. The reload restarts the `smtpd` processes without stopping
+the queue: mail in transit is not lost and the listener remains available.
+
+## Limitations
+
+- **`postfix check` does not validate the certificate.** It verifies file
   ownership, permissions and configuration consistency. A certificate and key
-  that are not a pair pass it and fail the handshake.
-- **It does not configure submission or smtps.** Ports 587 and 465 in
-  `master.cf` usually inherit these settings, but if yours override them, they
-  are separate lines.
-- **It does not publish MTA-STS or TLSA records.** Those are DNS, and a
-  certificate rotation that ignores a pinned TLSA record is an outage — if you
-  use DANE, roll the record first.
+  that are not a matching pair will pass the check and fail at the TLS
+  handshake.
+- **The agent does not configure submission or SMTPS.** Ports 587 and 465
+  normally inherit these settings from `main.cf`, but if `master.cf` overrides
+  them for those services, they must be updated separately.
+- **The agent does not publish MTA-STS policies or TLSA records.** If DANE is
+  in use, the TLSA record must be rolled before the certificate is replaced, or
+  delivery will fail.
 
-Verified against Postfix 3.7.11 from the Debian package, over STARTTLS on port
-25. See [agent.md](../agent.md).
+Last tested against Postfix 3.7.11 (Debian package), over STARTTLS on port 25.
+See [agent.md](../agent.md).

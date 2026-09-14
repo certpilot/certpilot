@@ -1,29 +1,16 @@
 # Apache Tomcat
 
-A JVM does not read PEM. It reads a keystore — one file holding the
-certificate, its chain and the private key together, opened with a password
-that also appears in `server.xml`.
+Java applications read certificates from a keystore — a single file containing
+the certificate, its chain and the private key, protected by a password that
+also appears in the server configuration. They do not read PEM files.
 
-That single difference is why Java estates renew by hand years after everything
-else stopped. The certificate arrives as PEM, somebody runs `openssl pkcs12
--export` and `keytool` from memory or from a wiki page, gets the alias or the
-password or the chain order wrong, and restarts Tomcat to find out. It is a
-task nobody automates because it never felt like the same task as copying two
-files.
+This difference is why Java deployments are often excluded from certificate
+automation: the certificate arrives as PEM and must be converted with
+`openssl pkcs12 -export` or `keytool` before use, with the correct alias, chain
+order and password. The agent performs this conversion, writing the keystore
+directly from the private key generated on the host.
 
-It is the same task. Only the encoding is different.
-
-## What CertPilot does
-
-The agent writes the keystore itself, from the key it generated on this host
-and the certificate it was issued. The mode, the ownership, the check before
-the reload and the rollback from a captured copy all work exactly as they do
-for PEM, because a keystore is a different encoding and not a different kind of
-operation.
-
-```bash
-certpilot-agent profiles tomcat
-```
+## Configuration
 
 ```json
 {
@@ -40,34 +27,43 @@ certpilot-agent profiles tomcat
              certificateKeystoreType="PKCS12" />
 ```
 
-`key_path` is omitted, deliberately — the key is inside the keystore, and
-naming a second path would also write it to disk in the clear.
+`key_path` is omitted. The private key is contained in the keystore, and
+specifying a second path would write it to disk unencrypted as well.
 
-**The password has no default and will not get one.** It is not protecting the
-key from anybody: the key is already on this host, written by this same agent,
-and whoever can read the keystore can read the directory it is in. It is a
-coordination value — Tomcat has it in `server.xml` and the keystore will not
-open unless the two match. `changeit` is what every Java tutorial uses, and
-defaulting to it would be theatre with the added harm of looking like
-protection.
+**A keystore password is required and has no default.** The value must match
+the one configured in `server.xml`. Supply it with `keystore_password`, or with
+`keystore_password_file` pointing at a file that already contains it. The
+password does not protect the key from anyone with access to the host — the key
+was generated there — but the keystore cannot be opened unless the two values
+match.
 
-## What it does not do
+## What the agent does
 
-- **This one restarts.** Tomcat re-reads a keystore when the connector is
-  rebuilt and there is no supported way to make it do that in place, so it is
-  the only platform here whose rotation drops connections. Schedule it.
-- **It does not write JKS.** PKCS#12 has been the JVM default since Java 9 and
-  every JDK since reads it natively. A Java 8 estate, or an application with a
-  hard-coded `storetype=JKS`, is not covered — `keytool -importkeystore`
-  converts in one command in the meantime.
-- **The unit name is a guess.** The profile says `tomcat10`, which is Debian
-  12. Change it for `tomcat9`, for Red Hat, or for a Tomcat installed from the
-  tarball — which is most of them.
-- **`check` and `reload` run with `PATH` and nothing else**, so that a command
-  in that file cannot read whatever put the agent's own environment together. A
-  reload calling `catalina.sh` directly must export `JAVA_HOME` itself; going
-  through `systemctl` does not, because the unit sets it.
+The agent writes the keystore, restarts Tomcat, and restores the previous
+keystore if the restart fails. File mode, ownership and rollback behave
+identically to PEM destinations.
 
-Verified against Tomcat 10.1.59 on JDK 21 — a keystore written by this agent,
-read by a real Tomcat, serving the certificate with its chain. See
+## Limitations
+
+- **Tomcat is restarted, not reloaded.** Tomcat re-reads a keystore only when
+  the connector is rebuilt, and there is no supported command to trigger this
+  in place. This is the only platform in this section whose certificate
+  rotation interrupts connections. Schedule renewals accordingly.
+- **No configuration check is available.** Tomcat provides no equivalent of
+  `nginx -t`.
+- **Verify the service unit name.** The profile specifies `tomcat10`, which is
+  correct for Debian 12. Installations using `tomcat9`, a Red Hat package, or a
+  Tomcat installed from the upstream archive require a different command.
+- **Check and reload commands run with a minimal environment.** The agent sets
+  `PATH` and nothing else, so that commands defined in the destination file
+  cannot read the agent's own environment variables. `catalina.sh` requires
+  `JAVA_HOME` and will not infer it, so a reload command invoking it directly
+  must set `JAVA_HOME` itself. Invoking `systemctl` avoids this, as the unit
+  file supplies it.
+- **JKS keystores are not written.** PKCS#12 has been the default JVM keystore
+  format since Java 9 and is read natively by all later versions. Deployments
+  requiring JKS can convert with
+  `keytool -importkeystore -srckeystore keystore.p12 -srcstoretype PKCS12 -destkeystore keystore.jks -deststoretype JKS`.
+
+Last tested against Apache Tomcat 10.1.59 on JDK 21. See
 [agent.md](../agent.md).

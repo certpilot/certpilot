@@ -1,28 +1,28 @@
 # MariaDB and MySQL
 
-Two things make database certificates the ones that get left to expire.
+Two characteristics make database certificates more likely to be left
+unrotated than web server certificates.
 
-**The runbook says restart.** Before MariaDB 10.4 and MySQL 8.0.16 there was no
-way to present a new certificate without restarting the server, and a great
-many internal wiki pages still say exactly that. A restart of the primary
-database is not something anybody schedules casually, so it does not get
-scheduled, so the certificate does not get rotated.
+**Older procedures require a restart.** Before MariaDB 10.4 and MySQL 8.0.16
+there was no way to load a new certificate without restarting the server.
+Documentation and internal procedures written before those releases still
+specify a restart, which is rarely scheduled for a production database.
 
-**The permissions failure is delayed.** Hand MariaDB a key it cannot read and
-it refuses to start — `Failed to setup SSL … Aborting`. That is the right
-behaviour, and it is still the worse outcome here, because nothing tries to
-start a database on the day you rotate its certificate. The rotation looks
-fine. Weeks later something restarts the server for an unrelated reason and it
-does not come back, and the change that caused it is a month behind you.
+**An unreadable key prevents startup.** If the private key cannot be read by
+the account the server runs as, the server does not start:
 
-## What CertPilot does
-
-`FLUSH SSL` — the statement that makes the restart unnecessary — as the reload
-command, so the rotation is a non-event.
-
-```bash
-certpilot-agent profiles mariadb
 ```
+SSL error: Unable to get private key from '...'
+[ERROR] Failed to setup SSL
+[ERROR] Aborting
+```
+
+This is the correct behaviour, but the failure is delayed. Nothing restarts a
+database on the day its certificate is rotated, so an incorrectly permissioned
+key may not cause a failure until the next restart, potentially weeks later and
+for an unrelated reason.
+
+## Configuration
 
 ```json
 { "name": "db", "certificate": "db-01.example.com", "profile": "mariadb" }
@@ -34,26 +34,30 @@ ssl_cert = /etc/certpilot/live/db-01.example.com/fullchain.pem
 ssl_key  = /etc/certpilot/live/db-01.example.com/privkey.pem
 ```
 
-The profile sets `owner` and `group` to `mysql` and the key to `0600`, which is
-what stops the delayed failure above — the key is readable by the account that
-has to read it, from the moment it is written rather than from the moment
-somebody notices.
+The profile sets the key's owner and group to `mysql` and its mode to `0600`,
+which prevents the startup failure described above.
 
-**On MySQL the statement is `ALTER INSTANCE RELOAD TLS`.** Same idea, different
-spelling; change the reload line.
+## What the agent does
 
-## What it does not do
+The agent writes the certificate and key with the required ownership, then runs
+`FLUSH SSL`, which loads the new certificate without a restart and without
+dropping connections.
 
-- **The reload runs as root over the unix socket**, which works on a Debian or
-  Ubuntu package because root authenticates with `unix_socket`. On a host where
-  root has a password this needs credentials — put them in a `my.cnf` that the
-  root account reads, **never on the command line**, where `ps` would show them
-  to every account on the machine.
-- **There is no check command.** Neither server has a configuration validator
-  to run before the reload.
-- **It does not set `require_secure_transport`**, or change any user's TLS
-  requirements. Installing a certificate is not the same as requiring it be
-  used, and the second one breaks clients.
+**On MySQL the equivalent statement is `ALTER INSTANCE RELOAD TLS`.** Update
+the reload command in the destination accordingly.
 
-Verified against MariaDB 10.11.18 from the Debian package. See
+## Limitations
+
+- **The reload command connects as root over the local socket.** This works on
+  Debian and Ubuntu packages, where the root account authenticates using the
+  `unix_socket` plugin. On a host where the root account has a password, supply
+  credentials in a `my.cnf` file readable by root. Do not place credentials on
+  the command line, where they are visible to all accounts via `ps`.
+- **No configuration check is available.** Neither server provides a
+  configuration validator that can be run before the reload.
+- **The agent does not enable `require_secure_transport`** or modify any
+  account's TLS requirements. Installing a certificate and requiring its use
+  are separate decisions.
+
+Last tested against MariaDB 10.11.18 (Debian package). See
 [agent.md](../agent.md).
