@@ -113,6 +113,24 @@ type Destination struct {
 	// it into a second place. Trailing whitespace is stripped; nothing else is.
 	KeystorePasswordFile string `json:"keystore_password_file,omitempty"`
 
+	// KeystoreAlias names the private key entry inside the keystore.
+	//
+	// A keystore is a map and Java looks entries up by name. Without this the
+	// entry carries no name at all and the JDK falls back to a counter, calling
+	// it "1" — so a Tomcat connector with certificateKeyAlias="tomcat", which is
+	// what `keytool -genkeypair -alias tomcat` produces and what most existing
+	// server.xml files carry, cannot find the key. Tomcat reports a successful
+	// startup anyway, and this is the one platform with no configuration check,
+	// so nothing catches it.
+	//
+	// Deliberately not defaulted, and deliberately not supplied by a profile.
+	// An alias is matched exactly against a configuration file this agent
+	// cannot read, so any value chosen here would be a guess, and a wrong guess
+	// is a host looking at the right file and finding nothing in it. Left empty
+	// the entry is unnamed, which is what every keystore written before this
+	// field existed looks like.
+	KeystoreAlias string `json:"keystore_alias,omitempty"`
+
 	Owner string `json:"owner,omitempty"`
 	Group string `json:"group,omitempty"`
 	// CertMode and KeyMode are octal strings — "0644", "0640". Defaulted rather
@@ -213,8 +231,17 @@ func (d *Destination) validate() error {
 		if err := d.validateKeystore(); err != nil {
 			return err
 		}
-	} else if d.CertPath == "" || d.KeyPath == "" {
-		return fmt.Errorf("both cert_path and key_path are required")
+	} else {
+		if d.CertPath == "" || d.KeyPath == "" {
+			return fmt.Errorf("both cert_path and key_path are required")
+		}
+		// A PEM destination has no entry to name, so this would be accepted and
+		// then do nothing. An operator who set it believes their application
+		// will find the key by that name.
+		if strings.TrimSpace(d.KeystoreAlias) != "" {
+			return fmt.Errorf(
+				"keystore_alias names an entry inside a keystore, and this destination writes PEM. Set format to PKCS12, or remove it")
+		}
 	}
 	for field, p := range map[string]string{
 		"cert_path": d.CertPath, "key_path": d.KeyPath,
