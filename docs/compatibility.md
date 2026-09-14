@@ -46,5 +46,14 @@ Generated 2026-09-14 from core `8d5ff59`.
 ## The host agent
 
 <!-- BEGIN agent-compatibility -->
-_Not measured yet. `make agent-compatibility` writes this section._
+Whether this core still completes the whole agent lifecycle — enrol, grant,
+request, install, report — against a released agent. The last column is the
+check that cannot be satisfied by two systems that are merely both working: the
+SHA-256 the core recorded against the SHA-256 of the file actually on the host.
+
+| Agent | Version | Lifecycle | Detail |
+|:---|:---|:---|:---|
+| `certpilot-agent` | latest | pass | enrolled, requested, installed; the core's fingerprint matches the file on disk |
+
+Generated 2026-09-14 from core `9a8c8be`.
 <!-- END agent-compatibility -->
