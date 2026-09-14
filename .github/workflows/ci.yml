@@ -128,6 +128,84 @@ jobs:
         run: go test ./agent/... -v
         working-directory: ${{ github.workspace }}
 
+  iis:
+    name: IIS end to end
+    runs-on: windows-latest
+
+    # The bar every deployment profile is held to, applied to the first one that
+    # is not a Linux service. `make verify-profiles` starts the real service in
+    # a container, installs a certificate through the agent's own installer, and
+    # completes a TLS handshake proving the service served it. IIS cannot be run
+    # in a container, so it is run here instead — and the claim in the catalogue
+    # that this profile was verified against IIS is checked against the web
+    # server actually on this runner, so that it cannot quietly become a claim
+    # about a version nobody has used.
+    #
+    # This does not shell out to a Makefile target, unlike every Linux job. The
+    # Windows images do not ship make, which is why the agent's own Windows job
+    # above calls `go test` directly too.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Install IIS
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Web-Scripting-Tools is the WebAdministration PowerShell module, which
+          # is what the profile's bind command imports. Without it the binding
+          # step fails with "module not found" on a host that has IIS.
+          Install-WindowsFeature -Name Web-Server, Web-Scripting-Tools -IncludeManagementTools
+          if ((Get-Service W3SVC).Status -ne 'Running') { Start-Service W3SVC }
+
+      - name: Give Default Web Site an https binding with no certificate on it
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module WebAdministration
+          # Deliberately no certificate. The agent's job is to put one on an
+          # existing binding — it does not create sites or bindings, because
+          # that means choosing a port, an address and whether SNI is on. A
+          # fixture that pre-bound a certificate would leave the part that
+          # matters untested.
+          New-WebBinding -Name 'Default Web Site' -Protocol https -Port 443 -IPAddress '*'
+          Get-WebBinding -Name 'Default Web Site' | Format-List
+
+      - name: Install, renew and roll back against the running server
+        shell: powershell
+        run: |
+          # No $ErrorActionPreference here, unlike the steps around it. `go test`
+          # writes to stderr, and under Stop PowerShell turns a native command's
+          # stderr into a terminating error — which would fail this step on a
+          # passing test run. The exit status is the verdict, so it is read.
+          go test -tags iis -run TestIISServesWhatTheAgentInstalls -v ./agent/...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: The catalogue's claim is about this machine
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $line = Select-String -Path agent/profiles_catalogue.go -Pattern 'Verified:\s+"IIS ([^"]+)"'
+          if (-not $line) { Write-Error "the iis profile records no verification"; exit 1 }
+          $claim = $line.Matches[0].Groups[1].Value
+
+          $version = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\InetStp' -Name VersionString).VersionString `
+            -replace '^Version\s*', ''
+          $caption = (Get-CimInstance Win32_OperatingSystem).Caption
+          if ($caption -notmatch 'Server (\d{4})') { Write-Error "unrecognised Windows: $caption"; exit 1 }
+          $year = $Matches[1]
+
+          Write-Host "claim:  IIS $claim"
+          Write-Host "runner: IIS $version on Windows Server $year"
+          if ($claim -notlike "*$version*" -or $claim -notlike "*Server $year*") {
+            Write-Error ("the catalogue says this profile was verified against 'IIS {0}', and what just " +
+              "ran it was IIS {1} on Windows Server {2}. Update the Verified line." -f $claim, $version, $year)
+            exit 1
+          }
+
   lint:
     name: lint
     runs-on: ubuntu-latest
