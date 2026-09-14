@@ -13,7 +13,6 @@ longer does.
 | `certpilot-gateway-sdk` | The provider contract, published, plus the conformance probe |
 | `certpilot-agent-sdk` | The agent contract, published |
 | `certpilot-gateway-<ca>` | One per certificate authority — `-acme`, `-vault`, `-selfsigned` |
-| `cert-pilot-landing` | The public site. Spelled differently on purpose — see below |
 
 Two rules, and the first is the one that matters.
 
@@ -25,25 +24,6 @@ anything else is a gateway nobody finds.
 **No hyphen inside the word.** It is `certpilot`, not `cert-pilot`. The Go module
 paths, the container images and the organisation all spell it one way, and a
 second spelling is a thing every future reader has to check rather than know.
-
-### The one exception, and why it stays
-
-`cert-pilot-landing` breaks the second rule and is not going to be renamed.
-
-It is the repository Vercel builds the public site from, and the connection is
-to that repository under that owner. Renaming it, or moving it into the
-organisation, means reconnecting the project and reattaching the production
-domain — a live marketing site taken down to make a name tidier.
-
-The rule it breaks is a readability rule. Nothing resolves this name: no Go
-module path imports it, no container image is built from it, and no gateway
-search depends on it. The prefix rule above is the one with consequences, and
-this repository is not a gateway.
-
-So it is recorded here rather than left as an inconsistency somebody
-rediscovers, files, and has to reason about again from the start. If the site
-ever moves off Vercel, rename it then, when the cost is a redirect rather than
-an outage.
 
 ## Checkouts are siblings, not nested
 
