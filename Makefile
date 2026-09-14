@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes verify-profiles compatibility all build build-core build-agent test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes verify-profiles compatibility agent-lifecycle all build build-core build-agent test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -118,6 +118,17 @@ verify-profiles:
 ## docs/compatibility.md from what happened rather than from memory.
 compatibility:
 	./scripts/gateway-compatibility.sh $(GATEWAY)
+
+## Does this core still work with the agent? Enrol, grant, request, install and
+## report, against a real core, a real gateway and a real agent binary.
+##
+## Nothing else asks this. The core tests its handlers, the agent tests its
+## logic, and the contract between them is verified by neither.
+##
+##   make agent-lifecycle
+##   make agent-lifecycle AGENT_BIN=/path/to/certpilot-agent
+agent-lifecycle:
+	./scripts/agent-lifecycle.sh
 
 run-core:
 	$(GO) run ./core/cmd/ --config=config.dev.yaml
@@ -267,6 +278,7 @@ help:
 	@echo "  make routes                  Regenerate docs/routes.json from the router"
 	@echo "  make test-routes             Prove a failed regeneration damages nothing"
 	@echo "  make verify-profiles         Install to every platform, in containers"
+	@echo "  make agent-lifecycle         Enrol, request, install and report, end to end"
 	@echo ""
 	@echo "Check"
 	@echo "  make test                    Run all tests"
