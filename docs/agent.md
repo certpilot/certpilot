@@ -354,6 +354,7 @@ Elasticsearch estate was invisible to this agent until it could write one.
   "format": "PKCS12",
   "cert_path": "/opt/tomcat/conf/keystore.p12",
   "keystore_password_file": "/opt/tomcat/conf/keystore.pass",
+  "keystore_alias": "tomcat",
   "key_mode": "0600",
   "check": ["/opt/tomcat/bin/configtest.sh"],
   "reload": ["/bin/systemctl", "reload", "tomcat"]
@@ -378,6 +379,26 @@ before the reload, and the rollback from a captured copy if the reload fails.
 JDK since reads it natively, so this covers the modern JVM and the `.pfx` that
 Windows tooling and several appliances want. JKS is for an estate still on
 Java 8 and is not written by this build.
+
+#### Naming the entry
+
+A keystore is a map, and Java looks entries up by name. `keystore_alias` is that
+name.
+
+Leave it out and the entry is written unnamed, which the JDK reports as `1`
+because it falls back to a counter. That is correct for a configuration that
+does not name an alias, and wrong for one that does: a Tomcat connector with
+`certificateKeyAlias="tomcat"` — the conventional value, and what
+`keytool -genkeypair -alias tomcat` produces — cannot find the key, while Tomcat
+still reports a successful startup. Tomcat has no configuration check, so
+nothing catches that until post-renewal verification reports the endpoint
+serving the old certificate.
+
+There is no default and no profile supplies one. The value has to match a
+configuration file this agent cannot read, so anything chosen here would be a
+guess, and a wrong guess is a host looking at the right file and finding nothing
+in it. Setting it on a PEM destination is refused when the spec is read, rather
+than accepted and ignored.
 
 #### About that password
 

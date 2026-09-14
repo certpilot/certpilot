@@ -8,6 +8,121 @@ CA — it only knows the gRPC contract in
 That means a gateway can be written in any language with gRPC support, run
 anywhere the core can reach, and be deployed and upgraded independently.
 
+**It goes in your own repository.** There is no `gateways/` directory in the
+core to add one to. The three gateways CertPilot maintains each live in a
+repository of their own and build against the published module with no
+`replace` directive, which is the only real test of whether a contract is
+published or merely copied. Nothing about being outside this project makes a
+gateway second-class: the core reaches yours the same way it reaches those,
+over the network, through the same contract.
+
+The `certpilot-gateway-` prefix is worth keeping. It is what makes a gateway
+findable on a GitHub search, and what lets this project point at community
+gateways without vouching for them.
+
+## Start with one that answers
+
+Before any of the contract below, get a process running that the conformance
+probe can talk to. Eight methods is a lot to read cold; two of them take a few
+minutes and make the rest concrete.
+
+```bash
+mkdir certpilot-gateway-my-ca && cd certpilot-gateway-my-ca
+go mod init github.com/you/certpilot-gateway-my-ca
+go get github.com/certpilot/certpilot-gateway-sdk
+```
+
+```go
+package main
+
+import (
+    "context"
+    "flag"
+    "log/slog"
+    "os"
+
+    "github.com/certpilot/certpilot-gateway-sdk/grpckit"
+    commonv1 "github.com/certpilot/certpilot-gateway-sdk/pb/common/v1"
+    providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
+    "google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// Embedding the generated Unimplemented server is what lets this compile with
+// six methods missing: each one answers codes.Unimplemented, which is the
+// correct answer for something not written yet rather than a build failure.
+type Provider struct {
+    providerv1.UnimplementedCertificateProviderServiceServer
+}
+
+func (p *Provider) GetCapabilities(
+    context.Context, *providerv1.GetCapabilitiesRequest,
+) (*providerv1.GetCapabilitiesResponse, error) {
+    return &providerv1.GetCapabilitiesResponse{
+        Capabilities: &commonv1.ProviderCapabilities{
+            ProviderName:      "my-ca",
+            ProviderVersion:   "0.1.0",
+            ProviderType:      "custom",
+            SupportedKeyTypes: []string{"ECDSA"},
+            Description:       "Answers metadata; issues nothing yet",
+        },
+    }, nil
+}
+
+func (p *Provider) HealthCheck(
+    context.Context, *providerv1.HealthCheckRequest,
+) (*providerv1.HealthCheckResponse, error) {
+    return &providerv1.HealthCheckResponse{
+        Status:    commonv1.HealthStatus_HEALTH_STATUS_HEALTHY,
+        CheckedAt: timestamppb.Now(),
+    }, nil
+}
+
+func main() {
+    port := flag.Int("port", 9094, "gRPC port")
+    flag.Parse()
+
+    opts := grpckit.DefaultServerOptions()
+    opts.Port = *port
+    opts.TLS = grpckit.TLSConfig{Insecure: true} // development only
+
+    server, err := grpckit.NewServer(opts)
+    if err != nil {
+        slog.Error("could not create the server", "error", err)
+        os.Exit(1)
+    }
+    providerv1.RegisterCertificateProviderServiceServer(server, &Provider{})
+    if err := grpckit.Serve(server, *port); err != nil {
+        slog.Error("gateway stopped", "error", err)
+        os.Exit(1)
+    }
+}
+```
+
+Run it, and ask the conformance probe what you have:
+
+```bash
+go run . -port 9094 &
+go run github.com/certpilot/certpilot-gateway-sdk/cmd/conformance@latest \
+    -addr localhost:9094 -insecure -domain test.example.com
+```
+
+```
+provider.v1 conformance — localhost:9094
+
+  ok    GetCapabilities                          my-ca (custom), key types ECDSA
+  ok    HealthCheck                              HEALTH_STATUS_HEALTHY
+  FAIL  ValidateConfig (rejects malformed JSON)  the call failed: ... not implemented
+  --    ValidateConfig (accepts the real one)    skipped: no -config was supplied
+  --    GetCAInfo                                skipped: the gateway reports supports_ca_info=false
+  FAIL  IssueCertificate                         the call failed: ... not implemented
+  FAIL  IssueCertificate (honours csr_pem)       the call failed: ... not implemented
+
+2 passed, 3 failed, 2 skipped, 0 advisory
+```
+
+That list is the rest of this page, in the order it is worth doing. The
+remainder explains what each of those calls has to return and why.
+
 ## The contract
 
 ```protobuf
@@ -91,10 +206,6 @@ mkdir -p certpilot-gateway-my-ca/cmd && cd certpilot-gateway-my-ca
 go mod init github.com/you/certpilot-gateway-my-ca
 go get github.com/certpilot/certpilot-gateway-sdk
 ```
-
-The `certpilot-gateway-` prefix is worth keeping: it is what makes a gateway
-findable on a GitHub search, and what lets this project point at community
-gateways without vouching for them.
 
 Then implement the service:
 
@@ -212,22 +323,6 @@ by the core in production mode.
 Non-Go gateways need the same: TLS 1.3, client certificate required, verified
 against the CertPilot control-plane CA.
 
-## Registering it
-
-```bash
-curl -X POST localhost:8080/api/v1/ca-accounts \
-  -H 'Content-Type: application/json' -d '{
-    "name": "my-custom-ca",
-    "provider_type": "custom",
-    "gateway_addr": "localhost:9094",
-    "server_name": "localhost",
-    "config": {"endpoint": "https://ca.internal", "api_token": "..."}
-  }'
-```
-
-The core connects, calls `GetCapabilities`, then `ValidateConfig`. If validation
-fails, nothing is stored and the errors come back to the operator.
-
 ## Testing
 
 Test the provider directly — it is a plain gRPC service, so no server is needed:
@@ -291,11 +386,28 @@ later as a certificate that does not match its private key.
 ## Registering it with a core
 
 A gateway is reachable over the network, so the core does not need to have heard
-of it and there is no plugin registry to be listed in:
+of it and there is no plugin registry to be listed in. Registering one is a
+single call:
 
+```bash
+curl -X POST localhost:8080/api/v1/ca-accounts \
+  -H 'Content-Type: application/json' -d '{
+    "name": "my-custom-ca",
+    "provider_type": "custom",
+    "gateway_addr": "gateway-my-ca.internal:9094",
+    "server_name": "gateway-my-ca.internal",
+    "config": {"endpoint": "https://ca.internal", "api_token": "..."}
+  }'
 ```
-POST /api/v1/ca-accounts   { "gateway_addr": "gateway-my-ca.internal:9094", ... }
-```
+
+The core connects, calls `GetCapabilities`, then `ValidateConfig`. If validation
+fails nothing is stored and the errors come back to the operator, which is why
+`ValidateConfig` is worth implementing properly — it is the last moment a wrong
+API token is a message on a screen rather than a failed renewal at three in the
+morning.
+
+`config` is whatever your gateway expects. The core stores it encrypted, never
+inspects it, and hands it back as `provider_config` on every call.
 
 **What CertPilot will not do for you:** there is no discovery mechanism, and no
 compatibility testing of gateways this project does not build. The conformance
