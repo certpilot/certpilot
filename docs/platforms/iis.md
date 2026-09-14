@@ -168,7 +168,11 @@ When a bind, a reload or a verify fails:
    a binding still names turns a service serving the wrong certificate into one
    serving nothing, which is not recoverable by trying again.
 3. **If the binding cannot be returned, the imported certificate is left in
-   place** and the failure says so. This is the case that needs a person.
+   place** and the failure says so. This is the case that needs a person. The
+   likeliest way to reach it is the previous certificate having been removed
+   from the store by hand: the agent can only bind a thumbprint the store still
+   holds, and leaving a binding pointing at nothing would be worse than leaving
+   the wrong certificate on it.
 
 Two cases have no rollback and are reported rather than guessed at:
 

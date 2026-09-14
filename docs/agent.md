@@ -303,9 +303,12 @@ reloaded by some other means, and the profile's reload command is not
 substituted. Deployments that keep certificates in non-standard locations are
 therefore still able to use a profile for the remaining fields.
 
-`{{ .Certificate }}` in any path is replaced with the certificate's name. It is
-the only placeholder supported, and any other text in double braces is rejected
-when the file is read, rather than written to disk as a literal filename.
+`{{ .Certificate }}` in any path, or in `verify`, is replaced with the
+certificate's name. The one other placeholder is `{{ .Thumbprint }}`, which
+applies only to `bind` on a Windows certificate store destination and is
+replaced with the thumbprint of the certificate just imported. Any other text in
+double braces is rejected when the file is read, rather than written to disk as
+a literal filename.
 
 | Profile | Platform | Verified against |
 |:---|:---|:---|
@@ -318,13 +321,25 @@ when the file is read, rather than written to disk as a literal filename.
 | `mariadb` | MariaDB and MySQL | MariaDB 10.11.18, Debian package |
 | `postfix` | Postfix | Postfix 3.7.11, Debian package |
 | `dovecot` | Dovecot | Dovecot 2.3.19.1, Debian package |
+| `iis` | Microsoft IIS | IIS 10.0 on Windows Server 2022 |
 
-Each profile is tested by `make verify-profiles`, which starts the service in a
-container with one certificate, installs a different one using the agent, runs
-the profile's check and reload commands, and then opens a TLS connection from
-outside the container to confirm the service returns the newly installed
+Each Linux profile is tested by `make verify-profiles`, which starts the service
+in a container with one certificate, installs a different one using the agent,
+runs the profile's check and reload commands, and then opens a TLS connection
+from outside the container to confirm the service returns the newly installed
 certificate and its chain. Profiles that have not passed this test are not
 included.
+
+`iis` is held to the same standard and cannot be tested the same way, because
+IIS does not run in a container. It is tested in CI on a Windows runner: an
+install, a renewal, and a deliberately unprovable install, with a TLS handshake
+after each — see [how this platform is
+tested](platforms/iis.md#how-this-platform-is-tested).
+
+A profile for one platform is refused on the other, when the file is read. The
+Linux profiles reload with `systemctl` and write under `/etc`, and `iis` installs
+into a certificate store; either applied to the wrong host would produce a
+destination that validates and installs nothing.
 
 ### Detection
 
@@ -382,12 +397,18 @@ Elasticsearch estate was invisible to this agent until it could write one.
 }
 ```
 
-**`check` and `reload` run with `PATH` and nothing else.** The agent clears the
-environment before running either, so that a command named in this file cannot
-read whatever put the agent's own environment together — an enrolment token, a
-server address. It costs one thing worth knowing: a command that needs a
-variable must set it itself, which is why `catalina.sh` called directly needs
-`JAVA_HOME` and the same command through `systemctl` does not.
+**`check`, `reload` and `bind` run with a bare environment.** The agent clears
+its own before running any of them, so that a command named in this file cannot
+read whatever put the agent's environment together — an enrolment token, a
+server address. On Unix that is `PATH` and nothing else. On Windows it is the
+few variables a command cannot start without — `SystemRoot`, a system `PATH`,
+`PATHEXT`, `ComSpec`, a machine temporary directory, and `PSModulePath`, without
+which `Import-Module WebAdministration` finds nothing — all derived from
+`SystemRoot` rather than copied from the agent's own environment.
+
+It costs one thing worth knowing: a command that needs any other variable must
+set it itself, which is why `catalina.sh` called directly needs `JAVA_HOME` and
+the same command through `systemctl` does not.
 
 `cert_path` is the keystore, and `key_path` must be omitted — the key is inside
 it, and naming a second path would write it to disk in the clear as well.
@@ -438,6 +459,38 @@ application does not have to copy it into a second place. Exactly one, and
 omitting both is refused when the spec is read rather than when the install
 runs.
 
+### The Windows certificate store, for IIS
+
+IIS binds a certificate by thumbprint out of `LocalMachine\My` and reads no
+file, and neither do Exchange, ADFS, Network Policy Server or Remote Desktop
+Services. A destination for one of those names a `store` instead of paths.
+
+```json
+{
+  "name": "iis",
+  "certificate": "www.example.com",
+  "profile": "iis",
+  "verify": "{{ .Certificate }}:443"
+}
+```
+
+The profile fills in `store` and the `bind` command. `bind` is what re-points
+whatever serves TLS at the certificate just imported, with `{{ .Thumbprint }}`
+substituted into it — a command rather than something the agent knows, because
+each of the five consumers of the store binds differently.
+
+`cert_path`, `key_path`, `format`, the keystore fields, the file modes and
+`owner`/`group` are all refused on such a destination: nothing is written to
+disk, so every one of them would be a setting an operator believed had taken
+effect. `check` is refused too, and that one is a statement about the platform
+rather than about the destination — nothing on Windows reports in advance
+whether a binding that has not been made yet will work. `verify` is what is
+offered instead, and it runs after the binding rather than before it.
+
+[The IIS page](platforms/iis.md) covers the rest: where each certificate in the
+chain goes, why a self-signed root is imported nowhere, and the order a rollback
+happens in.
+
 ---
 
 ```bash
@@ -454,6 +507,17 @@ capture what is there  →  write atomically  →  run check  →  run reload
                                    └── check fails → restore the previous bytes
 ```
 
+A certificate store destination has the same shape and different steps, because
+there is no file to capture and no check to run before the fact:
+
+```
+read the previous thumbprint  →  import  →  run bind  →  run verify
+                                              │
+                                              └── verify fails → bind the
+                                                  previous thumbprint, then
+                                                  remove what was imported
+```
+
 **Atomic writes.** A temp file in the same directory, `chmod` before `rename`,
 `Sync()` before `rename`. A server reading a half-written certificate is a
 server that has stopped serving TLS.
@@ -462,8 +526,9 @@ server that has stopped serving TLS.
 contents come back and the reload never happens. A bad certificate that fails a
 config check leaves the server exactly as it was.
 
-**No shell.** `check` and `reload` are argv arrays executed directly, with a
-bare `PATH=/usr/sbin:/usr/bin:/sbin:/bin`. There is no string to inject into.
+**No shell.** `check`, `reload` and `bind` are argv arrays executed directly,
+with the bare environment described above — `PATH=/usr/sbin:/usr/bin:/sbin:/bin`
+on Unix. There is no string to inject into.
 
 **A combined file** — one path holding certificate and key, which HAProxy wants
 — is refused if `cert_mode` would make it world-readable. The key is in that
