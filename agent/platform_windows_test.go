@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"unsafe"
 
+	"github.com/certpilot/certpilot-agent-sdk/agentauth"
 	"golang.org/x/sys/windows"
 )
 
@@ -30,30 +30,9 @@ func dacl(t *testing.T, path string) (*windows.ACL, windows.SECURITY_DESCRIPTOR_
 	return acl, control
 }
 
-// trustees lists the SIDs an ACL grants anything to.
-func trustees(t *testing.T, acl *windows.ACL) []*windows.SID {
-	t.Helper()
-	if acl == nil {
-		return nil
-	}
-	var out []*windows.SID
-	for i := uint32(0); i < uint32(acl.AceCount); i++ {
-		var ace *windows.ACCESS_ALLOWED_ACE
-		if err := windows.GetAce(acl, i, &ace); err != nil {
-			t.Fatalf("could not read entry %d: %v", i, err)
-		}
-		if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE {
-			continue
-		}
-		out = append(out, (*windows.SID)(unsafe.Pointer(uintptr(unsafe.Pointer(ace))+
-			unsafe.Offsetof(ace.SidStart))))
-	}
-	return out
-}
-
 func grants(t *testing.T, acl *windows.ACL, who *windows.SID) bool {
 	t.Helper()
-	for _, sid := range trustees(t, acl) {
+	for _, sid := range aclTrustees(acl) {
 		if windows.EqualSid(sid, who) {
 			return true
 		}
@@ -188,5 +167,67 @@ func TestOwnerAndGroupAreRefused(t *testing.T) {
 				t.Errorf("the message does not explain it: %v", err)
 			}
 		})
+	}
+}
+
+// TestAnIdentityKeyGrantingEveryoneIsRefused is the Windows counterpart of
+// TestAReadableKeyIsRefusedRatherThanWarnedAbout.
+//
+// The Unix test chmods the key to 0644 and expects the agent to refuse to
+// start. os.Chmod cannot express that on Windows, so the condition is created
+// the way it actually arises here: an ACL that grants a broad group.
+//
+// Refused rather than warned about, for the same reason. An identity key other
+// accounts can read means every one of those accounts can speak to CertPilot as
+// this machine.
+func TestAnIdentityKeyGrantingEveryoneIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	_, priv, err := agentauth.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveIdentity(dir, priv, State{AgentID: "a", Server: "s"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	// As saved, it loads.
+	if _, _, err := LoadIdentity(dir); err != nil {
+		t.Fatalf("a freshly saved identity was refused: %v", err)
+	}
+
+	// Now hand it to Everyone, which is what an operator copying the file about
+	// with inheritance on would do.
+	everyone, err := windows.CreateWellKnownSid(windows.WinWorldSid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loose, err := windows.ACLFromEntries([]windows.EXPLICIT_ACCESS{{
+		AccessPermissions: windows.GENERIC_ALL,
+		AccessMode:        windows.GRANT_ACCESS,
+		Inheritance:       windows.NO_INHERITANCE,
+		Trustee: windows.TRUSTEE{
+			TrusteeForm:  windows.TRUSTEE_IS_SID,
+			TrusteeType:  windows.TRUSTEE_IS_WELL_KNOWN_GROUP,
+			TrusteeValue: windows.TrusteeValueFromSID(everyone),
+		},
+	}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := filepath.Join(dir, keyFile)
+	if err := windows.SetNamedSecurityInfo(key, windows.SE_FILE_OBJECT,
+		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
+		nil, nil, loose, nil); err != nil {
+		t.Fatalf("could not loosen the key: %v", err)
+	}
+
+	_, _, err = LoadIdentity(dir)
+	if err == nil {
+		t.Fatal("an identity key readable by Everyone must be refused")
+	}
+	// Whoever hits this is trying to get an agent running, so the message has
+	// to name the file and say what to do.
+	if !strings.Contains(err.Error(), "other accounts on this host") {
+		t.Errorf("the error does not explain the problem: %v", err)
 	}
 }

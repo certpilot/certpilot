@@ -110,21 +110,36 @@ func SaveIdentity(dir string, key ed25519.PrivateKey, state State) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("could not create the state directory %s: %w", dir, err)
 	}
+	if err := restrictToOwner(dir, 0o700); err != nil {
+		return fmt.Errorf("could not restrict access to the state directory: %w", err)
+	}
 
 	encoded, err := agentauth.EncodePrivateKey(key)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, keyFile), []byte(encoded), 0o600); err != nil {
+	keyPath := filepath.Join(dir, keyFile)
+	if err := os.WriteFile(keyPath, []byte(encoded), 0o600); err != nil {
 		return fmt.Errorf("could not write the identity key: %w", err)
+	}
+	// The mode above is the enforcement on Unix and is ignored on Windows,
+	// where the same statement has to be made as an ACL. Without this the
+	// identity key inherits whatever the directory grants, and LoadIdentity
+	// refuses to start — which is the safe direction, and still a broken agent.
+	if err := restrictToOwner(keyPath, 0o600); err != nil {
+		return fmt.Errorf("could not restrict access to the identity key: %w", err)
 	}
 
 	body, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, stateFile), append(body, '\n'), 0o600); err != nil {
+	statePath := filepath.Join(dir, stateFile)
+	if err := os.WriteFile(statePath, append(body, '\n'), 0o600); err != nil {
 		return fmt.Errorf("could not write the agent state: %w", err)
+	}
+	if err := restrictToOwner(statePath, 0o600); err != nil {
+		return fmt.Errorf("could not restrict access to the agent state: %w", err)
 	}
 	return nil
 }
@@ -145,10 +160,11 @@ func LoadIdentity(dir string) (ed25519.PrivateKey, State, error) {
 		return nil, state, fmt.Errorf(
 			"no identity in %s — run `certpilot-agent enrol` on this host first: %w", dir, err)
 	}
-	if mode := info.Mode().Perm(); mode&0o077 != 0 {
-		return nil, state, fmt.Errorf(
-			"%s is mode %04o, which lets other accounts on this host read this agent's identity key. Run: chmod 600 %s",
-			keyPath, mode, keyPath)
+	// Asked of the platform rather than of the mode. Go reports every file on
+	// Windows as 0666, so a mode test here refuses every key on every Windows
+	// host — which is what it did the first time this ran on one.
+	if err := keyIsPrivate(keyPath, info); err != nil {
+		return nil, state, err
 	}
 
 	raw, err := os.ReadFile(keyPath)

@@ -50,3 +50,15 @@ func restrictToOwner(path string, mode os.FileMode) error { return nil }
 // ownershipSupported reports whether owner and group on a destination mean
 // anything here. They are uids, so: yes.
 func ownershipSupported() bool { return true }
+
+// keyIsPrivate reports whether a key file is readable only by its owner.
+//
+// The mode is the enforcement here, so the mode is what is read.
+func keyIsPrivate(path string, info os.FileInfo) error {
+	if mode := info.Mode().Perm(); mode&0o077 != 0 {
+		return fmt.Errorf(
+			"%s is mode %04o, which lets other accounts on this host read this agent's identity key. Run: chmod 600 %s",
+			path, mode, path)
+	}
+	return nil
+}

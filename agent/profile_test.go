@@ -169,8 +169,12 @@ func TestEveryProfileNamesAbsolutePathsAndCommands(t *testing.T) {
 					t.Errorf("%q is not an absolute path", path)
 				}
 			}
+			// Compared against "/" rather than with filepath.IsAbs, which asks
+			// whether a path is absolute on the machine running the test. These
+			// profiles describe Linux hosts wherever they are read, and on
+			// Windows filepath.IsAbs says /usr/sbin/apachectl is relative.
 			for _, argv := range [][]string{p.Check, p.Reload} {
-				if len(argv) > 0 && !filepath.IsAbs(argv[0]) {
+				if len(argv) > 0 && !strings.HasPrefix(argv[0], "/") {
 					t.Errorf("%q is not an absolute command; this runs with the service "+
 						"manager's PATH, not an operator's", argv[0])
 				}

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -165,3 +166,87 @@ func currentUserSID() (*windows.SID, error) {
 // Accepting them and doing nothing would leave an operator believing a service
 // account can read a key it cannot, so they are refused when the spec is read.
 func ownershipSupported() bool { return false }
+
+// broadSIDs are the groups an ordinary account on this host belongs to. A
+// private key granting any of them anything is a key every user can read.
+func broadSIDs() ([]*windows.SID, error) {
+	var out []*windows.SID
+	for _, id := range []windows.WELL_KNOWN_SID_TYPE{
+		windows.WinWorldSid,             // Everyone
+		windows.WinAuthenticatedUserSid, // Authenticated Users
+		windows.WinBuiltinUsersSid,      // BUILTIN\\Users
+	} {
+		sid, err := windows.CreateWellKnownSid(id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sid)
+	}
+	return out, nil
+}
+
+// keyIsPrivate reports whether a key file is readable only by its owner.
+//
+// Not the mode, which is why this is not shared with the Unix implementation.
+// Go reports every file on Windows as 0666, or 0444 when the read-only
+// attribute is set, because that is all the attribute bits can say. Reading the
+// mode here would refuse every key on every Windows host, which is what the
+// first run of this on a real Windows runner did.
+//
+// The question the mode was asking — can another account read this — is
+// answered by the ACL.
+func keyIsPrivate(path string, _ os.FileInfo) error {
+	sd, err := windows.GetNamedSecurityInfo(
+		path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return fmt.Errorf("could not read the permissions of %s: %w", path, err)
+	}
+	control, _, err := sd.Control()
+	if err != nil {
+		return fmt.Errorf("could not read the permissions of %s: %w", path, err)
+	}
+	if control&windows.SE_DACL_PROTECTED == 0 {
+		return fmt.Errorf(
+			"%s inherits its permissions from the directory above it, so who can read this agent's "+
+				"identity key is decided by that directory rather than by this agent. Re-run "+
+				"`certpilot-agent enrol`, or remove inheritance from the file", path)
+	}
+	acl, _, err := sd.DACL()
+	if err != nil {
+		return fmt.Errorf("could not read the permissions of %s: %w", path, err)
+	}
+	broad, err := broadSIDs()
+	if err != nil {
+		return err
+	}
+	for _, sid := range aclTrustees(acl) {
+		for _, wide := range broad {
+			if windows.EqualSid(sid, wide) {
+				return fmt.Errorf(
+					"%s grants access to %s, which lets other accounts on this host read this agent's "+
+						"identity key. Re-run `certpilot-agent enrol`", path, wide.String())
+			}
+		}
+	}
+	return nil
+}
+
+// aclTrustees lists the SIDs an ACL grants anything to.
+func aclTrustees(acl *windows.ACL) []*windows.SID {
+	if acl == nil {
+		return nil
+	}
+	var out []*windows.SID
+	for i := uint32(0); i < uint32(acl.AceCount); i++ {
+		var ace *windows.ACCESS_ALLOWED_ACE
+		if err := windows.GetAce(acl, i, &ace); err != nil {
+			continue
+		}
+		if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE {
+			continue
+		}
+		out = append(out, (*windows.SID)(unsafe.Pointer(uintptr(unsafe.Pointer(ace))+
+			unsafe.Offsetof(ace.SidStart))))
+	}
+	return out
+}
