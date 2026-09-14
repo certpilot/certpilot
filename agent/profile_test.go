@@ -141,6 +141,12 @@ func TestThePlaceholderExpandsWithoutAProfile(t *testing.T) {
 func TestEveryProfileProducesAnInstallableDestination(t *testing.T) {
 	for _, p := range Profiles() {
 		t.Run(p.Name, func(t *testing.T) {
+			if !p.RunsHere() {
+				// The counterpart for this one is in store_windows_test.go,
+				// which runs on the platform it describes. Loading it here
+				// would assert the refusal rather than the profile.
+				t.Skipf("%q is a %s profile and this is not %s", p.Name, p.OS, p.OS)
+			}
 			body := `{"destinations":[{"name":"x","certificate":"www.example.com","profile":"` +
 				p.Name + `"` + keystoreFields(p) + `}]}`
 			if _, err := writeSpec(t, body); err != nil {
@@ -162,24 +168,88 @@ func keystoreFields(p Profile) string {
 func TestEveryProfileNamesAbsolutePathsAndCommands(t *testing.T) {
 	for _, p := range Profiles() {
 		t.Run(p.Name, func(t *testing.T) {
+			absolute := absoluteOn(p.OS)
 			for _, path := range append(append([]string{}, p.Detect...),
 				p.CertPath, p.KeyPath, p.ChainPath, p.FullChainPath) {
 				if path == "" {
 					continue
 				}
-				if !strings.HasPrefix(path, "/") {
-					t.Errorf("%q is not an absolute path", path)
+				if !absolute(path) {
+					t.Errorf("%q is not an absolute path on %s", path, p.OS)
 				}
 			}
-			// Compared against "/" rather than with filepath.IsAbs, which asks
-			// whether a path is absolute on the machine running the test. These
-			// profiles describe Linux hosts wherever they are read, and on
-			// Windows filepath.IsAbs says /usr/sbin/apachectl is relative.
-			for _, argv := range [][]string{p.Check, p.Reload} {
-				if len(argv) > 0 && !strings.HasPrefix(argv[0], "/") {
+			// Checked against the shape a path has on the platform the profile
+			// describes, rather than with filepath.IsAbs, which asks whether a
+			// path is absolute on the machine running the test. These profiles
+			// describe their own platform wherever they are read: on Windows
+			// filepath.IsAbs calls /usr/sbin/apachectl relative, and on Linux it
+			// says the same of C:\Windows\System32.
+			for _, argv := range [][]string{p.Check, p.Reload, p.Bind} {
+				if len(argv) > 0 && !absolute(argv[0]) {
 					t.Errorf("%q is not an absolute command; this runs with the service "+
 						"manager's PATH, not an operator's", argv[0])
 				}
+			}
+		})
+	}
+}
+
+// absoluteOn is "does this path start at the root" for one platform, written
+// out because the standard library only answers it for the host.
+func absoluteOn(goos string) func(string) bool {
+	if goos == "windows" {
+		return func(path string) bool {
+			return len(path) > 2 && path[1] == ':' && path[2] == '\\'
+		}
+	}
+	return func(path string) bool { return strings.HasPrefix(path, "/") }
+}
+
+// Detection is a prompt for a person, so it must not prompt for something the
+// next step refuses. On Windows an absolute Unix path is resolved against the
+// current drive, which makes C:\etc\nginx\nginx.conf a file that can exist.
+func TestDetectionOnlyReportsProfilesThatCanBeUsedHere(t *testing.T) {
+	for _, p := range DetectProfiles() {
+		if !p.RunsHere() {
+			t.Errorf("profile %q was detected on this host and would be refused if it were named", p.Name)
+		}
+	}
+}
+
+// A store profile has to produce a destination the installer will accept, and
+// that is checked on the platform it describes — but the shape of what it
+// carries can be checked anywhere, and the failure it prevents is silent. A
+// bind command with no thumbprint in it runs, exits 0, and re-points nothing;
+// the host serves the old certificate until it expires.
+func TestEveryStoreProfileCanBind(t *testing.T) {
+	for _, p := range Profiles() {
+		if p.Store == "" {
+			if len(p.Bind) > 0 || p.Verify != "" {
+				t.Errorf("profile %q sets bind or verify and names no store, so neither would apply", p.Name)
+			}
+			continue
+		}
+		t.Run(p.Name, func(t *testing.T) {
+			if _, err := parseStoreName(p.Store); err != nil {
+				t.Errorf("store %q: %v", p.Store, err)
+			}
+			if len(p.Bind) == 0 {
+				t.Fatal("names a store and no bind, so it would import a certificate and re-point nothing at it")
+			}
+			if !hasThumbprintPlaceholder(p.Bind) {
+				t.Errorf("bind carries no %s, so every renewal would re-run the same binding", thumbprintPlaceholder)
+			}
+			for _, arg := range p.Bind {
+				rest := strings.ReplaceAll(arg, thumbprintPlaceholder, "")
+				if left := remainingPlaceholder(rest); left != "" {
+					t.Errorf("bind contains %q, which is not a placeholder the agent substitutes", left)
+				}
+			}
+			// Proves the substitution reaches the command rather than merely
+			// being present in it: a thumbprint is what the whole step turns on.
+			bound := withThumbprint(p.Bind, "ABCD")
+			if !strings.Contains(strings.Join(bound, " "), "ABCD") {
+				t.Error("substituting a thumbprint into bind produced a command without it")
 			}
 		})
 	}

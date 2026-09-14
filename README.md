@@ -172,11 +172,11 @@ core depends on none of them at build time — only on the published contract:
 
 Separately, a **host agent** runs on the machines where certificates are served.
 It generates its own private keys and never sends them anywhere — CertPilot
-cannot produce them and does not claim to. It runs on Linux, and on Windows for
-destinations that are files; see [where it runs](docs/agent.md#where-it-runs). Its contract is published too, in
+cannot produce them and does not claim to. It runs on Linux and on Windows,
+where it also installs into the certificate store IIS reads from; see [where it
+runs](docs/agent.md#where-it-runs). Its contract is published too, in
 [`certpilot-agent-sdk`](https://github.com/certpilot/certpilot-agent-sdk), so an
-agent can be a Kubernetes operator or a Python daemon rather than this binary —
-which is also how a Windows host is deployed to.
+agent can be a Kubernetes operator or a Python daemon rather than this binary.
 
 [docs/architecture.md](docs/architecture.md) explains the three decisions the
 whole design follows from.

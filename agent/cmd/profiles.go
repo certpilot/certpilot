@@ -52,11 +52,11 @@ func runProfiles(args []string) error {
 	if *asJSON {
 		return printJSON(all)
 	}
-	fmt.Printf("%d platforms. Each one has been installed to: a container running the\n", len(all))
-	fmt.Print("real service, a certificate installed by this agent, and a TLS handshake\n")
-	fmt.Print("proving the service served it after its own reload.\n\n")
+	fmt.Printf("%d platforms. Each one has been installed to for real: the service running,\n", len(all))
+	fmt.Print("a certificate installed by this agent, and a TLS handshake proving the service\n")
+	fmt.Print("served it after its own reload.\n\n")
 	for _, p := range all {
-		fmt.Printf("  %-12s %s\n", p.Name, p.Platform)
+		fmt.Printf("  %-12s %s%s\n", p.Name, p.Platform, elsewhere(p))
 		fmt.Printf("  %-12s %s\n", "", p.Summary)
 		fmt.Println()
 	}
@@ -79,6 +79,17 @@ func printProfile(p agent.Profile) {
 			fmt.Printf("  %-16s %s\n", label, value)
 		}
 	}
+	if p.Store != "" {
+		// A store destination writes no file, so none of the rows below it
+		// apply and printing them empty would suggest they were available.
+		row("store", p.Store)
+		row("bind", strings.Join(p.Bind, " "))
+		row("verify", orDefault(p.Verify, "— none unless you set one; see below"))
+		row("reload", strings.Join(p.Reload, " "))
+		fmt.Println()
+		printFooter(p)
+		return
+	}
 	row("format", orDefault(p.Format, "PEM"))
 	row("cert_path", p.CertPath)
 	row("key_path", p.KeyPath)
@@ -96,6 +107,10 @@ func printProfile(p agent.Profile) {
 	row("reload", strings.Join(p.Reload, " "))
 	fmt.Println()
 
+	printFooter(p)
+}
+
+func printFooter(p agent.Profile) {
 	if len(p.Detect) > 0 {
 		fmt.Print("Looked for on this host:\n\n")
 		for _, d := range p.Detect {
@@ -110,15 +125,33 @@ func printProfile(p agent.Profile) {
 			fmt.Println(wrap("  - ", "    ", n))
 		}
 	}
+	if !p.RunsHere() {
+		fmt.Printf("\nThis profile is for %s. Naming it on this host is refused when the\n", p.OS)
+		fmt.Print("install spec is read, rather than half-applied.\n")
+	}
 	if p.Verified != "" {
 		fmt.Printf("\nVerified against %s.\n", p.Verified)
 	}
+}
+
+// elsewhere marks a listed profile that cannot be used on this host.
+func elsewhere(p agent.Profile) string {
+	if p.RunsHere() {
+		return ""
+	}
+	return "  (" + p.OS + " only)"
 }
 
 // extraFields names what a profile cannot supply and the operator must.
 func extraFields(p agent.Profile) string {
 	if p.Format == agent.FormatPKCS12 {
 		return ",\n    \"keystore_password_file\": \"/etc/certpilot/keystore-password\""
+	}
+	if p.Store != "" {
+		// Not required, and shown anyway. It is the only check this platform
+		// has, and a destination without it installs a certificate and never
+		// looks to see whether anything is serving it.
+		return ",\n    \"verify\": \"{{ .Certificate }}:443\""
 	}
 	return ""
 }

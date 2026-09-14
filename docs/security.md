@@ -534,15 +534,28 @@ variable-length string — so it needs a `CPS2` envelope with the old one still
 readable. Worth doing, and deliberately not bundled with the provider work,
 because a mistake in that code is unrecoverable loss of every stored key.
 
-**The private key permission guarantee is Unix-only.** The agent writes a
-private key `0600`, restores its previous ownership, and refuses a mode that
-would make it readable by any account on the host — `0640` with a group is
-allowed, because that is how it is normally and correctly done. All of that is
-Unix file modes and ownership, and it is the whole of how the guarantee is
-enforced. There is no Windows agent, and the code does not compile for Windows,
-so nothing is silently unprotected today. It is recorded here because it is the
-reason a Windows port is not a build flag: the guarantee has to be re-expressed
-as an ACL before an agent could run there and still make the same promise.
+**On Windows, the private key guarantee is an ACL and administrators are on
+it.** On Unix the guarantee is a file mode: the agent writes a private key
+`0600`, restores its previous ownership, and refuses a mode that would make it
+readable by any account on the host — `0640` with a group is allowed, because
+that is how it is normally and correctly done.
+
+Windows has no file modes. `os.WriteFile` accepts a `0600` and ignores it, and
+Go reports every file there as `0666` whatever its permissions actually are, so
+a port that only made the code compile would write keys that looked correct and
+were readable by everyone. The guarantee is therefore re-expressed: an explicit
+access control list on every key the agent writes, granting the account it runs
+as, `SYSTEM` and the local administrators, with inheritance switched off. A key
+imported into the certificate store is held by the storage provider under the
+same three, and is marked non-exportable.
+
+`SYSTEM` and the local administrators are on that list deliberately, and it is
+the difference worth recording here. On Unix a `0600` key is not readable by
+other accounts including, in practice, the ones an operator uses; on Windows an
+administrator can take ownership of anything on the machine in one command, so
+excluding them would buy nothing and cost the ability to back the key up or to
+see it from the endpoint tooling every Windows estate runs. What the ACL removes
+is other *ordinary* accounts, which is the threat it can actually answer.
 
 **Deployment waves stop at the job level, not the estate level.** A wave holds
 per certificate. Two certificates rolling out at once do not coordinate, so

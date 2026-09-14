@@ -252,7 +252,15 @@ func runCommand(ctx context.Context, argv []string) (string, error) {
 	// A deliberately bare environment. Inheriting the agent's own means
 	// inheriting whatever put its enrolment token or server address there, and
 	// a reload command has no business reading either.
-	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin"}
+	//
+	// Bare, not empty, and the difference is platform-specific — which is why
+	// this is a platform function. A Unix reload needs a PATH and nothing else.
+	// A Windows one needs rather more: powershell.exe will not start without
+	// SystemRoot, and Import-Module WebAdministration — which is how a
+	// certificate is bound to an IIS site — finds nothing without PSModulePath.
+	// A hard-coded Unix PATH here was correct for as long as the only
+	// destinations that ran commands were Linux ones.
+	cmd.Env = commandEnv()
 
 	output, err := cmd.CombinedOutput()
 	text := strings.TrimSpace(string(output))

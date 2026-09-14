@@ -49,7 +49,7 @@ This is early development software. Do not run it in production yet.
 | Cryptographic posture | ✅ | Which endpoints negotiate a post-quantum key exchange and which do not, from real handshakes; CNSA 2.0 conformance per certificate; CycloneDX 1.6 CBOM export validated against the published schema. Post-quantum *issuance* waits for `crypto/x509` |
 | Deployment to servers | ✅ | Durable, retried, audited deployment to a signed webhook, a host running the agent, AWS ACM, Azure Key Vault and F5 BIG-IP. **A renewal deploys itself**, and a failing target halts the rest of the rollout rather than letting a bad certificate march through the estate. Key Vault and F5 are written to their published APIs and unit-tested; neither has been run against a real vault or appliance |
 | Deployment profiles | ✅ | Nine platforms the agent installs to by name: nginx, Apache, HAProxy, Caddy, Tomcat, PostgreSQL, MariaDB/MySQL, Postfix, Dovecot. Each is tested by `make verify-profiles`, which runs the service in a container, installs a certificate through the agent, and confirms over TLS that the service returns it after reloading. A profile supplies defaults; any field set on the destination takes precedence. See [platforms](platforms/README.md) |
-| Host agent | ✅ | One binary that enrols, inventories, **requests certificates with keys it generates locally and never sends** — CertPilot cannot produce them and does not claim to — then installs them where the server actually reads them and reloads it — as PEM, or as a PKCS#12 keystore for anything on the JVM. Bounded by grants an operator writes in advance — which now say *which template* a host may use, so the same rules and the same estate-wide floor apply to a host as to a person. Linux, and Windows for file destinations — see [where it runs](agent.md#where-it-runs) |
+| Host agent | ✅ | One binary that enrols, inventories, **requests certificates with keys it generates locally and never sends** — CertPilot cannot produce them and does not claim to — then installs them where the server actually reads them and reloads it — as PEM, as a PKCS#12 keystore for anything on the JVM, or into the Windows certificate store for [IIS](platforms/iis.md), which reads no file at all. Bounded by grants an operator writes in advance — which now say *which template* a host may use, so the same rules and the same estate-wide floor apply to a host as to a person. Linux and Windows — see [where it runs](agent.md#where-it-runs) |
 | Vault issuers in the CA inventory | ✅ | Connecting a CA account records the CAs behind it, and from that moment they are monitored, thresholded and alerted on like everything else. The importer refreshes what the certificate says and never touches what an operator decided — the name, the thresholds, the owning team |
 | Certificate revocation | ✅ | `POST /certificates/:id/revoke`, admin only. The CA is told first and only what it accepted is recorded, so a row can never read `REVOKED` while the certificate still answers handshakes. `DELETE` now refuses a live certificate and points at revoke; `?forget=true` is the deliberate override for one you want to stop tracking while it stays live |
 | GCP CAS, AWS PCA, DigiCert, Sectigo gateways | ❌ | Not started |
@@ -94,7 +94,12 @@ with their reasoning in [security.md](security.md#known-gaps).
   file or from Vault, but delegated unwrapping through a transit or KMS backend
   needs an envelope format that does not exist yet.
 - Deployment waves are per certificate. Two rollouts do not coordinate.
-- The host agent runs on Windows for file destinations but does not write to
-  the Windows certificate store, which is what IIS, Exchange, ADFS, NPS and RDS
-  read from. Private keys are protected there by an explicit ACL rather than a
-  file mode; the Linux deployment profiles do not apply and are refused.
+- The host agent installs into the Windows certificate store, and the only
+  consumer of it that has been run is IIS. Exchange, ADFS, Network Policy Server
+  and Remote Desktop Services read from the same store and differ only in the
+  command that binds a thumbprint; each is the IIS profile with a different
+  `bind`, and none has been tested by this project.
+- A store destination has no pre-flight check. Nothing on Windows reports in
+  advance whether a binding that has not been made yet will work, so the check
+  offered is `verify`, which reconnects after the binding and rolls it back on a
+  mismatch. A destination that does not set one has no check at all.

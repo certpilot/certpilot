@@ -131,6 +131,43 @@ type Destination struct {
 	// field existed looks like.
 	KeystoreAlias string `json:"keystore_alias,omitempty"`
 
+	// Store installs into the Windows certificate store instead of writing
+	// files: "LocalMachine\\My".
+	//
+	// A different kind of destination rather than a different encoding, which is
+	// why it is not a Format. IIS does not read a certificate from a path — it
+	// binds one by thumbprint out of a store — and neither do Exchange, ADFS,
+	// Network Policy Server or Remote Desktop Services. On those hosts an agent
+	// writing flawless PEM to a file installs nothing.
+	//
+	// Setting this refuses every field that names a file or describes one, so a
+	// destination is one or the other and never half of each. See store.go for
+	// what it costs: no pre-flight check exists on this platform, and rollback
+	// had to be built rather than inherited.
+	Store string `json:"store,omitempty"`
+
+	// Bind re-points whatever serves TLS at the certificate just imported, with
+	// {{ .Thumbprint }} substituted into it.
+	//
+	// A command, for the same reason Reload is one, and with more force. IIS
+	// binds by thumbprint against a site binding; Exchange takes
+	// Enable-ExchangeCertificate with a list of services; ADFS, NPS and RDS
+	// each have their own cmdlet. Five bindings compiled into the agent would
+	// be five things to keep current and still wrong for the sixth. The `iis`
+	// profile supplies this one, so the common case is one word.
+	Bind []string `json:"bind,omitempty"`
+
+	// Verify is the endpoint to connect to after binding — "www.example.com:443".
+	//
+	// The only check this platform has, and it runs after rather than before.
+	// It completes a TLS handshake and compares the thumbprint of the
+	// certificate served with the one just installed; a mismatch rolls the
+	// binding back. Optional, and deliberately not supplied by a profile: the
+	// port a site listens on is a property of that site, and a default that
+	// guessed wrong would roll back a perfectly good certificate on every
+	// renewal.
+	Verify string `json:"verify,omitempty"`
+
 	Owner string `json:"owner,omitempty"`
 	Group string `json:"group,omitempty"`
 	// CertMode and KeyMode are octal strings — "0644", "0640". Defaulted rather
@@ -226,6 +263,21 @@ func LoadInstallSpec(path string) (InstallSpec, error) {
 func (d *Destination) validate() error {
 	if d.Certificate == "" {
 		return fmt.Errorf("no certificate name — say which certificate belongs here")
+	}
+	// A store destination writes no file, so none of the file-shaped validation
+	// below applies to it. What does apply is stricter and lives in store.go,
+	// because every field it refuses is one an operator would otherwise believe
+	// had taken effect.
+	if d.toStore() {
+		return d.validateStore()
+	}
+	// The mirror of that refusal. bind and verify exist for a store and mean
+	// nothing without one; accepting them here would leave somebody believing
+	// their IIS binding was being re-pointed on every renewal.
+	if len(d.Bind) > 0 || strings.TrimSpace(d.Verify) != "" {
+		return fmt.Errorf(
+			"bind and verify belong to a destination that installs into the Windows certificate " +
+				"store. This one writes files, and what picks them up is reload")
 	}
 	if d.keystore() {
 		if err := d.validateKeystore(); err != nil {
@@ -346,13 +398,22 @@ type Installer struct {
 	// directory, and a rollback that only works against a mock is not a
 	// rollback.
 	run func(ctx context.Context, argv []string) (string, error)
+	// store is the certificate store, replaced in tests. Unlike the files, this
+	// one cannot be exercised for real anywhere but Windows — and the ordering
+	// inside a store rollback is the part of this package whose failure is an
+	// outage rather than an inconvenience, so it is worth being able to test it
+	// on the machine somebody is sitting at.
+	store certStore
+	// verifyFor is how long a store destination's verify keeps retrying,
+	// replaced in tests. Zero means the default.
+	verifyFor time.Duration
 }
 
 // NewInstaller creates an installer over what this host currently holds.
 func NewInstaller(spec InstallSpec, specPath string, held []*Held) *Installer {
 	return &Installer{
 		spec: spec, specPath: specPath, held: held,
-		now: time.Now, run: runCommand,
+		now: time.Now, run: runCommand, store: defaultCertStore(),
 	}
 }
 
@@ -394,9 +455,17 @@ func (i *Installer) applyOne(ctx context.Context, d Destination, force bool) age
 		// Not an error and not silence. This host has been configured to
 		// install something it has not been granted, which is a fact only this
 		// process can observe and almost always one character in a hostname.
+		//
+		// Worded from paths() rather than from CertPath, which a store
+		// destination leaves empty — "nothing has been written to " with the
+		// sentence ending there is a report that reads like a bug in the agent
+		// rather than a typo in the spec.
+		where := "written to " + strings.Join(d.paths(), ", ")
+		if d.toStore() {
+			where = "imported into " + d.Store
+		}
 		out.Detail = fmt.Sprintf(
-			"this host holds no certificate for %s, so nothing has been written to %s",
-			d.Certificate, d.CertPath)
+			"this host holds no certificate for %s, so nothing has been %s", d.Certificate, where)
 		return out
 	}
 
@@ -410,6 +479,13 @@ func (i *Installer) applyOne(ctx context.Context, d Destination, force bool) age
 		return out
 	}
 	out.Fingerprint = material.fingerprint
+
+	// From here the two kinds of destination part company. A store destination
+	// has no bytes to render, nothing to capture and nothing to put back, so it
+	// takes its own path through install, proof and rollback.
+	if d.toStore() {
+		return i.applyStore(ctx, d, material, out, force)
+	}
 
 	desired, err := d.render(material)
 	if err != nil {
@@ -710,6 +786,13 @@ func (d *Destination) render(m *material) (*rendered, error) {
 
 // paths lists the files this destination writes, in the order it writes them.
 func (d *Destination) paths() []string {
+	// Where the certificate went, which for a store destination is the store.
+	// The central view asks this so that somebody can answer "where does this
+	// certificate actually live on that machine" without logging in, and
+	// "LocalMachine\\My" is the honest answer to that question.
+	if d.toStore() {
+		return []string{d.Store}
+	}
 	out := []string{d.CertPath}
 	// A keystore is one file. Without this the list carries an empty string,
 	// and the "wrote ..." line an operator reads ends in a stray comma.

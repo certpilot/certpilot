@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -251,13 +252,55 @@ func aclTrustees(acl *windows.ACL) []*windows.SID {
 	return out
 }
 
-// profilesSupported reports whether the deployment profile catalogue applies
-// here.
+// commandEnv is the environment a check, reload or bind command runs with.
 //
-// It does not. Every profile in it names a Linux service — systemctl to reload,
-// /etc/nginx and /etc/haproxy to write to — and none of those exist on Windows.
-// Applying one would fill a destination with paths validate() then refuses as
-// not absolute, which is a confusing way to learn that nginx on Windows is not
-// what the nginx profile describes. A destination on Windows names its own
-// paths and commands.
-func profilesSupported() bool { return false }
+// Bare, for the same reason as on Unix: the agent's own environment is where
+// its enrolment token and server address came from, and a command out of the
+// install spec has no business reading either.
+//
+// Longer than Unix's one line because Windows needs more to start anything at
+// all. powershell.exe exits before it runs a word without SystemRoot.
+// Import-Module WebAdministration — which is how a certificate is bound to an
+// IIS site, and therefore the commonest command this agent will run on
+// Windows — finds nothing without PSModulePath, because the module lives under
+// system32 and the default path is assembled from environment variables rather
+// than looked up.
+//
+// Each value is derived from SystemRoot rather than copied out of the agent's
+// environment, so what a command sees does not depend on who started the agent.
+func commandEnv() []string {
+	root := os.Getenv("SystemRoot")
+	if root == "" {
+		root = os.Getenv("windir")
+	}
+	if root == "" {
+		root = `C:\Windows`
+	}
+	system32 := filepath.Join(root, "System32")
+	powershell := filepath.Join(system32, "WindowsPowerShell", "v1.0")
+
+	programFiles := os.Getenv("ProgramFiles")
+	if programFiles == "" {
+		programFiles = `C:\Program Files`
+	}
+
+	return []string{
+		"SystemRoot=" + root,
+		"windir=" + root,
+		"SystemDrive=" + filepath.VolumeName(root),
+		"ComSpec=" + filepath.Join(system32, "cmd.exe"),
+		"PATH=" + strings.Join([]string{
+			system32, root, filepath.Join(system32, "Wbem"), powershell,
+		}, ";"),
+		"PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.JS;.WSF;.PS1",
+		"PSModulePath=" + strings.Join([]string{
+			filepath.Join(programFiles, "WindowsPowerShell", "Modules"),
+			filepath.Join(powershell, "Modules"),
+		}, ";"),
+		// A temporary directory that belongs to the machine rather than to
+		// whichever profile happened to start the agent. Several cmdlets fail
+		// without one, and a service account may have no profile at all.
+		"TEMP=" + filepath.Join(root, "TEMP"),
+		"TMP=" + filepath.Join(root, "TEMP"),
+	}
+}

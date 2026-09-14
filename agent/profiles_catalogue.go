@@ -45,6 +45,7 @@ var catalogue = []Profile{
 	{
 		Name:     "nginx",
 		Platform: "nginx",
+		OS:       "linux",
 		Summary:  "Serves whatever certificate is on disk; reloads without dropping a connection.",
 		Detect: []string{
 			"/etc/nginx/nginx.conf",
@@ -76,6 +77,7 @@ var catalogue = []Profile{
 	{
 		Name:     "apache",
 		Platform: "Apache httpd",
+		OS:       "linux",
 		Summary:  "Serves what SSLCertificateFile names; graceful restart finishes in-flight requests.",
 		Detect: []string{
 			"/etc/apache2/apache2.conf",
@@ -105,6 +107,7 @@ var catalogue = []Profile{
 	{
 		Name:     "haproxy",
 		Platform: "HAProxy",
+		OS:       "linux",
 		Summary:  "Wants the certificate, the chain and the key concatenated into one file.",
 		Detect: []string{
 			"/etc/haproxy/haproxy.cfg",
@@ -135,6 +138,7 @@ var catalogue = []Profile{
 	{
 		Name:     "caddy",
 		Platform: "Caddy",
+		OS:       "linux",
 		Summary:  "Manages its own certificates by default; this is for the estate where it must not.",
 		Detect: []string{
 			"/etc/caddy/Caddyfile",
@@ -166,6 +170,7 @@ var catalogue = []Profile{
 	{
 		Name:     "postgresql",
 		Platform: "PostgreSQL",
+		OS:       "linux",
 		Summary:  "Speaks TLS on the same port as everything else, which is why nobody remembers it has a certificate.",
 		Detect: []string{
 			"/etc/postgresql",
@@ -201,6 +206,7 @@ var catalogue = []Profile{
 	{
 		Name:     "postfix",
 		Platform: "Postfix",
+		OS:       "linux",
 		Summary:  "Presents a certificate to every other mail server on the internet, on port 25.",
 		Detect: []string{
 			"/etc/postfix/main.cf",
@@ -231,6 +237,7 @@ var catalogue = []Profile{
 	{
 		Name:     "dovecot",
 		Platform: "Dovecot",
+		OS:       "linux",
 		Summary:  "IMAP and POP3 over TLS — the certificate every mail client in the estate checks.",
 		Detect: []string{
 			"/etc/dovecot/dovecot.conf",
@@ -259,6 +266,7 @@ var catalogue = []Profile{
 	{
 		Name:     "mariadb",
 		Platform: "MariaDB and MySQL",
+		OS:       "linux",
 		Summary:  "Rotates its certificate without dropping a connection, if you know the statement.",
 		Detect: []string{
 			"/etc/mysql/mariadb.conf.d",
@@ -299,6 +307,7 @@ var catalogue = []Profile{
 	{
 		Name:     "tomcat",
 		Platform: "Apache Tomcat",
+		OS:       "linux",
 		Summary:  "Reads a PKCS#12 keystore, not PEM — which is why half a Java estate renews by hand.",
 		Detect: []string{
 			"/etc/tomcat10/server.xml",
@@ -338,4 +347,101 @@ var catalogue = []Profile{
 		},
 		Verified: "Apache Tomcat 10.1.59 on JDK 21",
 	},
+	{
+		Name:     "iis",
+		Platform: "Microsoft IIS",
+		OS:       "windows",
+		Summary:  "Binds a certificate by thumbprint out of the machine store, and reads no file at all.",
+		Detect: []string{
+			`C:\Windows\System32\inetsrv\config\applicationHost.config`,
+			`C:\Windows\System32\inetsrv\InetMgr.exe`,
+		},
+		Store: `LocalMachine\My`,
+		Bind: []string{
+			`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`,
+			"-NoProfile", "-NonInteractive", "-Command", iisBind,
+		},
+		Notes: []string{
+			"The https binding has to exist already. This re-points one; it does not " +
+				"create sites or bindings, because creating one means choosing a port, an " +
+				"address, a host header and whether SNI is on — decisions about how this " +
+				"machine serves traffic, which are not a certificate manager's to make. " +
+				"Add the binding once in IIS Manager with any certificate; every renewal " +
+				"after that is this.",
+			"The site is 'Default Web Site'. Change it — that is the name IIS ships " +
+				"with and it is not the name most estates use. It appears once, in the " +
+				"bind command, which you override by writing your own `bind` on the " +
+				"destination.",
+			"`$ErrorActionPreference = 'Stop'` is in that command deliberately. Without " +
+				"it PowerShell prints a red error, carries on, and exits 0 — so the agent " +
+				"would record a binding that never happened and the host would keep " +
+				"serving the old certificate until it expired. Keep it in anything you " +
+				"write yourself.",
+			"Set `verify`. It is the only check this platform has: there is no " +
+				"`nginx -t` for a certificate store, so nothing can tell you in advance " +
+				"whether a binding will work. With it the agent connects to the endpoint " +
+				"after binding and puts the binding back if the certificate being served " +
+				"is not the one it just installed. This profile does not set it because " +
+				"the port is a property of your site, and a default that guessed wrong " +
+				"would roll back a good certificate on every renewal.",
+			"The private key is imported non-exportable, which is what makes \"the key " +
+				"never leaves the host\" a property rather than a hope. An Exchange DAG " +
+				"or an ADFS farm that needs the same key on several nodes cannot use " +
+				"this; enrol each node and give each its own certificate.",
+			"Intermediates go into LocalMachine\\CA, because schannel builds the chain " +
+				"it sends from there rather than from whatever arrived beside the leaf. A " +
+				"self-signed root in the chain is imported nowhere: that store is Root, " +
+				"and adding to it makes a certificate authority trusted by every program " +
+				"on the machine, which is an administrator's decision and not a side " +
+				"effect of a renewal.",
+			"The certificate this one replaces is removed once the new one is bound and " +
+				"verified. The agent finds it by the friendly name it gave it — " +
+				"\"CertPilot: <destination>\", which is the Friendly Name column in " +
+				"certlm.msc — so renaming one there means the agent no longer recognises " +
+				"it and will leave it behind rather than remove something it is no longer " +
+				"sure about.",
+			"Exchange, ADFS, Network Policy Server and Remote Desktop Services import " +
+				"from the same store and differ only in the binding step, so each is this " +
+				"profile with its own `bind` — Exchange, for instance, is " +
+				"`Enable-ExchangeCertificate -Thumbprint '{{ .Thumbprint }}' -Services " +
+				"IIS,SMTP`. None of the four has been run by this project, and they are " +
+				"listed here as a shape to copy rather than as a supported platform.",
+		},
+		Verified: "IIS 10.0 on Windows Server 2025",
+	},
 }
+
+// iisBind is the command that re-points an IIS site at a newly imported
+// certificate.
+//
+// One line of PowerShell rather than something compiled in, because the agent
+// deliberately knows nothing about IIS: what it knows is how to import a
+// certificate and how to run the command this host's administrator wrote down.
+// This is that command, supplied so the common case is one word.
+//
+// Three things in it are load-bearing and easy to drop when copying it.
+//
+// $ErrorActionPreference is first because PowerShell's default is to print an
+// error and keep going. A bind that failed would exit 0, the agent would record
+// a success, and the host would serve the old certificate until it expired —
+// the exact silent failure this whole package is built to prevent.
+//
+// The loop, because a site can have several https bindings and Get-WebBinding
+// returns all of them. Binding the first and leaving the rest is how one
+// hostname renews for years while another quietly does not.
+//
+// And the sslFlags test, because the method differs. A binding with SNI on is
+// keyed by host header and takes AddSslCertificateByHostHeader; one without is
+// keyed by address and port and takes AddSslCertificate. Calling the wrong one
+// fails, and the presence of a host header is not the discriminator — sslFlags
+// is.
+const iisBind = `$ErrorActionPreference = 'Stop'; ` +
+	`Import-Module WebAdministration; ` +
+	`$site = 'Default Web Site'; ` +
+	`$bindings = @(Get-WebBinding -Name $site -Protocol https); ` +
+	`if ($bindings.Count -eq 0) { throw "$site has no https binding to re-point" }; ` +
+	`foreach ($b in $bindings) { ` +
+	`if (([int]$b.sslFlags -band 1) -eq 1) ` +
+	`{ $b.AddSslCertificateByHostHeader('{{ .Thumbprint }}', 'My') } ` +
+	`else { $b.AddSslCertificate('{{ .Thumbprint }}', 'My') } ` +
+	`}`
