@@ -11,6 +11,19 @@
 # The agent generates its identity key inside its own state directory and sends
 # no private key anywhere, so that directory must be a volume or enrolment is
 # repeated on every restart.
+#
+# The build context is the agent module, not the repository root.
+#
+# It used to be the root, because this repository is a Go workspace and the
+# agent's go.mod carried a replace pointing at ../pkg — so a build that could
+# not see the sibling could not resolve the module. That replace was dead: the
+# agent requires nothing from this repository and imports nothing from it, and
+# the directive outlived whatever once needed it.
+#
+# Building from the module is not tidiness. It is the difference between an
+# image whose inputs are the agent and one whose inputs are every file in the
+# repository, which means a frontend change invalidating the agent's build cache
+# and a context upload measured in the wrong units.
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 WORKDIR /src
@@ -30,7 +43,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w ${VERSION:+-X github.com/certpilot/certpilot/agent.Version=$VERSION}" \
-      -o /out/certpilot-agent ./agent/cmd/
+      -o /out/certpilot-agent ./cmd/
 
 FROM alpine:3.20
 
