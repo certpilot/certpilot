@@ -22,7 +22,8 @@ not been tested are not listed, which does not mean they cannot be used — see
 
 ## How platforms are tested
 
-Each platform is tested automatically by `make verify-profiles`. For each one,
+Each platform has an automated test, run by `make verify-profiles`. It needs a
+container runtime, so it is run on demand rather than in CI. For each platform,
 the test:
 
 1. Starts the service in a container with an initial certificate.
@@ -68,7 +69,10 @@ tested, not because they are unsupported. The agent requires only a file path,
 a format, a check command and a reload command, which can be specified
 manually. See [agent.md](../agent.md) for the configuration format.
 
-**Windows.** The agent runs on Linux only.
+**Windows.** The agent runs on Linux only and does not compile for Windows.
+Windows hosts are deployed to through a signed webhook or an agent written
+against the published contract — see
+[where the agent runs](../agent.md#where-it-runs).
 
 **Appliances without a writable filesystem.** F5 BIG-IP and Azure Key Vault are
 updated through their APIs by CertPilot Core rather than by the host agent. See
