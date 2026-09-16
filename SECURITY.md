@@ -250,5 +250,5 @@ Stated here rather than discovered later.
 | Fingerprints | SHA-256 |
 
 Post-quantum algorithms are not yet used. See the
-[roadmap](ROADMAP.md#phase-6--crypto-agility-posture) for what is planned and
+[roadmap](ROADMAP.md#existing-work) for what is planned and
 why it is not simply "issue ML-DSA certificates".
