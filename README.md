@@ -206,7 +206,8 @@ the implementation.
 | [Database](docs/database.md) | Schema, migrations, PostgreSQL, the conformance suite |
 | [Troubleshooting](docs/troubleshooting.md) | Symptom, cause, fix |
 | [Implementation status](docs/status.md) | What is built, what is partial, what is not |
-| [Roadmap](ROADMAP.md) | A record of what was found on the way |
+| [Roadmap](ROADMAP.md) | Now, Next and Later: adoption, documentation and security |
+| [Implementation history](ROADMAP-HISTORY.md) | Earlier phases and the reasoning behind them |
 
 [docs/README.md](docs/README.md) is the index.
 

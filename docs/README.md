@@ -55,7 +55,8 @@ document how to automate that.
 |:---|:---|
 | [repositories.md](repositories.md) | What each repository is called, and what holds them together |
 | [../README.md](../README.md) | What CertPilot is and why |
-| [../ROADMAP.md](../ROADMAP.md) | What has been built, in order, and what has not |
+| [../ROADMAP.md](../ROADMAP.md) | Current adoption, documentation and security priorities |
+| [Implementation history](../ROADMAP-HISTORY.md) | Earlier phases and their reasoning |
 | [../SECURITY.md](../SECURITY.md) | Reporting a vulnerability |
 
 ---
