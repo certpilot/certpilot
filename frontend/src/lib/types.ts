@@ -128,6 +128,16 @@ export interface Certificate {
    * that can only 404.
    */
   key_custody?: 'CERTPILOT' | 'AGENT' | 'EXTERNAL'
+  /**
+   * When the CA confirmed the revocation — core/store/models.go Certificate.
+   *
+   * The schema enforces that this and `status = 'REVOKED'` agree, so a record
+   * can never read REVOKED while the certificate still answers handshakes.
+   */
+  revoked_at?: string | null
+  /** The RFC 5280 CRLReason code it was revoked under. */
+  revocation_reason?: number | null
+  revoked_by?: string
   /** Values for the admin-defined MetadataFields, keyed by field key. */
   metadata?: Record<string, unknown>
   key_holder_agent_id?: string | null

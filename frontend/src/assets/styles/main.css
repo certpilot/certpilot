@@ -676,6 +676,49 @@
   }
 
   /*
+   * A radio, for one choice out of several that each need explaining.
+   *
+   * The console's usual answer to a single choice is a row of `.choice`
+   * buttons, and that stays the default. This exists for the case that pattern
+   * cannot carry: options that need a sentence each to tell them apart, like
+   * the revocation reasons, where the choice is recorded for ever and the
+   * description is what a reader at 2am is actually choosing between.
+   *
+   * Round rather than square, and deliberately so. A square control says "tick
+   * as many as apply"; every one of these is exclusive, and a checkbox offering
+   * a multi-select that silently is not one is the kind of thing somebody
+   * discovers by having got it wrong.
+   */
+  .radio-console {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--ink-page);
+    border: 1px solid var(--line-strong);
+    cursor: pointer;
+    display: inline-grid;
+    place-content: center;
+    transition: border-color var(--dur-fast) var(--ease-out),
+      background var(--dur-fast) var(--ease-out);
+  }
+
+  .radio-console::after {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink-page);
+    opacity: 0;
+  }
+
+  .radio-console:checked { background: var(--signal); border-color: var(--signal); }
+  .radio-console:checked::after { opacity: 1; }
+  .radio-console:hover:not(:disabled) { border-color: var(--text-muted); }
+  .radio-console:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /*
    * A switch, for settings that take effect immediately.
    *
    * Distinct from a checkbox on purpose: a checkbox is part of a form that will

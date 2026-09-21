@@ -6,7 +6,7 @@ import DataState from '@/components/common/DataState.vue'
 import PanelBox from '@/components/ui/PanelBox.vue'
 import SevChip from '@/components/ui/SevChip.vue'
 import {
-  Plus, Search, RotateCw, CircleX, ShieldCheck, Download, KeyRound, FileSignature,
+  Plus, Search, RotateCw, CircleX, ShieldCheck, Download, KeyRound, FileSignature, Ban,
 } from 'lucide-vue-next'
 import {
   certStateLabel, certUrgency, compareSeverity, sevBg, sevClass,
@@ -240,6 +240,117 @@ async function exportPrivateKey(cert: Certificate) {
     exportError.value = err instanceof Error ? err.message : String(err)
   } finally {
     exportingKey.value = false
+  }
+}
+
+// ── Revoking ────────────────────────────────
+
+/**
+ * The reasons the core accepts, in the order it lists them.
+ *
+ * Deliberately not every RFC 5280 code: the core takes the subset a CA will
+ * act on and refuses the rest with a 400, so offering `certificateHold` here
+ * would be offering a choice that can only fail. The descriptions are what
+ * distinguishes them for somebody deciding at 2am, which is the only time
+ * most people read this list.
+ */
+const REVOCATION_REASONS: { code: number; name: string; what: string }[] = [
+  { code: 1, name: 'keyCompromise', what: 'The private key is, or may be, in somebody else\u2019s hands.' },
+  { code: 4, name: 'superseded', what: 'Replaced by another certificate. The ordinary reason for a planned rotation.' },
+  { code: 5, name: 'cessationOfOperation', what: 'The service it was issued for is being retired.' },
+  { code: 3, name: 'affiliationChanged', what: 'The subject\u2019s name or organisation changed.' },
+  { code: 9, name: 'privilegeWithdrawn', what: 'The holder is no longer entitled to it.' },
+  { code: 0, name: 'unspecified', what: 'No reason recorded. Every other option tells the next reader more.' },
+]
+
+const revoking = ref(false)
+const revokeError = ref<string | null>(null)
+const revokeTarget = ref<Certificate | null>(null)
+const revokeReason = ref<number | null>(null)
+
+/**
+ * What auto-renew actually means for this certificate.
+ *
+ * The renewal sweep and the ARI poller both select on
+ * `status IN ('ISSUED', 'EXPIRING', 'RENEWAL_FAILED')`, so a revoked or expired
+ * certificate is never picked up however its flag reads. Rendering the stored
+ * flag alone put "Yes, 30 days ahead" on a revoked certificate — a promise
+ * nothing in the system will keep, on the one record where somebody is most
+ * likely to be checking whether it is still going to do something.
+ */
+function autoRenewNote(cert: Certificate): string {
+  if (!cert.auto_renew) return 'No'
+  if (cert.status === 'REVOKED') return 'Set, but revoked certificates are never renewed'
+  if (cert.status === 'EXPIRED') return 'Set, but expired certificates are never renewed'
+  return `Yes, ${cert.renewal_lead_days} days ahead`
+}
+
+/** The stored reason as a name, for a certificate that is already revoked. */
+function revocationReasonName(code: number | null | undefined): string {
+  if (code === null || code === undefined) return 'not recorded'
+  return REVOCATION_REASONS.find((r) => r.code === code)?.name ?? `reason ${code}`
+}
+
+/**
+ * Whether revoking this one can succeed.
+ *
+ * The core refuses a certificate it holds no copy of, and one with no CA
+ * account, because neither can be sent to a CA — usually a discovered
+ * certificate. Offering the button anyway would produce a 400 on the one
+ * operation where a failed attempt reads as "something is wrong with the
+ * estate" rather than "wrong button".
+ */
+function canRevoke(cert: Certificate): boolean {
+  return cert.status !== 'REVOKED' && !!cert.ca_account_id
+}
+
+/** Why it cannot be revoked here, in the terms the reader needs. */
+function revokeRefusal(cert: Certificate): string {
+  if (cert.status === 'REVOKED') return 'Already revoked.'
+  return (
+    'Not bound to a CA account, so there is nowhere to send a revocation — ' +
+    'this was discovered rather than issued here. Revoke it at the issuing CA.'
+  )
+}
+
+function openRevoke(cert: Certificate) {
+  revokeTarget.value = cert
+  // Deliberately unset. The core requires a reason rather than defaulting it,
+  // and pre-selecting one here would put that choice back to a default by the
+  // back door — "unspecified" would become the commonest reason in the estate.
+  revokeReason.value = null
+  revokeError.value = null
+}
+
+function closeRevoke() {
+  if (revoking.value) return
+  revokeTarget.value = null
+  revokeError.value = null
+}
+
+async function confirmRevoke() {
+  const cert = revokeTarget.value
+  if (!cert || revokeReason.value === null) return
+
+  revoking.value = true
+  revokeError.value = null
+  try {
+    await api.post(`/api/v1/certificates/${cert.id}/revoke`, { reason: revokeReason.value })
+    await certs.refresh()
+    // Reopened from the refreshed list rather than patched in place: the CA
+    // decides what actually happened, and the record the core wrote back is
+    // the only honest thing to show.
+    if (selected.value?.id === cert.id) {
+      selected.value = certificates.value.find((c) => c.id === cert.id) ?? null
+    }
+    revokeTarget.value = null
+  } catch (err) {
+    // Left open, with the error and the chosen reason intact. Every failure on
+    // this path leaves the certificate exactly as it was, so the operator is
+    // one corrected click from trying again rather than starting over.
+    revokeError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    revoking.value = false
   }
 }
 
@@ -641,6 +752,54 @@ async function signCSR() {
               <p v-if="exportError" role="alert" class="export-error">{{ exportError }}</p>
             </div>
 
+            <!-- Revocation. Below export because far more people come here to
+                 download something than to revoke, and above the immutable
+                 facts because it is the one thing on this panel that changes
+                 the world rather than describing it. -->
+            <div class="revoke-block">
+              <div class="meta-head">
+                <span class="label-rail">Revocation</span>
+              </div>
+
+              <!-- Already revoked: the most important thing that ever happened
+                   to this certificate, so the panel states it rather than
+                   leaving the reader to infer it from a chip in the header. -->
+              <template v-if="selected.status === 'REVOKED'">
+                <dl class="kv">
+                  <dt>Revoked</dt>
+                  <dd>{{ selected.revoked_at ? formatDate(selected.revoked_at) : 'date not recorded' }}</dd>
+                  <dt>Reason</dt>
+                  <dd>{{ revocationReasonName(selected.revocation_reason) }}</dd>
+                </dl>
+                <p class="field-help">
+                  The CA confirmed this before CertPilot recorded it. The audit
+                  log names the account that asked.
+                </p>
+              </template>
+
+              <template v-else>
+                <button
+                  v-if="canRevoke(selected) && auth.isAdmin"
+                  class="btn-console btn-danger"
+                  @click="openRevoke(selected)"
+                >
+                  <Ban class="w-3 h-3" /> Revoke
+                </button>
+                <!-- Three different facts, stated as three different things.
+                     "You may not", "nobody can from here", and "already done"
+                     send an operator to three different places; one greyed-out
+                     button would send them all to the same wrong one. -->
+                <span v-else-if="canRevoke(selected)" class="export-refusal">
+                  Revoking is admin-only
+                </span>
+                <span v-else class="export-refusal">{{ revokeRefusal(selected) }}</span>
+                <p class="field-help">
+                  Tells the CA first and records the result only if the CA agreed.
+                  Deleting the record instead would leave the certificate live.
+                </p>
+              </template>
+            </div>
+
             <!-- Metadata, above the immutable facts. It is the part somebody
                  came here to change; the serial is not. -->
             <div class="meta-block">
@@ -764,13 +923,7 @@ async function signCSR() {
               </div>
               <div class="detail-wide">
                 <dt class="label-micro">Auto renew</dt>
-                <dd>
-                  {{
-                    selected.auto_renew
-                      ? `Yes, ${selected.renewal_lead_days} days ahead`
-                      : 'No'
-                  }}
-                </dd>
+                <dd>{{ autoRenewNote(selected) }}</dd>
               </div>
               <div class="detail-wide">
                 <dt class="label-micro">Issuer</dt>
@@ -982,6 +1135,89 @@ async function signCSR() {
           </div>
         </form>
       </PanelBox>
+    </div>
+
+    <!-- Revoke dialog.
+         Two deliberate steps from a table row: open the certificate, then open
+         this. A revocation cannot be undone, and a one-click action on a row is
+         one mis-aimed cursor away from revoking the wrong certificate. -->
+    <div
+      v-if="revokeTarget"
+      class="dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="revoke-title"
+      @click.self="closeRevoke"
+      @keydown.esc="closeRevoke"
+    >
+      <div class="dialog-panel">
+        <header class="panel-head">
+          <span id="revoke-title" class="label-rail">Revoke certificate</span>
+        </header>
+
+        <form @submit.prevent="confirmRevoke">
+          <div class="dialog-body flex flex-col gap-3">
+            <!-- Named in full. The dialog is modal, so this is the only thing
+                 on screen saying which certificate is about to be revoked. -->
+            <dl class="kv">
+              <dt>Common name</dt>
+              <dd>{{ revokeTarget.common_name }}</dd>
+              <dt v-if="revokeTarget.serial_number">Serial</dt>
+              <dd v-if="revokeTarget.serial_number">{{ revokeTarget.serial_number }}</dd>
+              <dt>Expires</dt>
+              <dd>{{ revokeTarget.not_after ? formatDate(revokeTarget.not_after) : '—' }}</dd>
+            </dl>
+
+            <p class="field-help">
+              CertPilot asks the CA first and records the result only if the CA
+              agreed. If anything fails, nothing changes and you can try again.
+              <strong>This cannot be undone</strong> — a revoked certificate
+              cannot be un-revoked, only replaced.
+            </p>
+
+            <div class="field">
+              <span class="label-micro">Reason</span>
+              <!-- Radios rather than a select. The reason is the part of this
+                   operation that survives: it is what tells the next reader
+                   whether a key was compromised or a service was retired, and
+                   a collapsed select invites taking whatever is on top. -->
+              <div class="reason-list">
+                <label v-for="r in REVOCATION_REASONS" :key="r.code" class="reason">
+                  <input
+                    v-model="revokeReason"
+                    type="radio"
+                    name="revoke-reason"
+                    class="radio-console"
+                    :value="r.code"
+                  />
+                  <span>
+                    <span class="reason-name">{{ r.name }}</span>
+                    <span class="field-help">{{ r.what }}</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <p v-if="revokeError" role="alert" class="export-error">{{ revokeError }}</p>
+          </div>
+
+          <div class="dialog-foot">
+            <button type="button" class="btn-console" :disabled="revoking" @click="closeRevoke">
+              Cancel
+            </button>
+            <!-- Disabled until a reason is chosen, because the core requires
+                 one and a request without it is a guaranteed 400. -->
+            <button
+              type="submit"
+              class="btn-console btn-danger"
+              :disabled="revoking || revokeReason === null"
+            >
+              <template v-if="revoking">Asking the CA…</template>
+              <template v-else>Revoke</template>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 </template>
@@ -1285,6 +1521,40 @@ async function signCSR() {
   display: flex;
   gap: 0.375rem;
   flex-wrap: wrap;
+}
+
+.revoke-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  align-items: flex-start;
+  padding: 0.5rem;
+  background: var(--ink-raised);
+  border: 1px solid var(--line);
+}
+
+.reason-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.reason {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem;
+  align-items: start;
+  cursor: pointer;
+}
+
+.reason > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+}
+
+.reason-name {
+  font-size: var(--fs-small);
 }
 
 .export-key {
