@@ -12,7 +12,7 @@ flowchart TB
 
     subgraph plane["Control plane — the only thing holding the KEK"]
         direction LR
-        CORE["CertPilot Core<br/>REST API · 13 engines"]
+        CORE["CertPilot Core<br/>REST API · background engines"]
         DB[("PostgreSQL<br/>sealed secrets, queues")]
         CORE <--> DB
     end
