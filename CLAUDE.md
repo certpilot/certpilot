@@ -45,11 +45,11 @@ dependencies.
 | Path | What it is |
 |:---|:---|
 | `pkg/` | Shared, and only what is genuinely shared: `config`, `secrets` (envelope encryption), `passwords`, `revocation`, `webhooksig` |
-| `core/` | The control plane. API, store, plugin manager, and ten engines |
+| `core/` | The control plane. API, store, plugin manager, and the background engines |
 | *(separate repositories)* | CA adapters, each its own repository, module, image and process, speaking one gRPC contract: [selfsigned](https://github.com/certpilot/certpilot-gateway-selfsigned), [acme](https://github.com/certpilot/certpilot-gateway-acme), [vault](https://github.com/certpilot/certpilot-gateway-vault) |
 | *(separate repository)* | [The host agent](https://github.com/certpilot/certpilot-agent): generates keys locally, sends CSRs, installs and reloads. `scripts/agent-lifecycle.sh` is what runs a released one against this core |
 | `frontend/` | Vue 3 + Vite + Tailwind 4 + Pinia |
-| `migrations/` | 39 numbered `.sql` files, applied by `certpilot-core --migrate` |
+| `migrations/` | Numbered `.sql` files, applied by `certpilot-core --migrate` |
 | `docs/` | Written, current, and worth reading |
 
 **The API reference is published as a separate site** from
@@ -69,12 +69,17 @@ Adding a *new* page needs one line in the site's `PAGES` list and one in its
 sidebar; its sync fails loudly and names the file until both exist, which is
 the fix for eleven pages that sat unpublished because nothing checked.
 
-`core/engine/` holds the ten background engines: `pki` (CA health and issuer
-import), `renewal`, `discovery`, `ctlog`, `cloudsync`, `deploy`, `fleet`,
-`notifications`, `policy`, `posture`. They are started by `core/server` and
-publish to an in-process broker (`core/events`) that feeds the SSE endpoint.
+`core/engine/` holds the background engines: `pki` (CA health and issuer
+import), `renewal`, `issuance`, `discovery`, `ctlog`, `cloudsync`, `deploy`,
+`fleet`, `notifications`, `policy`, `posture`. They are started by
+`core/server` and publish to an in-process broker (`core/events`) that feeds
+the SSE endpoint. The directory listing is the inventory — a count written
+beside it drifts on its own, and the one that used to be here had.
 
-`core/api/` is 26 handler files behind 121 routes in `router.go`.
+`core/api/` holds the handlers behind the routes in `router.go`.
+`docs/routes.json` is the generated inventory of both, and `make routes`
+rebuilds it — read that rather than a number written here, which is how the
+ones that used to be here came to be wrong.
 
 ---
 

@@ -45,7 +45,7 @@ make dev
 ```
 
 That is the whole thing: it starts PostgreSQL if it is not already running,
-creates a `certpilot_dev` database, applies the prelude and all 39 migrations,
+creates a `certpilot_dev` database, applies the prelude and every migration,
 generates a development key encryption key once and reuses it, starts the
 self-signed gateway, the API, and the frontend, and registers the gateway as a
 CA account so there is something to issue from.

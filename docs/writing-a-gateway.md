@@ -23,8 +23,8 @@ gateways without vouching for them.
 ## Start with one that answers
 
 Before any of the contract below, get a process running that the conformance
-probe can talk to. Eight methods is a lot to read cold; two of them take a few
-minutes and make the rest concrete.
+probe can talk to. The whole contract is a lot to read cold; two of its methods
+take a few minutes and make the rest concrete.
 
 ```bash
 mkdir certpilot-gateway-my-ca && cd certpilot-gateway-my-ca
