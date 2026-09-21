@@ -47,9 +47,14 @@ func (h *CertificateHandler) Revoke(c *gin.Context) {
 		return
 	}
 
+	// Both stores report a missing certificate as an error rather than a nil
+	// result, so a 500 here told an operator who mistyped an id that the server
+	// was broken. Every other handler in this package reads the same error as a
+	// 404; this one did not, and nothing tested it. The nil branch is kept
+	// because Store is an interface and the other convention is legal.
 	cert, err := h.store.GetCertificate(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	if cert == nil {
