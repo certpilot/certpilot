@@ -224,9 +224,10 @@ CertPilot's own table keyed on `(issuer, subject)`, so an identity provider says
 who you are and CertPilot says what you may do; a claim in a token cannot
 promote anyone.
 
-Production mode refuses anonymous access, an insecure gateway channel, a
-wildcard CORS origin, a missing auth method, and a missing database — by
-refusing to start, not by warning.
+Production mode refuses an insecure gateway channel, a wildcard CORS origin,
+and a missing database — by refusing to start, not by warning. Anonymous access
+is not on that list because it is refused in *every* mode: `auth.allow_anonymous`
+no longer exists and setting it stops the core from starting at all.
 
 [docs/security.md](docs/security.md) has the threat model and an honest list of
 what is not covered. Report vulnerabilities per [SECURITY.md](SECURITY.md) —

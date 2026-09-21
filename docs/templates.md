@@ -34,8 +34,13 @@ That third axis is the whole reason this object exists.
 
 ## Creating one
 
+> These examples carry `-b "$JAR"`, a cookie jar from signing in. There is no
+> anonymous mode, so a command without a credential is a 401. See
+> [Authentication](api-reference.md#from-the-command-line) for the one-liner
+> that fills it, or substitute `-H "Authorization: Bearer $TOKEN"`.
+
 ```bash
-curl -X POST localhost:8080/api/v1/certificate-templates \
+curl -b "$JAR" -X POST localhost:8080/api/v1/certificate-templates \
   -H 'Content-Type: application/json' -d '{
   "slug": "internal-mtls",
   "name": "Internal mTLS",
@@ -156,7 +161,7 @@ every real request on its merits.
 A grant binds a subject to a template, and narrows the names.
 
 ```bash
-curl -X POST localhost:8080/api/v1/agent-grants \
+curl -b "$JAR" -X POST localhost:8080/api/v1/agent-grants \
   -H 'Content-Type: application/json' -d '{
   "name": "web tier",
   "template_id": "internal-mtls",

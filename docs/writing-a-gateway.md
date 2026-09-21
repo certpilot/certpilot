@@ -422,8 +422,13 @@ widen `deployment_targets_target_type_check` this same way, and are the
 precedent this pattern is copied from. Run it, then register the account with
 your own `provider_type` in place of `my-ca`:
 
+> These examples carry `-b "$JAR"`, a cookie jar from signing in. There is no
+> anonymous mode, so a command without a credential is a 401. See
+> [Authentication](api-reference.md#from-the-command-line) for the one-liner
+> that fills it, or substitute `-H "Authorization: Bearer $TOKEN"`.
+
 ```bash
-curl -X POST localhost:8080/api/v1/ca-accounts \
+curl -b "$JAR" -X POST localhost:8080/api/v1/ca-accounts \
   -H 'Content-Type: application/json' -d '{
     "name": "my-custom-ca",
     "provider_type": "my-ca",

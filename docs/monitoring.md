@@ -146,8 +146,13 @@ Three types, deliberately not more:
 | `webhook` | Generic receiver, HMAC-SHA256 signed |
 | `email` | SMTP with STARTTLS |
 
+> These examples carry `-b "$JAR"`, a cookie jar from signing in. There is no
+> anonymous mode, so a command without a credential is a 401. See
+> [Authentication](api-reference.md#from-the-command-line) for the one-liner
+> that fills it, or substitute `-H "Authorization: Bearer $TOKEN"`.
+
 ```bash
-curl -X POST localhost:8080/api/v1/notification-channels -H 'Content-Type: application/json' -d '{
+curl -b "$JAR" -X POST localhost:8080/api/v1/notification-channels -H 'Content-Type: application/json' -d '{
   "name": "pki-oncall", "channel_type": "slack",
   "severity_threshold": "CRITICAL",
   "topics": ["ca.expiry_alert", "ca.discovered", "cert.not_deployed"],
@@ -172,13 +177,13 @@ audit log as `notification.failed`.
 ## Acknowledgement and ownership
 
 ```bash
-curl -X POST localhost:8080/api/v1/pki/authorities/$ID/acknowledge \
+curl -b "$JAR" -X POST localhost:8080/api/v1/pki/authorities/$ID/acknowledge \
   -H 'Content-Type: application/json' \
   -d '{"note": "rotation scheduled for the 3rd", "silence_until": "2026-09-03T00:00:00Z"}'
 ```
 
 ```bash
-curl -X PUT localhost:8080/api/v1/pki/authorities/$ID/owner \
+curl -b "$JAR" -X PUT localhost:8080/api/v1/pki/authorities/$ID/owner \
   -H 'Content-Type: application/json' \
   -d '{"owner_team": "platform-security", "owner_email": "pki@example.com"}'
 ```
@@ -203,7 +208,7 @@ A screen in a corridor that nobody logs into needs a credential that cannot do
 damage if the screen is stolen.
 
 ```bash
-curl -X POST localhost:8080/api/v1/display-tokens -H 'Content-Type: application/json' -d '{
+curl -b "$JAR" -X POST localhost:8080/api/v1/display-tokens -H 'Content-Type: application/json' -d '{
   "name": "corridor-screen", "expires_at": "2027-01-01T00:00:00Z"}'
 ```
 

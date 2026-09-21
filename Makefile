@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes compatibility agent-lifecycle agent-compatibility all build build-core test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes test-docs compatibility agent-lifecycle agent-compatibility all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -95,6 +95,13 @@ routes:
 ## the real recipe with the generator rigged to fail, five different ways.
 test-routes:
 	./scripts/test-routes-atomicity.sh
+
+## Check every curl example in docs/ against docs/routes.json: that the route
+## exists, and that an example carries a credential when its route needs one.
+## Written after twenty-eight examples were found to be 401s, left behind when
+## anonymous access was removed and only the prose around them was updated.
+test-docs:
+	python3 scripts/check-doc-examples.py
 
 ## Measure which released gateways this core still works with, and write
 ## docs/compatibility.md from what happened rather than from memory.
@@ -274,6 +281,7 @@ help:
 	@echo "Docs"
 	@echo "  make routes                  Regenerate docs/routes.json from the router"
 	@echo "  make test-routes             Prove a failed regeneration damages nothing"
+	@echo "  make test-docs               Check every documented curl still runs"
 	@echo "  make agent-lifecycle         Enrol, request, install and report, end to end"
 	@echo "  make agent-compatibility     The same, for every released agent, into docs/"
 	@echo ""

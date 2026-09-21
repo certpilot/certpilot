@@ -343,8 +343,13 @@ travel in it. If you add your own access logging at the proxy, do the same.
 
 ### Connect a CA
 
+> These examples carry `-b "$JAR"`, a cookie jar from signing in. There is no
+> anonymous mode, so a command without a credential is a 401. See
+> [Authentication](api-reference.md#from-the-command-line) for the one-liner
+> that fills it, or substitute `-H "Authorization: Bearer $TOKEN"`.
+
 ```bash
-curl -X POST localhost:8080/api/v1/ca-accounts -H 'Content-Type: application/json' -d '{
+curl -b "$JAR" -X POST localhost:8080/api/v1/ca-accounts -H 'Content-Type: application/json' -d '{
   "name": "vault-issuing", "provider_type": "vault",
   "gateway_addr": "gateway-vault:9093",
   "config": {"address": "https://vault.internal:8200", "mount": "pki-int",
@@ -359,8 +364,8 @@ The CAs behind the account are imported at the same time.
 ### Import the CAs behind an account
 
 ```bash
-curl -X POST localhost:8080/api/v1/pki/authorities/import
-curl -X POST 'localhost:8080/api/v1/pki/authorities/import?account=vault-issuing'
+curl -b "$JAR" -X POST localhost:8080/api/v1/pki/authorities/import
+curl -b "$JAR" -X POST 'localhost:8080/api/v1/pki/authorities/import?account=vault-issuing'
 ```
 
 Runs automatically every 12 hours and on account creation. This is for the
@@ -369,7 +374,7 @@ moment after somebody has rotated an issuer.
 ### Force a renewal
 
 ```bash
-curl -X POST localhost:8080/api/v1/certificates/$ID/renew
+curl -b "$JAR" -X POST localhost:8080/api/v1/certificates/$ID/renew
 ```
 
 Enqueues a job; the queue runs it. The response is the job, not the
@@ -378,7 +383,7 @@ certificate.
 ### Check what is actually being served
 
 ```bash
-curl -X POST localhost:8080/api/v1/certificates/$ID/verify
+curl -b "$JAR" -X POST localhost:8080/api/v1/certificates/$ID/verify
 ```
 
 Opens a TLS connection to the endpoint and compares the fingerprint being
@@ -388,7 +393,7 @@ served against the one stored. This is the difference between "renewed" and
 ### Revoke
 
 ```bash
-curl -X POST localhost:8080/api/v1/certificates/$ID/revoke \
+curl -b "$JAR" -X POST localhost:8080/api/v1/certificates/$ID/revoke \
   -H 'Content-Type: application/json' \
   -d '{"reason": 1}'
 ```
@@ -453,7 +458,7 @@ is recorded in the audit log as the choice it is.
 ### Take a CA out of the inventory
 
 ```bash
-curl -X DELETE localhost:8080/api/v1/pki/authorities/$ID
+curl -b "$JAR" -X DELETE localhost:8080/api/v1/pki/authorities/$ID
 ```
 
 Admin only. Note that a gateway-imported CA will come back on the next import

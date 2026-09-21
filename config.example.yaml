@@ -15,9 +15,10 @@ server:
   port: 8080
   # development | production
   #
-  # Production mode refuses several settings that are convenient locally and
-  # dangerous when deployed: anonymous access, an insecure gateway channel, and
-  # a wildcard CORS origin.
+  # Production mode refuses settings that are convenient locally and dangerous
+  # when deployed: an insecure gateway channel (plugins.tls.insecure), a "*" in
+  # allowed_origins, and running with no database. Anonymous access is not
+  # among them only because it is refused in every mode, not just this one.
   mode: "development"
   # Browser origins permitted to call the API. A wildcard is not accepted
   # alongside credentials, so name the frontend explicitly.

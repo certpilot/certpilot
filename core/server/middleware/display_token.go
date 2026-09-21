@@ -103,9 +103,10 @@ var displayTokenForbiddenPaths = []string{
 //   - anything but GET is refused, whatever the route;
 //   - the paths above are refused, whatever their own role gate says.
 //
-// An invalid token aborts rather than falling through. That matters: with
-// anonymous access enabled for local evaluation, falling through would hand a
-// rejected token an admin identity.
+// An invalid token aborts rather than falling through. That mattered most when
+// anonymous access was still available for local evaluation, because falling
+// through would have handed a rejected token an admin identity; it is kept
+// because "invalid credential" and "no credential" are different answers.
 func DisplayTokenAuth(st DisplayTokenStore) gin.HandlerFunc {
 	seen := &lastSeenTracker{at: make(map[string]time.Time)}
 
