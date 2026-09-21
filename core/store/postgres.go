@@ -18,6 +18,28 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// noSuchRow reports whether err means "nothing by that id", counting both an
+// empty result and an id PostgreSQL could not read as a uuid at all.
+//
+// The second half is not pedantry. `id` arrives from a URL path, so anything
+// can be in it, and a value that is not a uuid reaches the column as SQLSTATE
+// 22P02 rather than as zero rows. That error was returned verbatim, so an
+// operator who mistyped an id was shown
+// `invalid input syntax for type uuid: "nope" (SQLSTATE 22P02)` — a database
+// fault, for a request that was simply wrong about which certificate it meant.
+//
+// A malformed id cannot name a row, so the honest answer is the same one an
+// absent id gets. This is class D from postgres_only_test.go seen from the
+// other side: not a parameter PostgreSQL typed unexpectedly, but one it
+// refused, in a query the in-memory store answers with an ordinary map miss.
+func noSuchRow(err error) bool {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "22P02"
+}
+
 // PostgresStore implements Store using pgxpool for PostgreSQL.
 type PostgresStore struct {
 	pool *pgxpool.Pool
@@ -233,7 +255,7 @@ func (s *PostgresStore) GetCertificate(ctx context.Context, id string) (*Certifi
 		FROM public.certificates WHERE id = $1
 	`
 	cert, err := scanCertificate(s.pool.QueryRow(ctx, query, id))
-	if err == pgx.ErrNoRows {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("certificate %s not found", id)
 	}
 	if err != nil {
@@ -904,7 +926,7 @@ func (s *PostgresStore) GetCAAccount(ctx context.Context, id string) (*CAAccount
 		&acc.RenewalRateLimit, &acc.RenewalRateWindowHours, &acc.CreatedBy,
 		&acc.CreatedAt, &acc.UpdatedAt,
 	)
-	if err == pgx.ErrNoRows {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("CA account %s not found", id)
 	}
 	return acc, err
