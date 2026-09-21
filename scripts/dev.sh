@@ -16,6 +16,9 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_dir"
 
+# shellcheck source=scripts/dev-session.sh
+source "$project_dir/scripts/dev-session.sh"
+
 db_name="${CERTPILOT_DEV_DB:-certpilot_dev}"
 state_dir="$project_dir/.certpilot"
 kek_file="$state_dir/dev-kek"
@@ -213,17 +216,26 @@ frontend_pid=$!
     sleep 0.1
   done
 
-  if curl -sf -m 5 http://127.0.0.1:8080/api/v1/ca-accounts 2>/dev/null \
+  # Signed in, because there is no anonymous mode even locally. This used to be
+  # bare curl, so it got a 401, and `-sf` turned that into the message below —
+  # which named the wrong cause, and left every fresh clone with no CA account.
+  if ! jar="$(dev_session http://127.0.0.1:8080 "$state_dir")"; then
+    echo 'Could not sign in, so the CA account was not registered; add one from the Settings page.' >&2
+    exit 0
+  fi
+
+  if curl -sf -m 5 -b "$jar" http://127.0.0.1:8080/api/v1/ca-accounts 2>/dev/null \
       | grep -q '"selfsigned-dev"'; then
     exit 0
   fi
 
   printf 'Registering the selfsigned-dev CA account...\n'
-  if ! curl -sf -m 15 -X POST http://127.0.0.1:8080/api/v1/ca-accounts \
+  ca_status="$(curl -sS -m 15 -o /dev/null -w '%{http_code}' -b "$jar" \
+      -X POST http://127.0.0.1:8080/api/v1/ca-accounts \
       -H 'Content-Type: application/json' \
-      -d '{"name":"selfsigned-dev","provider_type":"selfsigned","gateway_addr":"localhost:9091","is_default":true}' \
-      >/dev/null 2>&1; then
-    echo 'Could not register the CA account; add one from the Settings page.' >&2
+      -d '{"name":"selfsigned-dev","provider_type":"selfsigned","gateway_addr":"localhost:9091","is_default":true}')"
+  if [[ "$ca_status" != "201" && "$ca_status" != "200" ]]; then
+    echo "Could not register the CA account (HTTP $ca_status); add one from the Settings page." >&2
   fi
 ) &
 

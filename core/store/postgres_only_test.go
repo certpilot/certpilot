@@ -4,11 +4,13 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/certpilot/certpilot/pkg/secrets"
+	"github.com/google/uuid"
 )
 
 // The defects the in-memory store is structurally incapable of having.
@@ -363,5 +365,61 @@ func TestAuditChainDetectsTamperingDoneInSQL(t *testing.T) {
 	}
 	if report.BrokenAt == nil || *report.BrokenAt != 3 {
 		t.Fatalf("expected the break at seq 3, got %v", report.BrokenAt)
+	}
+}
+
+// TestAnIdThatIsNotAUuidReadsAsNotFound — class D from the other side.
+//
+// `id` reaches these lookups from a URL path, so it can be any text at all. A
+// value PostgreSQL cannot read as a uuid comes back as SQLSTATE 22P02 rather
+// than as zero rows, and that error used to be returned verbatim: an operator
+// who mistyped a certificate id was shown
+// `invalid input syntax for type uuid: "nope" (SQLSTATE 22P02)`, which reads as
+// the database being broken rather than the request being wrong about which
+// certificate it meant. It reached the revoke endpoint, of all of them.
+//
+// The in-memory store cannot have this. `m.certificates[id]` is a map miss for
+// any string, so it answered correctly for ever while PostgreSQL did not —
+// which is why this belongs here and not in the conformance suite.
+func TestAnIdThatIsNotAUuidReadsAsNotFound(t *testing.T) {
+	s := postgresOnly(t)
+	ctx := context.Background()
+
+	for _, id := range []string{
+		"nope",
+		"",
+		"not-a-uuid-at-all",
+		// A uuid with one character too many: the shape is right and the value
+		// is still unreadable, which is the case a length check would miss.
+		"3f2504e0-4f89-11d3-9a0c-0305e82c33011",
+	} {
+		cert, err := s.GetCertificate(ctx, id)
+		if err == nil {
+			t.Fatalf("GetCertificate(%q) returned no error and %v", id, cert)
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			t.Errorf("GetCertificate(%q) said %q, want a not-found error", id, err)
+		}
+		if strings.Contains(err.Error(), "SQLSTATE") {
+			t.Errorf("GetCertificate(%q) leaked the driver's error: %q", id, err)
+		}
+
+		acc, err := s.GetCAAccount(ctx, id)
+		if err == nil {
+			t.Fatalf("GetCAAccount(%q) returned no error and %v", id, acc)
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			t.Errorf("GetCAAccount(%q) said %q, want a not-found error", id, err)
+		}
+		if strings.Contains(err.Error(), "SQLSTATE") {
+			t.Errorf("GetCAAccount(%q) leaked the driver's error: %q", id, err)
+		}
+	}
+
+	// A well-formed uuid that names nothing must still say the same thing, or
+	// the fix above has only moved the inconsistency.
+	if _, err := s.GetCertificate(ctx, uuid.NewString()); err == nil ||
+		!strings.Contains(err.Error(), "not found") {
+		t.Errorf("an absent but well-formed id said %v, want a not-found error", err)
 	}
 }

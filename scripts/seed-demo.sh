@@ -24,10 +24,37 @@ if ! curl -sf -m 3 "$api/healthz" >/dev/null; then
   exit 1
 fi
 
-post() { curl -sS -m 30 -X POST "$api$1" -H 'Content-Type: application/json' -d "$2"; }
+# Signed in, because there is no anonymous mode even locally. Without this every
+# call below got a 401, and the first one parsed that error body as a list and
+# died on `KeyError: 'data'` — which named nothing an operator could act on.
+# shellcheck source=scripts/dev-session.sh
+source "$project_dir/scripts/dev-session.sh"
+jar="$(dev_session "$api" "$project_dir/.certpilot")" || exit 1
+# The python blocks below use urllib, which cannot read curl's jar.
+CERTPILOT_COOKIE="$(dev_session_cookie "$jar")"
+export CERTPILOT_COOKIE
 
-account=$(curl -sS -m 10 "$api/api/v1/ca-accounts" |
-  python3 -c 'import sys,json; d=json.load(sys.stdin)["data"]; print(d[0]["id"] if d else "")')
+post() { curl -sS -m 30 -b "$jar" -X POST "$api$1" -H 'Content-Type: application/json' -d "$2"; }
+
+accounts_body="$(curl -sS -m 10 -b "$jar" "$api/api/v1/ca-accounts")"
+account=$(printf '%s' "$accounts_body" | python3 -c '
+import sys, json
+
+try:
+    body = json.load(sys.stdin)
+except json.JSONDecodeError:
+    sys.exit("the CA account list was not JSON; is $api really CertPilot?")
+
+# An error body is an object with "error", not a list under "data". Reading it
+# as the success shape is how a 401 surfaced as KeyError: "data".
+if isinstance(body, dict) and body.get("error"):
+    sys.exit("CertPilot refused the CA account list: " + str(body["error"]))
+
+data = body.get("data") if isinstance(body, dict) else None
+if data is None:
+    sys.exit("the CA account list had no \"data\"; got: " + str(body)[:200])
+
+print(data[0]["id"] if data else "")')
 if [[ -z "$account" ]]; then
   echo "No CA account is registered. Start the stack with ./scripts/dev.sh first." >&2
   exit 1
@@ -80,18 +107,28 @@ mkca iot          95 "Example Corp IoT Device CA"
 
 ca() {
   python3 - "$api" "$1" "$work/$2.pem" "${3:-}" <<'PY'
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 api, name, pem, parent = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+H = {"Content-Type": "application/json", "Cookie": os.environ["CERTPILOT_COOKIE"]}
+
+def get(url):
+    return json.load(urllib.request.urlopen(
+        urllib.request.Request(url, headers=H), timeout=30))
+
 body = {"name": name, "certificate_pem": open(pem).read()}
 if parent:
     body["parent_ca_id"] = parent
 req = urllib.request.Request(f"{api}/api/v1/pki/authorities", method="POST",
-    data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+    data=json.dumps(body).encode(), headers=H)
 try:
     print(json.load(urllib.request.urlopen(req, timeout=30))["id"])
-except urllib.error.HTTPError:
-    # Already present. Find it by name so children still attach.
-    listing = json.load(urllib.request.urlopen(f"{api}/api/v1/pki/authorities", timeout=30))
+except urllib.error.HTTPError as e:
+    # 409 is already present; find it by name so children still attach. A 401
+    # is not that, and swallowing it here is how a whole unseeded estate used
+    # to look like a successful run.
+    if e.code in (401, 403):
+        sys.exit(f"CertPilot refused the request ({e.code}); the session is not valid")
+    listing = get(f"{api}/api/v1/pki/authorities")
     print(next((a["id"] for a in listing["data"] if a["name"] == name), ""))
 PY
 }
@@ -105,12 +142,14 @@ printf '  6 authorities, 25 to 3,650 days\n'
 
 # Somebody to call, and one problem already being worked.
 python3 - "$api" <<'PY'
-import json, urllib.request, sys
+import json, os, urllib.request, sys
 api = sys.argv[1]
-cas = json.load(urllib.request.urlopen(f"{api}/api/v1/pki/authorities", timeout=30))["data"]
+H = {"Content-Type": "application/json", "Cookie": os.environ["CERTPILOT_COOKIE"]}
+cas = json.load(urllib.request.urlopen(
+    urllib.request.Request(f"{api}/api/v1/pki/authorities", headers=H), timeout=30))["data"]
 def call(path, body, method):
     req = urllib.request.Request(f"{api}{path}", method=method,
-        data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+        data=json.dumps(body).encode(), headers=H)
     try: urllib.request.urlopen(req, timeout=30)
     except Exception: pass
 for ca in cas:
@@ -128,11 +167,14 @@ PY
 # ── Certificates ─────────────────────────────────────────────────────────────
 printf 'Certificates...\n'
 python3 - "$api" "$account" <<'PY'
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 api, account = sys.argv[1], sys.argv[2]
+H = {"Content-Type": "application/json", "Cookie": os.environ["CERTPILOT_COOKIE"]}
 
 existing = {c["common_name"] for c in
-            json.load(urllib.request.urlopen(f"{api}/api/v1/certificates", timeout=30))["data"]}
+            json.load(urllib.request.urlopen(
+                urllib.request.Request(f"{api}/api/v1/certificates", headers=H),
+                timeout=30))["data"]}
 
 # cn, days, environment, team, metadata
 estate = [
@@ -177,7 +219,7 @@ for cn, days, env, team, meta in estate:
             "key_type": "ECDSA", "key_size": 256, "validity_days": days,
             "environment": env, "team": team, "auto_renew": True, "metadata": meta}
     req = urllib.request.Request(f"{api}/api/v1/certificates", method="POST",
-        data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+        data=json.dumps(body).encode(), headers=H)
     try:
         urllib.request.urlopen(req, timeout=45)
         made += 1
@@ -194,10 +236,13 @@ if [[ ! -f "$work/external.csr" ]]; then
     -addext "subjectAltName=DNS:hsm-backed.example.com" 2>/dev/null
 fi
 python3 - "$api" "$account" "$work/external.csr" <<'PY'
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 api, account, csr = sys.argv[1], sys.argv[2], sys.argv[3]
+H = {"Content-Type": "application/json", "Cookie": os.environ["CERTPILOT_COOKIE"]}
 existing = {c["common_name"] for c in
-            json.load(urllib.request.urlopen(f"{api}/api/v1/certificates", timeout=30))["data"]}
+            json.load(urllib.request.urlopen(
+                urllib.request.Request(f"{api}/api/v1/certificates", headers=H),
+                timeout=30))["data"]}
 if "hsm-backed.example.com" in existing:
     print("  CSR-signed certificate already present")
 else:
@@ -206,7 +251,7 @@ else:
             "metadata": {"pci_in_scope": True, "service_tier": "tier_1",
                          "cost_centre": "CC-4471", "change_ticket": "CR-90552"}}
     req = urllib.request.Request(f"{api}/api/v1/certificates", method="POST",
-        data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+        data=json.dumps(body).encode(), headers=H)
     try:
         urllib.request.urlopen(req, timeout=45)
         print("  hsm-backed.example.com signed from a CSR — key custody EXTERNAL")
