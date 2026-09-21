@@ -385,29 +385,70 @@ Opens a TLS connection to the endpoint and compares the fingerprint being
 served against the one stored. This is the difference between "renewed" and
 "renewed and in use".
 
-### Revoke — not available through the API
-
-> **There is no certificate revocation endpoint.** Both the ACME and Vault
-> gateways implement `RevokeCertificate` properly, and the gRPC contract has
-> carried it since the first proto file, but the core exposes no route that
-> calls it.
->
-> `DELETE /api/v1/certificates/:id` **does not revoke.** It deletes the record.
-> The certificate stays valid at the CA until it expires, and CertPilot stops
-> tracking it — which is worse than either alternative, because a live
-> certificate is now outside the inventory.
-
-Until this is built, revoke at the CA directly:
+### Revoke
 
 ```bash
-# Vault
-vault write pki-int/revoke certificate=@cert.pem
-
-# ACME — via any client holding the account key, e.g.
-certbot revoke --cert-path cert.pem --reason keycompromise
+curl -X POST localhost:8080/api/v1/certificates/$ID/revoke \
+  -H 'Content-Type: application/json' \
+  -d '{"reason": 1}'
 ```
 
-Then delete the CertPilot record so the inventory matches reality.
+Admin only. **The CA is told first, and the record changes only if the CA
+agreed.** Every failure on this path — an unreachable gateway, a CA that
+declines, a certificate CertPilot holds no copy of — leaves the record exactly
+as it was and says so, because a row reading `REVOKED` beside a certificate
+that still answers handshakes is the one outcome worse than not revoking at
+all.
+
+`reason` is required rather than defaulted. "Unspecified" is a legitimate
+answer, but it should be one somebody chose: the reason is what tells the next
+reader whether a key was compromised or a service was simply retired.
+
+| Code | Reason |
+|:---|:---|
+| `0` | `unspecified` |
+| `1` | `keyCompromise` |
+| `3` | `affiliationChanged` |
+| `4` | `superseded` |
+| `5` | `cessationOfOperation` |
+| `9` | `privilegeWithdrawn` |
+
+Anything else is a 400 that lists these. RFC 5280 defines more codes; CertPilot
+accepts the subset a CA will act on.
+
+**What can refuse it:**
+
+| Response | Meaning |
+|:---|:---|
+| `400` | No reason, or one not in the table |
+| `400` | CertPilot holds no copy of the certificate, so it cannot be shown to a CA — usually a discovered certificate. Revoke it at the issuing CA |
+| `400` | Not bound to a CA account, so there is nowhere to send the revocation |
+| `404` | No such certificate |
+| `409` | Already revoked. The CA is not asked a second time |
+| `502` | The gateway is not connected, or the CA declined. **Nothing has been changed** |
+
+The one dangerous outcome is a `500` reading "the CA has revoked this
+certificate, but CertPilot could not record it". The certificate is genuinely
+dead; the record is wrong until the write succeeds. It is stated plainly rather
+than reported as a generic failure because the usual problem is the opposite
+way round.
+
+Revocation is audited (`certificate.revoked`, naming the actor, reason and
+fingerprint) and published on the event stream as `cert.revoked`, so a wall
+display reflects it without waiting for a sweep.
+
+### Delete — not a substitute for revoking
+
+`DELETE /api/v1/certificates/:id` deletes the *record*. It does not revoke.
+
+It refuses with a `409` on a certificate that is still live, and names the
+revoke endpoint in the error. Expired and already-revoked certificates delete
+without argument: the first authenticates nothing, and for the second the CA
+has already been told.
+
+`?forget=true` is the deliberate override, for a certificate you want CertPilot
+to stop tracking while it remains valid — an estate you no longer own, say. It
+is recorded in the audit log as the choice it is.
 
 ### Take a CA out of the inventory
 

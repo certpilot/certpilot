@@ -35,6 +35,18 @@ import (
 // because SetupRouter forgot a gate is caught here rather than in production.
 func realRouter(t *testing.T) (*gin.Engine, store.Store) {
 	t.Helper()
+	engine, st, _ := realRouterWithPlugins(t)
+	return engine, st
+}
+
+// realRouterWithPlugins is realRouter with the plugin manager handed back.
+//
+// Most handlers can be exercised without one. The ones that call a CA through a
+// gateway cannot, and a test that cannot register a gateway can only ever reach
+// their "no gateway connected" branch — which is how the revocation path came to
+// be wired, shipped and documented as absent without a single test touching it.
+func realRouterWithPlugins(t *testing.T) (*gin.Engine, store.Store, *pluginmgr.Manager) {
+	t.Helper()
 
 	st := store.NewMemoryStore()
 	broker := events.NewBroker()
@@ -137,7 +149,7 @@ func realRouter(t *testing.T) (*gin.Engine, store.Store) {
 		pm.Close()
 		st.Close()
 	})
-	return engine, st
+	return engine, st, pm
 }
 
 func do(r *gin.Engine, method, path string, body any, headers map[string]string) *httptest.ResponseRecorder {

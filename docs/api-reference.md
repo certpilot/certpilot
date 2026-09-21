@@ -214,6 +214,7 @@ POST   /api/v1/certificates                  Request and issue          (operato
 GET    /api/v1/certificates/:id              Detail
 POST   /api/v1/certificates/:id/renew        Renew now                  (operator)
 GET    /api/v1/certificates/:id/private-key  Export the key             (admin, audited)
+POST   /api/v1/certificates/:id/revoke       Revoke at the CA           (admin, audited)
 DELETE /api/v1/certificates/:id              Delete the record          (admin, audited)
 ```
 
@@ -281,6 +282,43 @@ GET /api/v1/certificates/:id/private-key
 Admin only. Writes `cert.private_key_exported` to the audit log with the actor
 and client IP. Returns 404 when no key is stored — which is the normal case for
 imported, discovered, or CSR-based certificates.
+
+### Revoking
+
+```http
+POST /api/v1/certificates/:id/revoke
+```
+
+```json
+{ "reason": 1 }
+```
+
+Admin only. **The CA is told first, and the record is updated only if the CA
+agreed.** The ordering is the guarantee: a record reading `REVOKED` beside a
+certificate that still answers handshakes is worse than either alternative, so
+every failure on this path leaves the record untouched and says so.
+
+`reason` is required. Accepted codes are `0` unspecified, `1` keyCompromise,
+`3` affiliationChanged, `4` superseded, `5` cessationOfOperation, `9`
+privilegeWithdrawn — the subset of RFC 5280 a CA will act on. Anything else is
+a 400 listing them, so a caller does not have to go and read the RFC.
+
+| Status | When |
+|:---|:---|
+| `200` | Revoked at the CA and recorded |
+| `400` | Missing or unaccepted reason; no stored copy of the certificate; or no CA account to send it to |
+| `404` | No such certificate |
+| `409` | Already revoked — the CA is not asked again |
+| `502` | Gateway not connected, or the CA declined. Nothing has been changed |
+| `500` | The CA revoked it and the record could not be written. The certificate is dead and the record is wrong until the write succeeds |
+
+Writes `certificate.revoked` to the audit log with the actor, reason code and
+fingerprint, and publishes `cert.revoked` on the event stream so a wall display
+reflects it without waiting for a sweep.
+
+`DELETE /certificates/:id` is not a substitute: it removes the record and the
+certificate stays valid at the CA. It refuses a live certificate with a 409 that
+names this endpoint; `?forget=true` overrides that deliberately.
 
 ## PKI and CA authorities
 
