@@ -1,0 +1,41 @@
+name: Documented examples
+
+# Every curl in docs/ is something a reader will paste into a terminal. Two
+# things make one wrong, and neither shows up in any build: it names a route
+# that no longer exists, or it carries no credential against a route that needs
+# one.
+#
+# The second is why this job exists. CertPilot used to accept anonymous
+# requests on a loopback address in development mode. Removing it was right;
+# `auth.allow_anonymous` is now refused by configuration validation. But only
+# the prose was updated — api-reference.md, security.md, configuration.md — and
+# all twenty-eight runnable examples were left behind, across eight files,
+# every one of them a 401. The getting-started guide's entire hands-on path did
+# not work, and had not for as long as that.
+#
+# Nothing caught it because nothing read the examples. This does, against
+# docs/routes.json, which `make routes` generates from the router itself.
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'scripts/check-doc-examples.py'
+      - 'Makefile'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: documented examples still run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check every documented curl
+        run: make test-docs

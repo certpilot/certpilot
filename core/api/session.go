@@ -84,11 +84,12 @@ type MeResponse struct {
 	Email       string `json:"email,omitempty"`
 	DisplayName string `json:"display_name,omitempty"`
 	Role        string `json:"role"`
-	// AuthMethod distinguishes a person from a wall display from local
-	// development, which the UI needs in order to decide what to offer.
+	// AuthMethod distinguishes a person signed in with a password or a bearer
+	// token from a wall display, which the UI needs in order to decide what to
+	// offer.
 	AuthMethod string `json:"auth_method"`
-	// UserID is CertPilot's own identifier, absent for display tokens and
-	// anonymous development where no user row exists.
+	// UserID is CertPilot's own identifier, absent for a display token, which
+	// is the one credential with no user row behind it.
 	UserID     string `json:"user_id,omitempty"`
 	RoleSource string `json:"role_source,omitempty"`
 	// MustChangePassword is set for a generated credential the account holder

@@ -90,3 +90,4 @@ skills-lock.json
 # identity key and the certificate it was issued, so it is ignored for the same
 # reason .certpilot/ is and not merely because it is build output.
 .agentlife/
+__pycache__/

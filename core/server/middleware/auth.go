@@ -67,8 +67,11 @@ func identityIssuer(claims *UserClaims, configured string) string {
 
 // Authentication methods recorded in ContextAuthMethod.
 const (
-	AuthMethodBearer       = "bearer"
-	AuthMethodAnonymous    = "anonymous"
+	AuthMethodBearer = "bearer"
+	// There is no AuthMethodAnonymous. There was, and nothing assigned it for
+	// a long time after the fallback below was removed — which is how
+	// docs/architecture.md came to keep listing anonymous as an auth method
+	// the chain could resolve.
 	AuthMethodDisplayToken = "display_token"
 	AuthMethodSession      = "session"
 )

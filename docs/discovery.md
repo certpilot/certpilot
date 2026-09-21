@@ -24,8 +24,13 @@ match — because "untrusted" alone tells an operator nothing they can act on.*
 
 ## Network scan
 
+> These examples carry `-b "$JAR"`, a cookie jar from signing in. There is no
+> anonymous mode, so a command without a credential is a 401. See
+> [Authentication](api-reference.md#from-the-command-line) for the one-liner
+> that fills it, or substitute `-H "Authorization: Bearer $TOKEN"`.
+
 ```bash
-curl -X POST localhost:8080/api/v1/discovery/scan -H 'Content-Type: application/json' \
+curl -b "$JAR" -X POST localhost:8080/api/v1/discovery/scan -H 'Content-Type: application/json' \
   -d '{"targets": ["example.com", "10.0.0.0/24", "internal-api.corp:8443"]}'
 ```
 
@@ -68,7 +73,7 @@ from an authority nobody has registered.
 ### Scheduled scans
 
 ```bash
-curl -X POST localhost:8080/api/v1/discovery/schedules -H 'Content-Type: application/json' -d '{
+curl -b "$JAR" -X POST localhost:8080/api/v1/discovery/schedules -H 'Content-Type: application/json' -d '{
   "name": "production edge",
   "targets": ["10.0.0.0/24", "edge.example.com"],
   "interval_minutes": 1440}'
@@ -84,7 +89,7 @@ renewal you did not make or a change you did not authorise.
 ### Importing a result
 
 ```bash
-curl -X POST localhost:8080/api/v1/discovery/import -H 'Content-Type: application/json' \
+curl -b "$JAR" -X POST localhost:8080/api/v1/discovery/import -H 'Content-Type: application/json' \
   -d '{"result_id": "<id>", "environment": "production", "team": "platform"}'
 ```
 
@@ -105,7 +110,7 @@ domains finds certificates issued *for you* that you did not ask for — a
 shadow-IT team using their own account, or something worse.
 
 ```bash
-curl -X POST localhost:8080/api/v1/ct/monitors -H 'Content-Type: application/json' \
+curl -b "$JAR" -X POST localhost:8080/api/v1/ct/monitors -H 'Content-Type: application/json' \
   -d '{"domain": "example.com", "include_subdomains": true}'
 ```
 
@@ -130,7 +135,7 @@ Certificates that a cloud provider holds, which CertPilot did not put there.
 | `kubernetes` | TLS secrets in a cluster |
 
 ```bash
-curl -X POST localhost:8080/api/v1/cloud/connections -H 'Content-Type: application/json' -d '{
+curl -b "$JAR" -X POST localhost:8080/api/v1/cloud/connections -H 'Content-Type: application/json' -d '{
   "name": "production aws", "provider": "aws_acm",
   "config": {"region": "eu-west-1", "access_key_id": "...", "secret_access_key": "..."}}'
 ```

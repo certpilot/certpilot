@@ -45,7 +45,7 @@ make dev
 ```
 
 That is the whole thing: it starts PostgreSQL if it is not already running,
-creates a `certpilot_dev` database, applies the prelude and every migration,
+creates a `certpilot_dev` database, applies every migration,
 generates a development key encryption key once and reuses it, starts the
 self-signed gateway, the API, and the frontend, and registers the gateway as a
 CA account so there is something to issue from.
@@ -62,8 +62,11 @@ written to `.certpilot/dev-kek` and reused, because generating a fresh one would
 make every private key already stored permanently unreadable.
 
 To use a database of your own, export `CERTPILOT_DB_URL` before running; the
-bootstrap above is skipped entirely, including the prelude, which must never run
-against a real PostgreSQL server.
+bootstrap above is skipped entirely. Every migration applies to a stock
+PostgreSQL server, so there is nothing to prepare first — there used to be a
+prelude here, creating objects migration `001` borrowed from a hosted platform,
+and removing it is what made pointing at a database you brought yourself
+possible.
 
 The rest of this page is the same thing done by hand, which is what you want
 when you are changing one piece of it.
@@ -99,9 +102,16 @@ without one; with the in-memory store it will generate an ephemeral key and warn
 cp config.example.yaml config.dev.yaml
 ```
 
-The defaults are set up for local development: bound to loopback, anonymous API
-access enabled, mTLS pointed at `.certpilot/pki/`. Production mode refuses all
-three of those, so a development config cannot quietly become a production one.
+The defaults are set up for local development: bound to loopback, one explicit
+CORS origin, mTLS pointed at `.certpilot/pki/`. Production mode refuses three
+things that are convenient locally — `plugins.tls.insecure`, a `*` in
+`server.allowed_origins`, and running with no database at all — by refusing to
+start, so a development config cannot quietly become a production one.
+
+What it does *not* do is enable anonymous access, because no configuration can.
+`auth.allow_anonymous` is refused in every mode, not just production: the core
+will not start with it set. You sign in locally exactly as you would anywhere
+else, which is what the next section starts with.
 
 ## 3. Run
 
@@ -120,9 +130,10 @@ make run-frontend             # :3000
 ```
 
 The dashboard is at `http://localhost:3000`. `/ca-health` lists every CA by
-urgency, and `/display` is the fullscreen wall view — locally it works without a
-credential, because the core accepts anonymous requests on loopback in
-development mode. On a real deployment it needs a display token; see the README.
+urgency, and `/display` is the fullscreen wall view. All three need you signed
+in, locally as much as anywhere else; `/display` also accepts a display token,
+which is the credential to give a screen in a corridor that nobody is sitting
+at. See [the API reference](api-reference.md#authenticating-an-unattended-screen).
 
 ![The dashboard: a logarithmic expiry horizon with authorities above and certificates below, six counters, the two authorities needing attention, and a live activity feed.](images/dashboard.png)
 
@@ -130,10 +141,34 @@ development mode. On a real deployment it needs a display token; see the README.
 without the near end collapsing to a point. The red marker is an intermediate CA
 five days out; everything it ever signed stops verifying when it goes.*
 
+### Sign in
+
+The core creates an administrator on first start and prints the password once.
+`make dev` also writes it to `.certpilot/dev-admin`. Sign in and keep the
+session in a cookie jar, which the rest of this page uses:
+
+```bash
+JAR=$(mktemp)
+curl -sS -c "$JAR" -X POST localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email": "you@example.com", "password": "..."}'
+```
+
+Or let the helper the development scripts use do it:
+
+```bash
+source scripts/dev-session.sh
+JAR=$(dev_session http://localhost:8080 .certpilot)
+```
+
+There is no anonymous mode, so a command without `-b "$JAR"` is a 401 —
+including every command below. If you have an identity provider configured,
+`-H "Authorization: Bearer $TOKEN"` works anywhere `-b "$JAR"` does.
+
 Confirm the gateway registered over mTLS:
 
 ```bash
-curl -s localhost:8080/api/v1/gateways | jq '.data[] | {name, is_connected}'
+curl -s -b "$JAR" localhost:8080/api/v1/gateways | jq '.data[] | {name, is_connected}'
 ```
 
 ## 4. Issue a certificate
@@ -142,7 +177,7 @@ Register the gateway as a CA account. The core connects, asks the gateway to
 validate the configuration, and only then seals and stores it:
 
 ```bash
-curl -s -X POST localhost:8080/api/v1/ca-accounts \
+curl -s -b "$JAR" -X POST localhost:8080/api/v1/ca-accounts \
   -H 'Content-Type: application/json' -d '{
     "name": "selfsigned-dev",
     "provider_type": "selfsigned",
@@ -155,7 +190,7 @@ curl -s -X POST localhost:8080/api/v1/ca-accounts \
 Then request a certificate, using the returned account id:
 
 ```bash
-curl -s -X POST localhost:8080/api/v1/certificates \
+curl -s -b "$JAR" -X POST localhost:8080/api/v1/certificates \
   -H 'Content-Type: application/json' -d '{
     "common_name": "test.example.local",
     "sans": ["www.test.example.local"],
@@ -177,7 +212,7 @@ never included in list or detail responses; exporting one is a separate
 admin-only call that writes an audit record:
 
 ```bash
-curl -s localhost:8080/api/v1/certificates/<id>/private-key | jq -r .private_key_pem
+curl -s -b "$JAR" localhost:8080/api/v1/certificates/<id>/private-key | jq -r .private_key_pem
 ```
 
 ## 5. Issue from a real CA
@@ -195,7 +230,7 @@ ACME needs to prove you control the domain. Pick a challenge:
 Cloudflare — the token needs Zone:Read and DNS:Edit:
 
 ```bash
-curl -s -X POST localhost:8080/api/v1/ca-accounts \
+curl -s -b "$JAR" -X POST localhost:8080/api/v1/ca-accounts \
   -H 'Content-Type: application/json' -d '{
     "name": "letsencrypt-staging",
     "provider_type": "acme",

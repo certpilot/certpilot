@@ -96,7 +96,8 @@ make help     # the rest
 ```
 
 `make dev` starts the local Homebrew PostgreSQL if it is not running, creates
-`certpilot_dev`, applies the plain-PostgreSQL prelude and all migrations,
+`certpilot_dev`, applies all migrations (there is no prelude: every migration
+applies to a stock PostgreSQL server),
 generates a development KEK once into `.certpilot/dev-kek` and reuses it, then
 runs the gateway (`:9091`), the API (`:8080`) and the frontend (`:3000`).
 Ctrl-C stops everything and stops PostgreSQL only if the script started it.

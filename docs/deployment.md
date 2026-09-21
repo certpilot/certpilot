@@ -32,14 +32,19 @@ A **binding** joins one certificate to one target, with *placement* options —
 which ARN, which vault entry, which crypto-store name, which path. One target
 can serve many certificates that land in different places on it.
 
+> These examples carry `-b "$JAR"`, a cookie jar from signing in. There is no
+> anonymous mode, so a command without a credential is a 401. See
+> [Authentication](api-reference.md#from-the-command-line) for the one-liner
+> that fills it, or substitute `-H "Authorization: Bearer $TOKEN"`.
+
 ```bash
 # a target
-curl -X POST localhost:8080/api/v1/deployment-targets -H 'Content-Type: application/json' -d '{
+curl -b "$JAR" -X POST localhost:8080/api/v1/deployment-targets -H 'Content-Type: application/json' -d '{
   "name": "edge webhook", "target_type": "webhook",
   "config": {"url": "https://edge.example.com/certpilot", "signing_secret": "..."}}'
 
 # a binding
-curl -X POST localhost:8080/api/v1/certificates/$CERT/targets -H 'Content-Type: application/json' -d '{
+curl -b "$JAR" -X POST localhost:8080/api/v1/certificates/$CERT/targets -H 'Content-Type: application/json' -d '{
   "target_id": "<id>", "options": {"path": "/etc/nginx/tls/app.pem"}}'
 ```
 
@@ -165,7 +170,7 @@ what a binding means: install this certificate there, including when it
 changes. A caller that wants the other behaviour asks for it by name.
 
 ```bash
-curl -X POST localhost:8080/api/v1/certificates/$CERT/targets \
+curl -b "$JAR" -X POST localhost:8080/api/v1/certificates/$CERT/targets \
   -H 'Content-Type: application/json' \
   -d '{"target_id": "<id>", "options": {...}, "deploy_on_renewal": false}'
 ```
@@ -280,7 +285,7 @@ Success from a deployer means **bytes were accepted**, not that they are being
 served. Those are different claims and the difference is a reload.
 
 ```bash
-curl -X POST localhost:8080/api/v1/certificates/$ID/verify
+curl -b "$JAR" -X POST localhost:8080/api/v1/certificates/$ID/verify
 ```
 
 The verifier opens a TLS connection to the endpoint and compares the

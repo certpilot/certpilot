@@ -119,9 +119,10 @@ a no-op by construction. It matters on a database built by an older CertPilot,
 where the constraints exist and still need dropping.
 
 The result is not a cosmetic inconsistency. Issuing a certificate raises a
-foreign key violation and fails. Local development hits it on the first request,
-because anonymous access writes a fixed subject that deliberately is not a real
-user.
+foreign key violation and fails. Local development used to hit it on the first
+request, back when anonymous access wrote a fixed subject that deliberately was
+not a real user; that mode is gone, but a database built by an older CertPilot
+still carries the constraints.
 
 `005` drops those constraints and keeps the columns. Migration `003` had already
 taken this position for `display_tokens`; `005` applies it to the tables that

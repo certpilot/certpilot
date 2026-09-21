@@ -12,8 +12,19 @@
 > discovery verdicts, ARI, the deployment queue's retry curve — which the
 > generated site does not yet cover. Keep both in mind when editing.
 
-All endpoints are under `/api/v1` and speak JSON. `GET /healthz` is the only
-unauthenticated route.
+All endpoints are under `/api/v1` and speak JSON. Four routes are
+unauthenticated, and each has to be:
+
+| | |
+|:---|:---|
+| `GET /healthz` | A liveness probe runs before anything can sign in, and deliberately says nothing about internals |
+| `GET /api/v1/auth/config` | What a browser reads to find out *how* to sign in, before it holds anything to sign in with |
+| `POST /api/v1/auth/login` | Sign-in cannot require being signed in; it is rate-limited instead |
+| `POST /api/v1/auth/callback` | The identity provider redirects here with an authorization code, which the core redeems |
+
+Every other route is a 401 without a credential. If you are restricting access
+at a reverse proxy, the three `auth` routes have to stay reachable or nobody
+can sign in.
 
 ## Authentication
 
@@ -30,6 +41,38 @@ a 401, in every build and every configuration. `auth.allow_anonymous` is still
 read, and setting it now refuses to start rather than being ignored: an
 operator who has it set believes their instance is open, and silently dropping
 it would leave them believing that until somebody was refused.
+
+### From the command line
+
+The examples in these guides use a cookie jar, because a password sign-in is
+the one credential every CertPilot has — a bearer token needs an identity
+provider, and an evaluation running `make dev` does not have one yet.
+
+```bash
+JAR=$(mktemp)
+curl -sS -c "$JAR" -X POST localhost:8080/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email": "you@example.com", "password": "..."}'
+```
+
+`make dev` writes the generated administrator credential to
+`.certpilot/dev-admin`, and `scripts/dev-session.sh` does the above with it —
+`source scripts/dev-session.sh && JAR=$(dev_session http://localhost:8080 .certpilot)`.
+
+Every subsequent example then carries `-b "$JAR"`:
+
+```bash
+curl -sS -b "$JAR" localhost:8080/api/v1/certificates
+```
+
+Substitute `-H "Authorization: Bearer $TOKEN"` for `-b "$JAR"` anywhere, if you
+have an identity provider issuing tokens. The two are interchangeable in every
+example here; the session cookie is used because it needs nothing but CertPilot
+itself.
+
+`scripts/check-doc-examples.py` checks every example in `docs/` against
+`docs/routes.json`: that the route exists, and that an example carries a
+credential when its route requires one. `make test-docs` runs it.
 
 ### Authenticating an unattended screen
 

@@ -256,7 +256,7 @@ request
         Bearer JWT       verified against JWKS, or legacy HS256
         display token    GET-only, viewer role, never private keys
         agent signature  Ed25519 over method, path, timestamp, body hash
-        anonymous        development mode on a loopback address only
+                         (no anonymous fallback, in any mode)
   → RequireRole          admin | operator | auditor | viewer
   → handler
 ```
