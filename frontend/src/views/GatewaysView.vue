@@ -66,14 +66,55 @@ const blankForm = () => ({
   webhook_url: '',
   webhook_secret: '',
   validity_days: '90',
+  // Vault: what config.go on the gateway actually reads. Address, mount and
+  // role cover an ordinary PKI mount; the auth fields are exclusive per
+  // auth_method, so only the ones for the selected method are sent.
+  vault_address: '',
+  vault_namespace: '',
+  vault_mount: 'pki',
+  vault_role: '',
+  vault_auth_method: 'token',
+  vault_token: '',
+  vault_role_id: '',
+  vault_secret_id: '',
+  vault_kubernetes_role: '',
 })
 const form = ref(blankForm())
 
 const isAcme = computed(() => form.value.provider_type === 'acme')
 const usesDns = computed(() => isAcme.value && form.value.challenge === 'dns-01')
+const isVault = computed(() => form.value.provider_type === 'vault')
 
 /** Builds the provider-specific `config` blob the gateway will validate. */
 function buildConfig(): Record<string, unknown> {
+  if (isVault.value) {
+    const config: Record<string, unknown> = {
+      address: form.value.vault_address,
+      mount: form.value.vault_mount,
+      role: form.value.vault_role,
+      auth_method: form.value.vault_auth_method,
+    }
+    if (form.value.vault_namespace) config.namespace = form.value.vault_namespace
+
+    // Exclusive by auth_method: the gateway's Config only reads the fields
+    // for the method actually selected, and sending the others is at best
+    // ignored and at worst a stray credential sealed into storage for a path
+    // that will never use it.
+    switch (form.value.vault_auth_method) {
+      case 'token':
+        config.token = form.value.vault_token
+        break
+      case 'approle':
+        config.role_id = form.value.vault_role_id
+        config.secret_id = form.value.vault_secret_id
+        break
+      case 'kubernetes':
+        config.kubernetes_role = form.value.vault_kubernetes_role
+        break
+    }
+    return config
+  }
+
   if (!isAcme.value) {
     return { validity_days: Number(form.value.validity_days) }
   }
@@ -387,6 +428,7 @@ async function removeAccount(account: CaAccount) {
                 <label class="label-micro" for="acc-type">Provider</label>
                 <select id="acc-type" v-model="form.provider_type" class="select-console">
                   <option value="acme">ACME</option>
+                  <option value="vault">HashiCorp Vault</option>
                   <option value="selfsigned">Self-signed (dev)</option>
                 </select>
               </div>
@@ -468,6 +510,87 @@ async function removeAccount(account: CaAccount) {
                   </div>
                 </template>
               </template>
+            </template>
+
+            <template v-else-if="isVault">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="field">
+                  <label class="label-micro" for="acc-vault-addr">Vault address</label>
+                  <input
+                    id="acc-vault-addr" v-model="form.vault_address" type="url" required
+                    placeholder="https://vault.internal:8200" class="input-console"
+                  />
+                </div>
+                <div class="field">
+                  <label class="label-micro" for="acc-vault-mount">PKI mount</label>
+                  <input
+                    id="acc-vault-mount" v-model="form.vault_mount" type="text" required
+                    placeholder="pki" class="input-console"
+                  />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="field">
+                  <label class="label-micro" for="acc-vault-role">Role</label>
+                  <input
+                    id="acc-vault-role" v-model="form.vault_role" type="text" required
+                    class="input-console"
+                  />
+                </div>
+                <div class="field">
+                  <label class="label-micro" for="acc-vault-namespace">Namespace</label>
+                  <input
+                    id="acc-vault-namespace" v-model="form.vault_namespace" type="text"
+                    placeholder="Vault Enterprise only" class="input-console"
+                  />
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="label-micro" for="acc-vault-auth">Auth method</label>
+                <select id="acc-vault-auth" v-model="form.vault_auth_method" class="select-console">
+                  <option value="token">Token</option>
+                  <option value="approle">AppRole</option>
+                  <option value="kubernetes">Kubernetes</option>
+                </select>
+              </div>
+
+              <div v-if="form.vault_auth_method === 'token'" class="field">
+                <label class="label-micro" for="acc-vault-token">Vault token</label>
+                <input
+                  id="acc-vault-token" v-model="form.vault_token" type="password" required
+                  class="input-console"
+                />
+              </div>
+
+              <div v-else-if="form.vault_auth_method === 'approle'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="field">
+                  <label class="label-micro" for="acc-vault-role-id">Role ID</label>
+                  <input
+                    id="acc-vault-role-id" v-model="form.vault_role_id" type="text" required
+                    class="input-console"
+                  />
+                </div>
+                <div class="field">
+                  <label class="label-micro" for="acc-vault-secret-id">Secret ID</label>
+                  <input
+                    id="acc-vault-secret-id" v-model="form.vault_secret_id" type="password" required
+                    class="input-console"
+                  />
+                </div>
+              </div>
+
+              <div v-else class="field">
+                <label class="label-micro" for="acc-vault-k8s-role">Kubernetes role</label>
+                <input
+                  id="acc-vault-k8s-role" v-model="form.vault_kubernetes_role" type="text" required
+                  class="input-console"
+                />
+                <span class="field-help">
+                  Uses this pod's own service account token; nothing else to enter here.
+                </span>
+              </div>
             </template>
 
             <div v-else class="field">

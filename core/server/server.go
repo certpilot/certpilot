@@ -412,6 +412,14 @@ func (s *Server) Start() error {
 	s.ariPoller.Start()
 	s.verifier.Start()
 
+	// Gateways reconnect on demand today — the next request that needs one, or
+	// an operator clicking "Check now". Between those moments a gateway that
+	// came back on its own, or went quiet, is invisible. Two minutes is often
+	// enough that the connected/disconnected indicator on the gateway list
+	// means something, and cheap enough that it is a HealthCheck RPC against
+	// each configured gateway, nothing more.
+	s.pluginMgr.Start(2 * time.Minute)
+
 	// An expiring CA takes down everything it signs, so this sweep has to run
 	// on a timer rather than waiting for someone to open the dashboard.
 	caInterval := time.Duration(s.cfg.PKI.CAHealthCheckInterval) * time.Minute
@@ -454,6 +462,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.renewalQueue.Stop()
 	s.ariPoller.Stop()
 	s.verifier.Stop()
+	s.pluginMgr.Stop()
 	s.caMonitor.Stop()
 	s.caImporter.Stop()
 	s.discoverySch.Stop()

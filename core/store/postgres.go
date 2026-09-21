@@ -862,7 +862,7 @@ func (s *PostgresStore) GetCAChain(ctx context.Context, id string) ([]*CAAuthori
 
 func (s *PostgresStore) ListCAAccounts(ctx context.Context) ([]*CAAccount, error) {
 	query := `
-		SELECT id, name, provider_type, gateway_addr, config_encrypted, is_default,
+		SELECT id, name, provider_type, gateway_addr, server_name, config_encrypted, is_default,
 		       status, last_health_at, coalesce(renewal_rate_limit, 0),
 		       coalesce(renewal_rate_window_hours, 168), created_by, created_at, updated_at
 		FROM public.ca_accounts ORDER BY name ASC
@@ -877,7 +877,7 @@ func (s *PostgresStore) ListCAAccounts(ctx context.Context) ([]*CAAccount, error
 	for rows.Next() {
 		acc := &CAAccount{}
 		err := rows.Scan(
-			&acc.ID, &acc.Name, &acc.ProviderType, &acc.GatewayAddr, &acc.ConfigEncrypted,
+			&acc.ID, &acc.Name, &acc.ProviderType, &acc.GatewayAddr, &acc.ServerName, &acc.ConfigEncrypted,
 			&acc.IsDefault, &acc.Status, &acc.LastHealthAt,
 			&acc.RenewalRateLimit, &acc.RenewalRateWindowHours, &acc.CreatedBy,
 			&acc.CreatedAt, &acc.UpdatedAt,
@@ -892,14 +892,14 @@ func (s *PostgresStore) ListCAAccounts(ctx context.Context) ([]*CAAccount, error
 
 func (s *PostgresStore) GetCAAccount(ctx context.Context, id string) (*CAAccount, error) {
 	query := `
-		SELECT id, name, provider_type, gateway_addr, config_encrypted, is_default,
+		SELECT id, name, provider_type, gateway_addr, server_name, config_encrypted, is_default,
 		       status, last_health_at, coalesce(renewal_rate_limit, 0),
 		       coalesce(renewal_rate_window_hours, 168), created_by, created_at, updated_at
 		FROM public.ca_accounts WHERE id::text = $1 OR name = $1
 	`
 	acc := &CAAccount{}
 	err := s.pool.QueryRow(ctx, query, id).Scan(
-		&acc.ID, &acc.Name, &acc.ProviderType, &acc.GatewayAddr, &acc.ConfigEncrypted,
+		&acc.ID, &acc.Name, &acc.ProviderType, &acc.GatewayAddr, &acc.ServerName, &acc.ConfigEncrypted,
 		&acc.IsDefault, &acc.Status, &acc.LastHealthAt,
 		&acc.RenewalRateLimit, &acc.RenewalRateWindowHours, &acc.CreatedBy,
 		&acc.CreatedAt, &acc.UpdatedAt,
@@ -912,13 +912,13 @@ func (s *PostgresStore) GetCAAccount(ctx context.Context, id string) (*CAAccount
 
 func (s *PostgresStore) CreateCAAccount(ctx context.Context, acc *CAAccount) error {
 	query := `
-		INSERT INTO public.ca_accounts (name, provider_type, gateway_addr, config_encrypted,
+		INSERT INTO public.ca_accounts (name, provider_type, gateway_addr, server_name, config_encrypted,
 			is_default, status, renewal_rate_limit, renewal_rate_window_hours)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at, updated_at
 	`
 	return s.pool.QueryRow(ctx, query,
-		acc.Name, acc.ProviderType, acc.GatewayAddr, acc.ConfigEncrypted, acc.IsDefault, acc.Status,
+		acc.Name, acc.ProviderType, acc.GatewayAddr, acc.ServerName, acc.ConfigEncrypted, acc.IsDefault, acc.Status,
 		acc.RenewalRateLimit, defaultWindowHours(acc.RenewalRateWindowHours),
 	).Scan(&acc.ID, &acc.CreatedAt, &acc.UpdatedAt)
 }
@@ -926,13 +926,13 @@ func (s *PostgresStore) CreateCAAccount(ctx context.Context, acc *CAAccount) err
 func (s *PostgresStore) UpdateCAAccount(ctx context.Context, acc *CAAccount) error {
 	query := `
 		UPDATE public.ca_accounts SET
-			name = $2, provider_type = $3, gateway_addr = $4, config_encrypted = $5,
-			is_default = $6, status = $7, last_health_at = $8,
-			renewal_rate_limit = $9, renewal_rate_window_hours = $10, updated_at = now()
+			name = $2, provider_type = $3, gateway_addr = $4, server_name = $5, config_encrypted = $6,
+			is_default = $7, status = $8, last_health_at = $9,
+			renewal_rate_limit = $10, renewal_rate_window_hours = $11, updated_at = now()
 		WHERE id = $1
 	`
 	_, err := s.pool.Exec(ctx, query,
-		acc.ID, acc.Name, acc.ProviderType, acc.GatewayAddr, acc.ConfigEncrypted,
+		acc.ID, acc.Name, acc.ProviderType, acc.GatewayAddr, acc.ServerName, acc.ConfigEncrypted,
 		acc.IsDefault, acc.Status, acc.LastHealthAt,
 		acc.RenewalRateLimit, defaultWindowHours(acc.RenewalRateWindowHours),
 	)

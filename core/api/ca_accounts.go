@@ -111,6 +111,7 @@ func (h *CAAccountHandler) Create(c *gin.Context) {
 		Name:                   input.Name,
 		ProviderType:           input.ProviderType,
 		GatewayAddr:            input.GatewayAddr,
+		ServerName:             input.ServerName,
 		IsDefault:              input.IsDefault,
 		Status:                 "DISCONNECTED",
 		RenewalRateLimit:       input.RenewalRateLimit,
@@ -226,8 +227,12 @@ func (h *CAAccountHandler) HealthCheck(c *gin.Context) {
 
 	gw, err := h.pluginMgr.GetGateway(acc.Name)
 	if err != nil {
-		// Try to register/reconnect
-		gw, err = h.pluginMgr.RegisterGateway(c.Request.Context(), acc.Name, acc.GatewayAddr, acc.ProviderType, "")
+		// Try to register/reconnect, with whatever TLS server name override
+		// this account was created with. Passing "" here would silently drop
+		// it on every reconnect — the exact case server_name exists for is a
+		// gateway dialed by IP or a service alias, where deriving the name
+		// from the address (RegisterGateway's fallback for "") is wrong.
+		gw, err = h.pluginMgr.RegisterGateway(c.Request.Context(), acc.Name, acc.GatewayAddr, acc.ProviderType, acc.ServerName)
 		if err != nil {
 			acc.Status = "ERROR"
 			_ = h.store.UpdateCAAccount(c.Request.Context(), acc)

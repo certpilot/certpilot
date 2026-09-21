@@ -386,14 +386,47 @@ later as a certificate that does not match its private key.
 ## Registering it with a core
 
 A gateway is reachable over the network, so the core does not need to have heard
-of it and there is no plugin registry to be listed in. Registering one is a
-single call:
+of it and there is no plugin registry to be listed in. Registering one is
+*almost* a single call — read the next paragraph before you make it, because
+`provider_type` is not a free-text field yet and the failure if you treat it as
+one is worse on Postgres than it is against the in-memory store used in
+development, which is exactly the shape of mistake that reaches production
+undetected.
+
+**`provider_type` is constrained today.** `ca_accounts.provider_type` carries a
+`CHECK` constraint naming a fixed list — `acme`, `vault`, `selfsigned`, `gcp_cas`,
+`aws_pca`, `digicert`, `sectigo`, `step_ca` at the time of writing, in
+`migrations/001_initial_schema.sql`. A value outside that list is accepted by the
+in-memory store (which enforces nothing) and refused by PostgreSQL with a bare
+constraint-violation error, which is not a message anyone can act on. If your CA
+is already in the list — several are there for gateways not yet built — skip
+ahead; your `provider_type` already works. If it is not, add it with a short
+migration before you register anything:
+
+```sql
+-- migrations/0NN_my_ca_provider.sql
+begin;
+
+alter table public.ca_accounts drop constraint if exists ca_accounts_provider_type_check;
+alter table public.ca_accounts add constraint ca_accounts_provider_type_check
+    check (provider_type in ('acme', 'vault', 'selfsigned', 'gcp_cas', 'aws_pca',
+                              'digicert', 'sectigo', 'step_ca', 'my-ca'));
+
+commit;
+```
+
+Drop and re-add rather than try to alter the constraint's check expression in
+place, which PostgreSQL does not support —
+`migrations/022_agent_installs.sql` and `migrations/024_cloud_deployers.sql` both
+widen `deployment_targets_target_type_check` this same way, and are the
+precedent this pattern is copied from. Run it, then register the account with
+your own `provider_type` in place of `my-ca`:
 
 ```bash
 curl -X POST localhost:8080/api/v1/ca-accounts \
   -H 'Content-Type: application/json' -d '{
     "name": "my-custom-ca",
-    "provider_type": "custom",
+    "provider_type": "my-ca",
     "gateway_addr": "gateway-my-ca.internal:9094",
     "server_name": "gateway-my-ca.internal",
     "config": {"endpoint": "https://ca.internal", "api_token": "..."}

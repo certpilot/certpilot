@@ -153,6 +153,11 @@ type CAAccount struct {
 	Name         string `json:"name"`
 	ProviderType string `json:"provider_type"` // acme, vault, selfsigned, etc.
 	GatewayAddr  string `json:"gateway_addr"`
+	// ServerName overrides the name expected in the gateway's TLS certificate,
+	// for a gateway dialed by IP or through a service alias whose certificate
+	// names something else. Empty means derive it from GatewayAddr, which is
+	// the right default for the ordinary case.
+	ServerName string `json:"server_name,omitempty"`
 	// ConfigEncrypted holds the sealed CA credentials. It is never serialized
 	// to API clients: the ciphertext is not a secret by itself, but shipping
 	// it to every dashboard reader turns one compromised KEK into a total

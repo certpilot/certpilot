@@ -890,6 +890,13 @@
           "required": false
         },
         {
+          "name": "server_name",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "ServerName overrides the name expected in the gateway's TLS certificate, for a gateway dialed by IP or through a service alias whose certificate names something else. Empty means derive it from GatewayAddr, which is the right default for the ordinary case."
+        },
+        {
           "name": "is_default",
           "type": "boolean",
           "go_type": "bool",
