@@ -41,7 +41,7 @@ The last column is the probe's own totals across every check including
 issuance, so a row can read "contract: pass" beside a non-zero failure count.
 That is the distinction above, not a contradiction.
 
-Generated 2026-09-14 from core `8d5ff59`.
+Generated 2026-09-21 from core `531ffba`.
 
 ## The host agent
 
@@ -55,5 +55,5 @@ SHA-256 the core recorded against the SHA-256 of the file actually on the host.
 |:---|:---|:---|:---|
 | `certpilot-agent` | latest | pass | enrolled, requested, installed; the core's fingerprint matches the file on disk |
 
-Generated 2026-09-14 from core `9a8c8be`.
+Generated 2026-09-21 from core `531ffba`.
 <!-- END agent-compatibility -->
