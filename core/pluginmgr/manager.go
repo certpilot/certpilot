@@ -37,6 +37,9 @@ type Manager struct {
 
 	mu       sync.RWMutex
 	gateways map[string]*GatewayClient
+
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // NewManager creates a new plugin manager.
@@ -44,6 +47,7 @@ func NewManager(tls grpckit.TLSConfig) *Manager {
 	return &Manager{
 		tls:      tls,
 		gateways: make(map[string]*GatewayClient),
+		stopCh:   make(chan struct{}),
 	}
 }
 
@@ -109,6 +113,18 @@ func (m *Manager) RegisterGateway(ctx context.Context, name, addr, gwType, serve
 		IsConnected:  true,
 	}
 
+	// A previous entry under this name is being replaced — most often a
+	// reconnect after the earlier connection was marked disconnected by a
+	// failed health check. Nothing else can be holding a reference to its
+	// Conn: GetGateway and ListGateways only ever hand out pointers while
+	// holding this same lock, and every RPC on it either already returned or
+	// is about to fail exactly as if the gateway process had restarted.
+	// Leaving it open would leak one file descriptor and one goroutine pair
+	// per reconnect, forever, on a connection nothing will ever use again.
+	if prev, ok := m.gateways[name]; ok && prev.Conn != nil {
+		prev.Conn.Close()
+	}
+
 	m.gateways[name] = gw
 	slog.Info("gateway registered successfully", "name", name, "type", gwType)
 	return gw, nil
@@ -167,11 +183,78 @@ func (m *Manager) HealthCheckAll(ctx context.Context) map[string]*providerv1.Hea
 			continue
 		}
 		gw.LastHealth = resp
+		needsCaps := gw.Capabilities == nil
 		m.mu.Unlock()
 
 		results[name] = resp
+
+		// Capabilities are fetched once, at registration, and never refreshed
+		// — so a gateway that was merely slow to come up at startup answers
+		// GetCapabilities correctly forever after and this process never asks
+		// it again. That is what left supports_ca_info permanently false, and
+		// CA import permanently silent, for a gateway that only needed a few
+		// more seconds. Asking again here costs one RPC every sweep interval,
+		// and only for a gateway that is already answering healthy but still
+		// missing them.
+		if needsCaps {
+			m.refreshCapabilities(ctx, name, gw)
+		}
 	}
 	return results
+}
+
+// refreshCapabilities retries GetCapabilities for a gateway that is healthy
+// but has never successfully answered it. A failure here is logged and left
+// for the next sweep rather than treated as a health failure of its own —
+// HealthCheck just said this gateway is fine, and a second RPC failing
+// immediately after is far more likely to be transient than a contradiction.
+func (m *Manager) refreshCapabilities(ctx context.Context, name string, gw *GatewayClient) {
+	callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	resp, err := gw.Client.GetCapabilities(callCtx, &providerv1.GetCapabilitiesRequest{})
+	cancel()
+	if err != nil {
+		slog.Warn("gateway is healthy but still has not answered GetCapabilities",
+			"name", name, "error", err)
+		return
+	}
+
+	m.mu.Lock()
+	gw.Capabilities = resp.Capabilities
+	m.mu.Unlock()
+	slog.Info("recovered gateway capabilities after a prior failure at registration", "name", name)
+}
+
+// Start runs HealthCheckAll on a timer.
+//
+// Registration only ever happens at startup or when the API is asked to
+// reconnect a specific account; nothing else notices a gateway that recovers
+// on its own, or one that goes quiet between requests. This is what makes
+// "is_connected" on the gateway list reflect reality between those moments,
+// rather than only after the next certificate request happens to fail.
+func (m *Manager) Start(interval time.Duration) {
+	if interval <= 0 {
+		interval = 2 * time.Minute
+	}
+	slog.Info("starting gateway health sweep", "interval", interval)
+
+	ticker := time.NewTicker(interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				m.HealthCheckAll(context.Background())
+			case <-m.stopCh:
+				return
+			}
+		}
+	}()
+}
+
+// Stop halts the periodic health sweep. It is safe to call more than once,
+// and safe to call even if Start was never called.
+func (m *Manager) Stop() {
+	m.stopOnce.Do(func() { close(m.stopCh) })
 }
 
 // Close closes all gateway connections.

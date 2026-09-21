@@ -144,6 +144,8 @@ export interface CaAccount {
   name: string
   provider_type: string
   gateway_addr: string
+  /** Overrides the name expected in the gateway's TLS certificate. Empty means derive it from gateway_addr. */
+  server_name?: string
   is_default: boolean
   status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR'
   last_health_at?: string
