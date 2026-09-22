@@ -50,7 +50,7 @@ for it.
 Those are reported honestly rather than stubbed, so the core knows not to offer
 a revoke button that would do nothing. A certificate issued here can still be
 deleted from the inventory; see
-[Delete — not a substitute for revoking](../operations.md#delete-not-a-substitute-for-revoking).
+[Delete — not a substitute for revoking](../operations.md#delete-—-not-a-substitute-for-revoking).
 
 ---
 
