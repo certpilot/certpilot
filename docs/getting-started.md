@@ -1,7 +1,14 @@
 # Getting started
 
-This walks through running CertPilot locally and issuing a certificate — first
-from the self-signed gateway, then from a real ACME CA.
+This walks through running CertPilot **from source** and issuing a certificate
+— first from the self-signed gateway, then from a real ACME CA. It is the page
+you want when you are changing CertPilot.
+
+> **Deciding whether CertPilot is interesting?** Start with
+> [Evaluate CertPilot](evaluation.md) instead. It is one container stack, no
+> toolchain and no database to provision, measured at about twenty seconds to a
+> console — and it goes all the way through issuing, renewing and cleaning up.
+> This page assumes you want Go, Node and PostgreSQL on your machine.
 
 ## Background
 

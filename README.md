@@ -76,8 +76,16 @@ Requires Docker. No clone, no toolchain, no database, no cloud account.
 mkdir certpilot-demo && cd certpilot-demo
 base=https://raw.githubusercontent.com/certpilot/certpilot/v0.1.1/deploy
 curl -O $base/docker-compose.quickstart.yml -O $base/config.quickstart.yaml
-CERTPILOT_VERSION=0.1.1 docker compose -f docker-compose.quickstart.yml up -d
+CERTPILOT_VERSION=0.1.1 GATEWAY_VERSION=0.3.0 \
+  docker compose -f docker-compose.quickstart.yml up -d
 ```
+
+Set both versions. The compose file defaults the gateway independently of the
+core, so setting only `CERTPILOT_VERSION` leaves you on whichever gateway that
+release was written against.
+
+Measured cold on Apple Silicon with nothing cached: **about 20 seconds** to a
+console you can sign in to.
 
 The frontend is on `:3000` and the API on `:8080`. The first start creates an
 administrator and prints its password once:
@@ -91,6 +99,11 @@ comments: the database is a container, the key encryption key is committed to
 this repository, and the CA is the self-signed gateway. Mutual TLS on the
 core-to-gateway channel is **not** switched off to make the demo easier —
 `deploy/docker-compose.yml` is the one to start from for anything real.
+
+[docs/evaluation.md](docs/evaluation.md) takes it the rest of the way: connect
+a CA, issue a certificate, renew it, check the audit chain, and put it all
+back. It records the versions it was measured against and what the evaluation
+cannot show you.
 
 ### From source instead
 
