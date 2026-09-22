@@ -36,7 +36,7 @@ This is early development software. Do not run it in production yet.
 | ACME revocation | ✅ | Real revocation; already-revoked is treated as success |
 | Renewal information (RFC 9773) | ✅ | Renews inside the CA's suggested window, at a random instant within it. A window pulled forward — what a CA does during a mass revocation — is a CRITICAL alert carrying the CA's own explanation |
 | Vault PKI issuance | ✅ | Issue, renew, revoke and status against a Vault PKI mount, with token, AppRole or Kubernetes auth. Signs CSRs by preference, so a key generated on the host stays there. Verified against a real Vault, not only a stub |
-| Vault issuer visibility | ✅ | The only gateway that answers `GetCAInfo`: the mount's issuers, their expiry and their CRL. Vault **refuses** to sign a certificate that would outlive its issuer, so the day an issuing CA comes within one certificate lifetime of expiry, every renewal through it fails at once — this is said at configuration time instead |
+| Vault issuer visibility | ✅ | The only gateway that returns **issuers** from `GetCAInfo` (ACME answers it too, with the CA's identity and advertised profiles, because ACME publishes no issuer listing): the mount's issuers, their expiry and their CRL. Vault **refuses** to sign a certificate that would outlive its issuer, so the day an issuing CA comes within one certificate lifetime of expiry, every renewal through it fails at once — this is said at configuration time instead |
 | Self-signed gateway | ✅ | Development and testing |
 | Secrets encrypted at rest | ✅ | AES-256-GCM envelope encryption, context-bound, rotatable |
 | Mutual TLS, core ↔ gateway | ✅ | Required by default; `make dev-certs` to get started |
