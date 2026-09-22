@@ -88,7 +88,7 @@ docker compose -f docker-compose.quickstart.yml logs core | grep -A4 'first run'
 │   password: <generated, shown once>
 ```
 
-Open <http://localhost:3000> and sign in, or keep a session for the commands
+Open `http://localhost:3000` and sign in, or keep a session for the commands
 below:
 
 ```bash
