@@ -26,6 +26,65 @@ anything else is a gateway nobody finds.
 paths, the container images and the organisation all spell it one way, and a
 second spelling is a thing every future reader has to check rather than know.
 
+## An agent is not a gateway
+
+Both are separate processes, both have an SDK, and both are named in the same
+sentence often enough that the difference is worth stating once. They do not
+even talk to the core the same way.
+
+| | A gateway | The agent |
+|:--|:--|:--|
+| Answers the question | "How do I talk to *this CA*?" | "What is on *this host*, and how do I install a certificate here?" |
+| Runs | Wherever the core can reach it — usually beside it | On the machine that serves the certificate |
+| How many | One process per CA vendor | One per host |
+| Speaks | gRPC, and the core dials *it* | REST, and it calls the core — so it needs no inbound port |
+| Contract | The `provider.v1` protobuf in `certpilot-gateway-sdk` | Go types in `certpilot-agent-sdk/agentapi`, with the signing scheme in `agentauth`. There is no `.proto` |
+| Authenticates as | A client certificate on a mutually authenticated channel | An Ed25519 signature over method, path, timestamp and body hash, enrolled in advance. A replayed request is refused |
+| Holds credentials | None of its own. The CA credential arrives per call, on the CA account | Its own identity key, generated on the host and never sent |
+| Sees private keys | Whatever the CA issuance produces, in transit | Generates them locally; CertPilot never receives them |
+
+The division is what lets a key stay on the host it belongs to. The agent
+generates a key and sends a signing request; the gateway carries that request to
+a CA. Neither is trusted with the other's job, and a compromise of one does not
+hand over the other's material.
+
+**You need a gateway** when CertPilot has no support for a CA you use — see
+[writing a gateway](writing-a-gateway.md). **You need the agent** when a
+certificate has to end up in a file, a keystore, or the Windows certificate
+store on a machine, rather than only in the inventory — see
+[the host agent](agent.md).
+
+## Depending on an SDK: released, not local
+
+Both SDKs are published Go modules — one carrying a protobuf contract, one
+carrying Go types and a signing scheme — and both are meant to be depended on
+the way any other module is:
+
+```
+require github.com/certpilot/certpilot-gateway-sdk v0.3.0
+```
+
+A `replace` directive pointing at a sibling checkout is for editing the contract
+itself, not for building against it. The difference matters because a gateway
+built against a local SDK can pass every test on the machine that wrote it and
+fail against the contract the core actually ships — which is precisely what the
+conformance probe exists to catch, and it cannot catch it if the SDK under test
+is the one in your working tree.
+
+The contract and the probe are released together, so pinning one pins the other:
+
+```bash
+go run github.com/certpilot/certpilot-gateway-sdk/cmd/conformance@v0.3.0 \
+    -addr localhost:9094 -insecure -domain test.example.com
+```
+
+That is the same command an external implementation runs — there is nothing
+privileged about the gateways in this organisation, and each of them runs
+exactly this in its own CI. `-domain` is what turns the issuance checks from
+skipped into run; without it a gateway can pass while proving nothing about
+issuance. [Compatibility](compatibility.md) records what each released gateway
+currently passes, measured rather than asserted.
+
 ## Checkouts are siblings, not nested
 
 ```
