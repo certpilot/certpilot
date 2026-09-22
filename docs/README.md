@@ -15,9 +15,26 @@ document how to automate that.
 
 | | |
 |:---|:---|
+| [evaluation.md](evaluation.md) | Whether this fits your estate, from a running container in about twenty seconds |
 | [getting-started.md](getting-started.md) | The first fifteen minutes. No database or cloud account needed |
 | [platforms/](https://github.com/certpilot/certpilot-agent/blob/main/docs/platforms/README.md) | Supported platforms: configuration, commands and limitations for each. In `certpilot-agent`, with the agent |
 | [architecture.md](architecture.md) | How the pieces fit, and the three decisions that shape everything else |
+| [status.md](status.md) | What is built, what is narrower than its name suggests, and what has never met the real thing |
+
+## Walkthroughs
+
+The reference pages each answer one question. These cross five of them, from an
+empty CertPilot to a web server renewing by itself, and every command on them was
+run rather than written from memory.
+
+| | |
+|:---|:---|
+| [walkthroughs/](walkthroughs/README.md) | What each one covers, what was verified, and what could not be |
+| [walkthroughs/vault-nginx.md](walkthroughs/vault-nginx.md) | HashiCorp Vault to a host serving nginx |
+| [walkthroughs/acme-nginx.md](walkthroughs/acme-nginx.md) | A public CA over ACME to the same place |
+| [walkthroughs/windows-iis.md](walkthroughs/windows-iis.md) | A binding re-pointed by thumbprint, where no file is read |
+| [walkthroughs/ca-expiry.md](walkthroughs/ca-expiry.md) | Finding an expiring CA before issuance starts failing |
+| [walkthroughs/failed-renewal.md](walkthroughs/failed-renewal.md) | Which of three things went wrong, and recovering |
 
 ## Running it
 
@@ -45,6 +62,8 @@ document how to automate that.
 | | |
 |:---|:---|
 | [gateways/vault.md](gateways/vault.md) | HashiCorp Vault PKI |
+| [gateways/acme.md](gateways/acme.md) | Any RFC 8555 CA — Let's Encrypt, ZeroSSL, Buypass, Google Trust Services |
+| [gateways/selfsigned.md](gateways/selfsigned.md) | Development and air-gapped labs. Not a CA |
 | [writing-a-gateway.md](writing-a-gateway.md) | Adding support for a CA, in any language |
 | [compatibility.md](compatibility.md) | Which released gateways this core works with, measured weekly |
 | [api-reference.md](api-reference.md) | Every endpoint |

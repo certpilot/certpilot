@@ -216,8 +216,11 @@ Before revocation, a `no_store` certificate's status reads `UNKNOWN`, because
 Vault has no record. Absence is not evidence, and reporting it as anything else
 would mark live certificates dead.
 
-> Note that CertPilot's own API currently exposes no route that triggers
-> revocation. See [operations.md](../operations.md#revoke--not-available-through-the-api).
+`POST /api/v1/certificates/:id/revoke` is what reaches this — admin only, and it
+tells Vault first, recording the result only if Vault agreed. `DELETE` on a
+certificate is not a substitute: it removes the record and revokes nothing, and
+refuses a live certificate with a `409` naming the revoke route. See
+[operations.md](../operations.md#revoke).
 
 ---
 

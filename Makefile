@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes test-docs compatibility agent-lifecycle agent-compatibility all build build-core test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes test-docs test-doc-links compatibility agent-lifecycle agent-compatibility all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -102,6 +102,13 @@ test-routes:
 ## anonymous access was removed and only the prose around them was updated.
 test-docs:
 	python3 scripts/check-doc-examples.py
+
+## Check every link in docs/ resolves — including the anchor, which the
+## documentation site's build does not. VitePress fails on a dead page and is
+## silent on a dead heading, so three links that had already shipped were
+## landing readers at the top of the right page with no way to tell.
+test-doc-links:
+	python3 scripts/check-doc-links.py
 
 ## Measure which released gateways this core still works with, and write
 ## docs/compatibility.md from what happened rather than from memory.
