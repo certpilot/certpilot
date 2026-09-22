@@ -31,8 +31,13 @@ renewal through it fails at once.
 make run-gateway-vault      # or the container; port 9093
 ```
 
+> This example carries `-b "$JAR"`, a cookie jar from signing in. There is no
+> anonymous mode, so a command without a credential is a 401. See
+> [Authentication](../api-reference.md#from-the-command-line) for the one-liner
+> that fills it, or substitute `-H "Authorization: Bearer $TOKEN"`.
+
 ```bash
-curl -X POST localhost:8080/api/v1/ca-accounts -H 'Content-Type: application/json' -d '{
+curl -b "$JAR" -X POST localhost:8080/api/v1/ca-accounts -H 'Content-Type: application/json' -d '{
   "name": "vault-issuing",
   "provider_type": "vault",
   "gateway_addr": "localhost:9093",

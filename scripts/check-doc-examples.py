@@ -191,8 +191,13 @@ def main() -> int:
     for r in table["routes"]:
         routes.setdefault((r["method"].upper(), route_key(r["path"])), r)
 
+    # rglob, not glob. The first version of this checked docs/*.md only, so
+    # docs/gateways/ and the eleven docs/platforms/ pages were never read —
+    # and docs/gateways/vault.md had carried an uncredentialled example the
+    # whole time. A checker with a silent blind spot is worse than none,
+    # because it reports zero problems over the part it looked at.
     files = [pathlib.Path(f) for f in args.files] or (
-        sorted(pathlib.Path("docs").glob("*.md")) + [pathlib.Path("README.md")])
+        sorted(pathlib.Path("docs").rglob("*.md")) + [pathlib.Path("README.md")])
 
     problems, checked = [], 0
     for f in files:
