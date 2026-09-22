@@ -226,7 +226,7 @@ this route cannot reach:
 - **A real CA.** The self-signed gateway needs no account anywhere, which is
   exactly why a first run can use it and exactly why nothing trusts what it
   signs. For ACME against Let's Encrypt staging or a Vault PKI mount, see
-  [Getting started](getting-started.md#5-issue-from-a-real-ca).
+  [Getting started](getting-started.md#_5-issue-from-a-real-ca).
 - **Anything about durability or scale.** One container each, one replica, a
   database whose volume is as durable as your laptop.
 

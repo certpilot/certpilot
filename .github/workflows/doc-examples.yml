@@ -21,6 +21,7 @@ on:
       - 'docs/**'
       - 'README.md'
       - 'scripts/check-doc-examples.py'
+      - 'scripts/check-doc-links.py'
       - 'Makefile'
   workflow_dispatch:
 
@@ -39,3 +40,18 @@ jobs:
 
       - name: Check every documented curl
         run: make test-docs
+
+      # Checked out beside this one because docs/platforms/*.md and docs/agent.md
+      # live there and are published to the same site from the same source paths.
+      # A core page linking to ../platforms/nginx.md is correct for a reader and
+      # unresolvable to anything looking only at this repository.
+      - uses: actions/checkout@v4
+        with:
+          repository: certpilot/certpilot-agent
+          path: certpilot-agent-checkout
+
+      - name: Put the agent docs where the checker looks
+        run: mv certpilot-agent-checkout ../certpilot-agent
+
+      - name: Check every documented link and anchor
+        run: make test-doc-links

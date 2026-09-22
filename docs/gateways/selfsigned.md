@@ -59,7 +59,7 @@ deleted from the inventory; see
 `make dev` registers this gateway *and* a CA account for it. The container
 evaluation registers the gateway only, so there the account is a step you take
 — which is where the two differ and why
-[Evaluate CertPilot](../evaluation.md#3-connect-a-certificate-authority) spells
+[Evaluate CertPilot](../evaluation.md#_3-connect-a-certificate-authority) spells
 it out.
 
 > These examples carry `-b "$JAR"`, a cookie jar from signing in. There is no
