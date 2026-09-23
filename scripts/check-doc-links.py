@@ -123,16 +123,26 @@ def anchors_of(path: pathlib.Path) -> tuple[set[str], dict[str, str]]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("files", nargs="*", help="markdown files; default is all of docs/")
+    ap.add_argument("--allow-missing-agent-docs", action="store_true",
+                    help="check what can be checked without a certpilot-agent checkout, and "
+                         "say which links went unchecked")
     args = ap.parse_args()
 
     root = pathlib.Path(__file__).resolve().parent.parent
     docs = root / "docs"
     agent_docs = root.parent / "certpilot-agent" / "docs"
     if not agent_docs.is_dir():
-        print(
-            f"note: no agent checkout at {agent_docs}; links into it are not checked",
-            file=sys.stderr,
-        )
+        # A failure by default, not a note. This used to print a line to stderr
+        # and carry on, so a CI job whose agent checkout step had been removed
+        # would report "0 problems" over a check that no longer read the
+        # platform pages at all — green, and indistinguishable from green that
+        # meant something. Skipping has to be asked for.
+        if not args.allow_missing_agent_docs:
+            print(f"no certpilot-agent checkout at {agent_docs}. docs/platforms/ and "
+                  f"docs/agent.md are published from it, so links into them cannot be "
+                  f"checked without it. Clone it beside this repository, or pass "
+                  f"--allow-missing-agent-docs to skip those links and say so.")
+            return 2
         agent_docs = None
 
     files = [pathlib.Path(f).resolve() for f in args.files] or sorted(docs.rglob("*.md"))
@@ -148,6 +158,19 @@ def main() -> int:
 
     problems: list[str] = []
     checked = 0
+    skipped = 0
+
+    def shown(p: pathlib.Path) -> pathlib.Path:
+        # A page outside the repository — the self-test's fixtures live in a
+        # temporary directory — is shown by the path it was given. relative_to
+        # raises instead, which exits 1 with a traceback: a "this must fail"
+        # test reading only the exit status would count that as the check
+        # working. test-doc-checks.sh reads the message too, which is how this
+        # was found.
+        try:
+            return p.relative_to(root)
+        except ValueError:
+            return p
 
     for path in files:
         text = path.read_text()
@@ -157,7 +180,7 @@ def main() -> int:
                 continue
             rel, _, anchor = target.partition("#")
             line = text[: m.start()].count("\n") + 1
-            here = f"{path.relative_to(root)}:{line}"
+            here = f"{shown(path)}:{line}"
 
             if rel == "":
                 checked += 1
@@ -174,6 +197,14 @@ def main() -> int:
                 continue
 
             resolved = (path.parent / rel).resolve()
+            if not resolved.exists() and agent_docs is None and args.allow_missing_agent_docs:
+                try:
+                    under = resolved.relative_to(docs.resolve()).parts[0]
+                except ValueError:
+                    under = ""
+                if under in ("platforms", "agent.md"):
+                    skipped += 1
+                    continue
             if not resolved.exists() and agent_docs is not None:
                 # Published from the agent's repository at the same source path.
                 try:
@@ -197,7 +228,9 @@ def main() -> int:
 
     for p in problems:
         print(p)
-    print(f"{checked} link(s) checked, {len(problems)} problem(s).")
+    note = (f" {skipped} link(s) into the agent's pages NOT checked: "
+            f"--allow-missing-agent-docs." if skipped else "")
+    print(f"{checked} link(s) checked, {len(problems)} problem(s).{note}")
     return 1 if problems else 0
 
 

@@ -20,7 +20,15 @@ reads the examples, against docs/routes.json, which `make routes` generates
 from the router itself. A route renamed in router.go fails this check on the
 next `make test-docs`.
 
+Reading an example against the route table proves it *could* run. `--live`
+proves it does: every example that is a GET, carries a credential and names no
+placeholder is sent to a running core with a real session, and must come back
+2xx. That is the subset that is safe to send anywhere — read-only, and with
+nothing the reader was meant to fill in — so it is sent over urllib, from the
+parsed method and path, and the example's shell text is never executed.
+
 Usage:  python3 scripts/check-doc-examples.py [--routes docs/routes.json] [FILE...]
+        python3 scripts/check-doc-examples.py --live http://localhost:8080 --cookie-jar JAR
 Exit:   0 if every example checks out, 1 otherwise.
 """
 
@@ -32,6 +40,8 @@ import pathlib
 import re
 import shlex
 import sys
+import urllib.error
+import urllib.request
 
 # A credential, in any of the forms the API accepts. `-b`/`--cookie` is the
 # session cookie a password sign-in returns; the header forms are the bearer
@@ -179,12 +189,55 @@ def route_key(path: str) -> str:
                     for s in path.split("/"))
 
 
+def session_cookie(jar: pathlib.Path) -> str:
+    """The session from a curl cookie jar.
+
+    Read by hand rather than with http.cookiejar: curl marks an HttpOnly cookie
+    by prefixing its line with `#HttpOnly_`, which the standard library's parser
+    reads as a comment — and the session cookie is HttpOnly, so it would load a
+    jar with nothing in it and every request would be a 401 that looked like a
+    documentation problem.
+    """
+    for line in jar.read_text().splitlines():
+        line = line.removeprefix("#HttpOnly_")
+        fields = line.split("\t")
+        if len(fields) == 7 and fields[5] == "certpilot_session":
+            return f"certpilot_session={fields[6]}"
+    raise SystemExit(f"{jar}: no certpilot_session cookie — sign in first")
+
+
+def live_status(base: str, method: str, url: str, cookie: str) -> int:
+    """Send one example to a running core and return the status.
+
+    Only the headers are awaited. One documented GET is the live event stream,
+    which never ends; its status line arrives immediately, and that is all this
+    needs to know.
+    """
+    target = base.rstrip("/") + API_HOST.sub("", url.strip("'\""), count=1)
+    req = urllib.request.Request(target, method=method, headers={"Cookie": cookie})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise SystemExit(f"could not reach {base} ({e}); --live needs a running core") from e
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--routes", default="docs/routes.json")
+    ap.add_argument("--live", metavar="BASE_URL",
+                    help="also send every safe example to this running core")
+    ap.add_argument("--cookie-jar", type=pathlib.Path,
+                    help="a curl cookie jar holding a signed-in session, for --live")
     ap.add_argument("files", nargs="*")
     args = ap.parse_args()
+    if args.live and not args.cookie_jar:
+        ap.error("--live needs --cookie-jar: every route it would send to requires a session")
+    cookie = session_cookie(args.cookie_jar) if args.live else None
+    sent = 0
 
     table = json.loads(pathlib.Path(args.routes).read_text())
     routes = {}
@@ -227,11 +280,26 @@ def main() -> int:
                         (f, line, f"{method} {path} requires {route['auth']} "
                                   f"({route['min_role']}), but this example "
                                   f"carries no credential — it is a 401"))
+                    continue
+
+                # Safe to send: read-only, and nothing in the path or query the
+                # reader was meant to replace.
+                target = url.strip("'\"")
+                if (args.live and method == "GET" and CREDENTIAL.search(cmd)
+                        and not re.search(r"[$<>{}]|/:", target)):
+                    status = live_status(args.live, method, target, cookie)
+                    sent += 1
+                    if not 200 <= status < 300:
+                        problems.append(
+                            (f, line, f"GET {API_HOST.sub('', target, count=1)} "
+                                      f"returned {status} from a running core, "
+                                      f"signed in as an administrator"))
 
     for f, line, msg in problems:
         print(f"{f}:{line}: {msg}")
 
-    print(f"\n{checked} API examples checked, {len(problems)} problem(s).",
+    live = f" {sent} sent to {args.live} and answered." if args.live else ""
+    print(f"\n{checked} API examples checked, {len(problems)} problem(s).{live}",
           file=sys.stderr)
     return 1 if problems else 0
 

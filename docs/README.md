@@ -73,6 +73,7 @@ run rather than written from memory.
 | | |
 |:---|:---|
 | [repositories.md](repositories.md) | What each repository is called, and what holds them together |
+| [documentation-checks.md](documentation-checks.md) | What the documentation checks prove, what they cannot, and which sentences need a person |
 | [../README.md](../README.md) | What CertPilot is and why |
 | [../ROADMAP.md](../ROADMAP.md) | Current adoption, documentation and security priorities |
 | [Implementation history](../ROADMAP-HISTORY.md) | Earlier phases and their reasoning |

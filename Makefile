@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes test-docs test-doc-links compatibility agent-lifecycle agent-compatibility all build build-core test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-docs-live test-evaluation compatibility agent-lifecycle agent-compatibility all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -109,6 +109,32 @@ test-docs:
 ## landing readers at the top of the right page with no way to tell.
 test-doc-links:
 	python3 scripts/check-doc-links.py
+
+## Check every version the documentation pins — image tags, module versions,
+## the quickstart's two variables — is published, that each page agrees with
+## itself, and that a pinned gateway or agent is one compatibility.md measured.
+## Asks the registries, so it needs the network; --offline skips that and says so.
+test-doc-versions:
+	python3 scripts/check-doc-versions.py
+
+## Break each documentation check's input on purpose and require it to fail,
+## then correct it and require it to pass. A check never seen to fail has not
+## been shown to work, and three here once passed while checking less than
+## they claimed.
+test-doc-checks:
+	./scripts/test-doc-checks.sh
+
+## Send every documented GET that is safe to send to a core built from this
+## tree, signed in, and require each to succeed. Reading an example against the
+## route table proves it could run; this proves it does.
+test-docs-live:
+	./scripts/doc-examples-live.sh
+
+## Run docs/evaluation.md as written, block by block, against the release it
+## pins, and check every claim it makes. Needs Docker and ports 3000 and 8080.
+## Under colima, pass a directory it shares: make test-evaluation EVAL_DIR=...
+test-evaluation:
+	python3 scripts/run-evaluation-doc.py $(if $(EVAL_DIR),--workdir $(EVAL_DIR),)
 
 ## Measure which released gateways this core still works with, and write
 ## docs/compatibility.md from what happened rather than from memory.
