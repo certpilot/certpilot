@@ -1,4 +1,4 @@
-name: Documented examples
+name: Documentation behaves
 
 # Every curl in docs/ is something a reader will paste into a terminal. Two
 # things make one wrong, and neither shows up in any build: it names a route
@@ -15,14 +15,34 @@ name: Documented examples
 #
 # Nothing caught it because nothing read the examples. This does, against
 # docs/routes.json, which `make routes` generates from the router itself.
+# What began as one check on curl examples is now four questions, each asked of
+# what a reader actually gets rather than of the markdown's syntax:
+#
+#   does every example name a real route, with a credential if it needs one
+#   does every link and anchor land
+#   does every pinned version exist, and agree with the rest of its page
+#   does the evaluation guide, run as written, do what it says it does
+#
+# plus proof that each check fails on the input it exists to catch. See
+# docs/documentation-checks.md for what each one cannot tell you.
+#
+# Weekly as well as on pull requests. Two of these depend on things outside
+# this repository — published images and tags, and a released quickstart — which
+# can change on a day nobody opens a pull request here.
+
 on:
   pull_request:
     paths:
       - 'docs/**'
       - 'README.md'
-      - 'scripts/check-doc-examples.py'
-      - 'scripts/check-doc-links.py'
+      - 'scripts/check-doc-*.py'
+      - 'scripts/run-evaluation-doc.py'
+      - 'scripts/doc-examples-live.sh'
+      - 'scripts/test-doc-checks.sh'
+      - '.github/workflows/doc-examples.yml'
       - 'Makefile'
+  schedule:
+    - cron: '0 7 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -44,7 +64,8 @@ jobs:
       # Checked out beside this one because docs/platforms/*.md and docs/agent.md
       # live there and are published to the same site from the same source paths.
       # A core page linking to ../platforms/nginx.md is correct for a reader and
-      # unresolvable to anything looking only at this repository.
+      # unresolvable to anything looking only at this repository. The link check
+      # fails, rather than skipping, if this step is ever removed.
       - uses: actions/checkout@v4
         with:
           repository: certpilot/certpilot-agent
@@ -55,3 +76,43 @@ jobs:
 
       - name: Check every documented link and anchor
         run: make test-doc-links
+
+      - name: Check every pinned version exists and agrees with its page
+        run: make test-doc-versions
+
+      - name: Prove each check fails on what it exists to catch
+        run: make test-doc-checks
+
+  live:
+    name: documented examples answer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: '**/go.sum'
+
+      # Every GET a page documents that is safe to send anywhere, sent to a core
+      # built from this commit, signed in. Against this tree rather than a
+      # release: the pages describe main.
+      - name: Send the safe examples to a core built from this tree
+        run: make test-docs-live
+
+  evaluation:
+    name: evaluation guide still works
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # docs/evaluation.md executed block by block, as a reader would paste it,
+      # against the release it pins — fetched from GitHub and ghcr.io exactly as
+      # the page says. Every assertion names the sentence on the page it checks.
+      - name: Run the evaluation guide as written
+        run: make test-evaluation
