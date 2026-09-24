@@ -99,3 +99,58 @@ jobs:
             VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  release:
+    name: publish release
+    # The release page. Nothing used to create one: the gateways and their SDK
+    # were tagged v0.3.0 and served that way for nine days while each Releases
+    # page still said v0.2.0, because the page was a step somebody had to
+    # remember (#101).
+    #
+    # After both images, so a page never announces an image that failed to
+    # publish. Only for a tag: a manual run from a branch has nothing to
+    # release.
+    needs: image
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the release for this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # Re-running a tag's workflow, or a release written by hand before this
+          # ran, must neither fail nor overwrite what is there.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already has a release; leaving it as it is."
+            exit 0
+          fi
+
+          # An annotated tag's message is the release notes, written by whoever cut
+          # the tag. A lightweight tag carries none, so GitHub lists the pull
+          # requests merged since the previous release instead.
+          notes=(--generate-notes)
+          ref=$(gh api "repos/$GH_REPO/git/ref/tags/$TAG")
+          if [ "$(jq -r .object.type <<<"$ref")" = tag ]; then
+            gh api "repos/$GH_REPO/git/tags/$(jq -r .object.sha <<<"$ref")" --jq .message \
+              | sed '/^-----BEGIN [A-Z ]*SIGNATURE-----$/,$d' > "$RUNNER_TEMP/notes.md"
+            notes=(--notes-file "$RUNNER_TEMP/notes.md")
+          fi
+
+          # Latest only for the highest version. A fix to an older line must not
+          # take the badge from the newest one, and a prerelease never has it.
+          flags=(--latest=false)
+          if [[ "$TAG" == *-* ]]; then
+            flags+=(--prerelease)
+          else
+            highest=$(gh api "repos/$GH_REPO/tags" --paginate --jq '.[].name' \
+              | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V | tail -n 1)
+            [ "$highest" = "$TAG" ] && flags=(--latest=true)
+          fi
+
+          gh release create "$TAG" --verify-tag --title "$TAG" "${notes[@]}" "${flags[@]}"
