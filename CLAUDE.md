@@ -387,17 +387,15 @@ adding a required field makes the whole estate unsaveable.
 
 Documented, not secretly broken. Do not "discover" these as findings.
 
-**Blocked on this machine, not on the code:** the Key Vault and F5 deployers
-need a real Azure tenant and a real F5 to test against, and the Docker assets
-need a container runtime.
+**Blocked on this machine, not on the code:** the ACM, Key Vault and F5
+deployers need a real AWS account, Azure tenant and F5 to test against.
 
 - The audit chain has no external anchor — an attacker holding both the
   database and the KEK can rewrite it wholesale, or truncate the newest entries.
-- Key Vault and F5 deployers are unit-tested only.
+- ACM, Key Vault and F5 deployers are tested against fakes only.
 - The KEK is held in the core's memory. It can be loaded from a file or from
   Vault, but delegated unwrapping (transit/KMS) needs a `CPS2` envelope.
 - Deployment waves are per certificate; two rollouts do not coordinate.
-- Docker assets were fixed but never built — no container runtime on this machine.
 
 ---
 
