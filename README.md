@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" /></a>
   <img alt="Go 1.26" src="https://img.shields.io/badge/go-1.26-00ADD8.svg" />
   <img alt="Status: early development" src="https://img.shields.io/badge/status-early%20development-orange.svg" />
-  <a href="https://certpilot.github.io/certpilot-docs/"><img alt="API reference" src="https://img.shields.io/badge/docs-API%20reference-informational.svg" /></a>
+  <a href="https://certpilot.github.io/certpilot-docs/"><img alt="Documentation" src="https://img.shields.io/badge/docs-certpilot.github.io-informational.svg" /></a>
 </p>
 
 ---
@@ -32,19 +32,27 @@
 
 CertPilot is built for the **central PKI team** — the group that owns the CA
 hierarchy and answers for every certificate the organisation serves. One place
-to watch every CA and certificate across any authority, public or private, with
-automated renewal, CA health monitoring, deployment to the servers that serve
-them, policy enforcement, and cryptographic posture reporting.
+to watch every CA and certificate, public or private, with CA health
+monitoring, automated renewal wherever a gateway reaches the CA, deployment to
+the servers that serve them, policy enforcement, and cryptographic posture
+reporting.
 
 An expiring issuing CA is the failure that takes down everything it ever
 signed, and no amount of certificate automation helps once that has happened.
 So CertPilot watches authorities first and certificates second.
 
 > [!WARNING]
-> **Early development.** Everything in the
+> **Early development.** Everything marked ✅ in the
 > [implementation status](docs/status.md) has been run end to end against real
-> certificate authorities, a real database and real servers. Anything not listed
-> there does not exist. Do not run this in production yet.
+> certificate authorities, a real database and real servers. Everything marked 🧪
+> is built but has only ever met a fake. Anything not listed there does not
+> exist. Do not run this in production yet.
+
+**Evaluating it?** [Run the evaluation](docs/evaluation.md): a released stack in
+about twenty seconds, one certificate issued and renewed, and a list of what the
+evaluation cannot show you. Then read [how CertPilot compares](docs/comparison.md)
+with Keyfactor Command, Next-Generation Trust Security and DigiCert Trust
+Lifecycle Manager, including when one of them fits better.
 
 ## Why
 
@@ -54,19 +62,22 @@ public TLS certificate fell to **200 days in March 2026**, and falls to **100
 days in March 2027** and **47 days in March 2029**. Domain validation reuse
 periods are reduced on the same schedule, to 10 days.
 
-At a 47-day maximum, each certificate is renewed approximately eight times a
-year. An estate of ten thousand certificates therefore requires around 200
-renewals per day. Manual renewal processes that are adequate for 398-day
-certificates do not scale to this, and the dates are already set.
+At a 47-day maximum, a certificate renewed on its last day is renewed about
+eight times a year, so an estate of ten thousand certificates needs over 200
+renewals a day. Renewed with a third of its life left instead, the figure is
+nearer 320. Manual renewal processes that are adequate for 398-day certificates
+do not scale to this, and the dates are already set.
 
 [sc081]: https://cabforum.org/2025/04/11/ballot-sc081v3-introduce-schedule-of-reducing-validity-and-data-reuse-periods/
 
 The open-source ecosystem is good at *getting* a certificate — certbot, lego,
-cert-manager and step-ca all do it well. What is missing is everything around
-it: knowing what you already have, where it is installed, whether it complies
-with your policy, and getting the renewed certificate onto the machine that
-serves it. That gap is where the commercial tools live, and it is what CertPilot
-is aimed at.
+cert-manager and step-ca all do it well, each in its own place. CertPilot is
+aimed at the view across all of them: the CAs the organisation depends on, the
+certificates under them, where each one is installed, whether it complies with
+policy, and getting a renewed certificate onto whatever serves it. Commercial
+certificate lifecycle platforms do much of this too.
+[How CertPilot compares](docs/comparison.md) says where, from their own
+documentation.
 
 ## Quick start
 
@@ -141,15 +152,18 @@ certificate, pointing at a real CA, and putting it on a wall.
 
 | | |
 |:---|:---|
-| **Issue** | ACME (RFC 8555) with `dns-01` and `http-01`, wildcards, External Account Binding, and ARI (RFC 9773). HashiCorp Vault PKI. A self-signed gateway for development |
+| **Issue** | ACME (RFC 8555) with `dns-01` and `http-01`, wildcards, ARI (RFC 9773), and External Account Binding 🧪. HashiCorp Vault PKI. A self-signed gateway for development |
 | **Renew** | A durable queue with leases, an attempt log, and backoff that tightens as expiry approaches. Safe on N replicas with no leader election. A renewal deploys itself |
 | **Watch** | Scheduled CA health sweeps with expiry thresholds, CRL freshness, and a real OCSP request whose signature and delegation are verified. Live updates over SSE |
-| **Find** | Network and CIDR scans, Certificate Transparency logs, and cloud inventory across ACM, Azure Key Vault, Google Cloud and Kubernetes secrets |
-| **Deploy** | Signed webhook, host agent, AWS ACM, Azure Key Vault, F5 BIG-IP — in declared waves, so a canary is one target rather than one per worker |
+| **Find** | Network and CIDR scans. Certificate Transparency logs 🧪, and cloud inventory 🧪 across ACM, Azure Key Vault, Google Cloud and Kubernetes secrets |
+| **Deploy** | Signed webhook and host agent; AWS ACM, Azure Key Vault and F5 BIG-IP 🧪 — in declared waves, so a canary is one target rather than one per worker |
 | **Install** | The host agent installs to ten tested platforms by name: nginx, Apache, HAProxy, Caddy, Tomcat, PostgreSQL, MariaDB and MySQL, Postfix, Dovecot, and IIS through the Windows certificate store. Each writes the files or imports to the store, validates the configuration, reloads the service, and rolls back if the reload fails. See **[supported platforms](https://github.com/certpilot/certpilot-agent/blob/main/docs/platforms/README.md)** |
 | **Prove** | A hash-chained audit log, CNSA 2.0 conformance per certificate, and CycloneDX 1.6 CBOM export |
 
-Full detail, including what is partial and what does not exist:
+🧪 marks what is built but has never been run against the real service by
+anything in this project: the notifications, identity-provider sign-in and
+cloud paths all depend on a third party CI holds no credential for. Full
+detail, including what is partial and what does not exist:
 **[docs/status.md](docs/status.md)**.
 
 ## Architecture
@@ -197,12 +211,14 @@ whole design follows from.
 
 ## Documentation
 
-The **[API reference](https://certpilot.github.io/certpilot-docs/)** is
-published as its own site, generated from the router so it cannot fall behind
-the implementation.
+The documentation is **[published as its own site](https://certpilot.github.io/certpilot-docs/)**:
+the evaluation, walkthroughs, guides, and an API reference generated from the
+router so it cannot fall behind the implementation.
 
 | | |
 |:---|:---|
+| [Evaluation](docs/evaluation.md) | A released stack in twenty seconds, and what it cannot show you |
+| [How it compares](docs/comparison.md) | Beside three commercial platforms, from their own documentation, dated |
 | [Getting started](docs/getting-started.md) | The first fifteen minutes |
 | [Architecture](docs/architecture.md) | How the pieces fit and why |
 | [Configuration](docs/configuration.md) | Every setting for every process |
@@ -272,8 +288,9 @@ Tailwind 4 · Chart.js
 ## Contributing
 
 Bug reports from running this against a real certificate authority are the most
-useful thing right now, followed by gateways for CAs that do not have one yet —
-Google Cloud CAS, AWS Private CA, DigiCert and Sectigo are all unwritten.
+useful thing right now, followed by gateways for CAs that do not have one yet.
+Microsoft AD CS is first in line, then AWS Private CA and Google Cloud CAS;
+DigiCert and Sectigo are unwritten too.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Open an issue before writing anything
 substantial; small fixes can go straight to a pull request.

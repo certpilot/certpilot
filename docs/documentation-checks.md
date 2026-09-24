@@ -19,6 +19,7 @@ that the site shows what this repository says.
 | `npm run check:links` in certpilot-docs | Every link, anchor, image and stylesheet on the **built** site lands | Links to other sites | Every certpilot-docs pull request, after the build |
 | `make test-doc-versions` | Every pinned image tag, module version and release ref is published. Each page names one version per component, and a pinned gateway or agent is one [compatibility.md](compatibility.md) measured | Whether a pinned *combination* works. Only the evaluation run shows that, and only for its own pair | Docs pull requests, weekly |
 | `make test-evaluation` | [evaluation.md](evaluation.md), run as written against the release it pins, does what sixteen of its sentences say | Every sentence it does not assert | Docs pull requests, weekly |
+| `make test-comparison-sources` | Every vendor sentence [comparison.md](comparison.md) quotes is still on the vendor's page, and every claim there cites a source the page lists | Whether the vendor's documentation is right, or anything it does not say | Weekly, and on pull requests that change the comparison |
 | `sync:pages --check` and `sync:guides --check` in certpilot-docs | The site shows exactly what this repository says, and records which commit it came from | Whether this repository is right | Every certpilot-docs pull request |
 | `make test-doc-checks` and `npm run test:checks` | Each check above fails on the breakage it exists to catch, and passes once that is corrected | Nothing beyond that. This one checks the checks | Docs pull requests, weekly |
 
@@ -52,6 +53,7 @@ that existed, because every check reads syntax, and these were about behaviour.
 | The agent and the gateways "both speak gRPC" | A draft, caught in review | The agent speaks REST and has no `.proto` | Never published |
 | Vault is "the only gateway that answers GetCAInfo" | A draft, caught in review | ACME answers it as well. Vault is the only one that returns *issuers* | Never published |
 | `config.example.yaml` "defaults to a wildcard CORS origin" | A draft, caught in review | It sets `http://localhost:3000` | Never published |
+| Deploying to servers: "Two of those five are 🧪" | `status.md` | Three are. The AWS ACM deployer has only ever answered a stub, and no CI job holds an AWS credential. Found while writing the comparison on 24 September | Two days as that sentence. The ✅ it replaced had said all five |
 
 The two that were published follow the same pattern, and it is the one most
 worth knowing. **A sentence saying that something does not exist was true when

@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-docs-live test-evaluation compatibility agent-lifecycle agent-compatibility all build build-core test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation compatibility agent-lifecycle agent-compatibility all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -123,6 +123,14 @@ test-doc-versions:
 ## they claimed.
 test-doc-checks:
 	./scripts/test-doc-checks.sh
+
+## Fetch every vendor page docs/comparison.md quotes and check the quoted text
+## is still there, and that every claim cites a source the page lists. The
+## comparison speaks about other companies' products; a vendor rewriting a page
+## is how it would go stale without anybody noticing. Needs the network;
+## --offline checks the table and the citations only, and says so.
+test-comparison-sources:
+	python3 scripts/check-comparison-sources.py
 
 ## Send every documented GET that is safe to send to a core built from this
 ## tree, signed in, and require each to succeed. Reading an example against the

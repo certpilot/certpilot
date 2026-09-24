@@ -158,6 +158,65 @@ expect "a page that lost a step's commands fails before running anything" 1 \
   "no shell block under step(s) [7]" \
   python3 scripts/run-evaluation-doc.py --page "$T/evaluation-nostep.md" --workdir "$T/eval"
 
+echo "── check-comparison-sources.py: a vendor page that changed under a quote"
+
+# A local server stands in for the vendor, so this needs no network. The cases
+# are about what the checker does with a page, not about any vendor's page. The
+# first page spells its text the way vendor HTML does, with an entity for the
+# apostrophe, a non-breaking space and a zero-width one, which is how DigiCert
+# writes its own name. The second is how Keyfactor answers a moved page: status
+# 200, and a title saying it is not there.
+mkdir -p "$T/vendor"
+cat >"$T/vendor/docs.html" <<'HTML'
+<html><head><title>Vendor docs</title></head><body>
+<p>The&nbsp;platform&rsquo;s agent generates the key&#8203; on the host.</p></body></html>
+HTML
+cat >"$T/vendor/moved.html" <<'HTML'
+<html><head><title>Oops! Page Not Found</title></head><body>Try the home page.</body></html>
+HTML
+port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+python3 -m http.server "$port" --bind 127.0.0.1 --directory "$T/vendor" >/dev/null 2>&1 &
+server=$!
+disown "$server"  # killed on exit; without this bash reports it as "Terminated"
+trap 'kill "$server" 2>/dev/null; rm -rf "$T"' EXIT
+for _ in $(seq 1 20); do
+  python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:$port/docs.html')" 2>/dev/null && break
+  sleep 0.25
+done
+
+# comparison <file> <cited id> <quoted text> <path on the stand-in vendor>
+comparison() {
+  page "$1" <<MD
+# Comparison
+
+It generates keys on the host ([$2](#sources)).
+
+## Sources
+
+| ID | Vendor | Page | Version or date | Reviewed | Quoted |
+|:--|:--|:--|:--|:--|:--|
+| K1 | Vendor | [Docs](http://127.0.0.1:$port/$4) | 1.0 | 2026-09-24 | $3 |
+MD
+}
+
+comparison comparison/ok.md K1 "The platform's agent generates the key on the host." docs.html
+expect "a quote still on its page passes, however the page spells its spaces" 0 "" \
+  python3 scripts/check-comparison-sources.py --page "$T/comparison/ok.md"
+
+comparison comparison/reworded.md K1 "The platform's agent generates the key in the cloud." docs.html
+expect "a quote the vendor has since reworded fails, naming the row" 1 \
+  "K1 (Vendor): the quoted text is no longer on" \
+  python3 scripts/check-comparison-sources.py --page "$T/comparison/reworded.md"
+
+comparison comparison/moved.md K1 "The platform's agent generates the key on the host." moved.html
+expect "a page that moved and answers 200 anyway fails" 1 "now serves a not-found page" \
+  python3 scripts/check-comparison-sources.py --page "$T/comparison/moved.md"
+
+comparison comparison/uncited.md K2 "The platform's agent generates the key on the host." docs.html
+expect "a claim citing a source that is not listed fails, offline too" 1 \
+  "the page cites K2, which is not in Sources" \
+  python3 scripts/check-comparison-sources.py --offline --page "$T/comparison/uncited.md"
+
 echo
 if (( failures )); then
   echo "$failures case(s) did not behave"
