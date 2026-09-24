@@ -129,6 +129,10 @@ from the one asked for.
 SigV4 is signed by hand ([`core/engine/cloudsync/sigv4.go`](../core/engine/cloudsync/sigv4.go)).
 There is no AWS SDK anywhere in this project.
 
+> Tested against a fake that answers the way ACM does. Nothing in this
+> repository or its CI holds an AWS credential, so AWS itself has never checked
+> one of these signatures.
+
 ### azure_key_vault
 
 ```json

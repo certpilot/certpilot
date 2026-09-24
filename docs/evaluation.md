@@ -245,3 +245,10 @@ stack does the wrong way on purpose:
 
 `deploy/docker-compose.yml` and `deploy/config.production.example.yaml` are the
 files to start from for that, and [operations](operations.md) is the page.
+
+## Whether it is the right tool at all
+
+[How CertPilot compares](comparison.md) puts it beside Keyfactor Command, Palo
+Alto Networks' Next-Generation Trust Security and DigiCert Trust Lifecycle
+Manager. It uses only what each vendor documents, dates every source, and says
+when one of them fits better than this does.

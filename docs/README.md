@@ -16,6 +16,7 @@ document how to automate that.
 | | |
 |:---|:---|
 | [evaluation.md](evaluation.md) | Whether this fits your estate, from a running container in about twenty seconds |
+| [comparison.md](comparison.md) | Beside Keyfactor Command, Next-Generation Trust Security and DigiCert Trust Lifecycle Manager, from their own documentation, dated, including when one of them fits better |
 | [getting-started.md](getting-started.md) | The first fifteen minutes. No database or cloud account needed |
 | [platforms/](https://github.com/certpilot/certpilot-agent/blob/main/docs/platforms/README.md) | Supported platforms: configuration, commands and limitations for each. In `certpilot-agent`, with the agent |
 | [architecture.md](architecture.md) | How the pieces fit, and the three decisions that shape everything else |

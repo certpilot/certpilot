@@ -22,6 +22,7 @@ name: Documentation behaves
 #   does every link and anchor land
 #   does every pinned version exist, and agree with the rest of its page
 #   does the evaluation guide, run as written, do what it says it does
+#   does every vendor page the comparison quotes still say what it quotes
 #
 # plus proof that each check fails on the input it exists to catch. See
 # docs/documentation-checks.md for what each one cannot tell you.
@@ -36,6 +37,7 @@ on:
       - 'docs/**'
       - 'README.md'
       - 'scripts/check-doc-*.py'
+      - 'scripts/check-comparison-sources.py'
       - 'scripts/run-evaluation-doc.py'
       - 'scripts/doc-examples-live.sh'
       - 'scripts/test-doc-checks.sh'
@@ -116,3 +118,33 @@ jobs:
       # the page says. Every assertion names the sentence on the page it checks.
       - name: Run the evaluation guide as written
         run: make test-evaluation
+
+  comparison:
+    name: comparison still quotes its sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Every sentence docs/comparison.md quotes from a vendor's documentation,
+      # fetched and looked for. Weekly, because vendors rewrite their pages on
+      # their own schedule; on a pull request only when the comparison or this
+      # check changed, so an unrelated documentation change does not depend on
+      # fifteen vendor sites answering. Its structure is checked offline either
+      # way, and the log says which of the two ran.
+      - name: Check every vendor quote is still on the vendor's page
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ] && git diff --quiet "$BASE" HEAD -- docs/comparison.md scripts/check-comparison-sources.py; then
+            echo "The comparison is unchanged by this pull request, so its vendor pages are not fetched here."
+            echo "The weekly run fetches them. Checking the table and its citations instead:"
+            python3 scripts/check-comparison-sources.py --offline
+          else
+            make test-comparison-sources
+          fi

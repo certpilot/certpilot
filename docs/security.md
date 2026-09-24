@@ -518,8 +518,9 @@ internally consistent. Detecting either needs the head tag published somewhere
 append-only — a second system, an object-lock bucket, a printed page — on a
 schedule. Not built.
 
-**Key Vault and F5 deployers are unit-tested only.** Written to their published
-APIs; never run against a real vault or appliance.
+**The AWS ACM, Key Vault and F5 deployers are tested against fakes only.**
+Written to their published APIs; never run against a real AWS account, vault or
+appliance.
 
 **The KEK is held in the core's memory.** It can now be loaded from a file or
 from Vault rather than an environment variable, but wherever it comes from the
