@@ -291,7 +291,7 @@ them:**
 | Key type, key size | BLOCK | Refused. Recording it would launder an unauthorised key into something that looks authorised |
 | SANs | BLOCK | Refused. A certificate covering names other than what was authorised is not the certificate that was authorised, whichever direction it differs |
 | Validity, shorter than asked | REPORT | Recorded. Every public CA caps lifetime; a 47-day certificate where 90 were requested is the CA being correct |
-| Validity, longer than asked | BLOCK | Refused. A CA issuing beyond the requested lifetime is misconfigured or is not the CA that was expected |
+| Validity, longer than asked | BLOCK | Refused. A CA issuing beyond the requested lifetime is misconfigured or is not the CA that was expected. On a renewal under a template that declares no lifetime, the lifetime asked for is the certificate's own, and a longer one is REPORT instead: an inference is not a rule, and a gateway older than `certpilot-gateway-sdk` v0.4.0 ignores it, so refusing would fail every renewal on a core upgraded ahead of its gateways |
 | A subject field the CA added | REPORT | Recorded, with the addition named. Refusing would make CertPilot unusable against any CA that adds an OU by policy; hiding it would make the template's subject a fiction |
 
 **`conformance: ENFORCE | REPORT`** is the switch, on the template, deciding

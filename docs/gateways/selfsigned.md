@@ -137,7 +137,7 @@ make run-gateway-selfsigned    # :9091
 
 Released as `ghcr.io/certpilot/gateway-selfsigned` on `linux/amd64` and
 `linux/arm64`, tagged in step with the Go module, so
-`go run github.com/certpilot/certpilot-gateway-selfsigned/cmd@v0.3.0` runs the
+`go run github.com/certpilot/certpilot-gateway-selfsigned/cmd@v0.4.0` runs the
 code the image contains.
 
 This is the one gateway that can be exercised end to end with no external
@@ -145,7 +145,7 @@ dependency, so CI runs the **full issuance path** against it on every pull
 request — with and without a CSR — rather than only the contract checks:
 
 ```bash
-go run github.com/certpilot/certpilot-gateway-sdk/cmd/conformance@v0.3.0 \
+go run github.com/certpilot/certpilot-gateway-sdk/cmd/conformance@v0.4.0 \
     -addr localhost:9091 -insecure -domain test.example.com
 ```
 

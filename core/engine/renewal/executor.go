@@ -143,6 +143,9 @@ func (e *Executor) RenewCertificate(ctx context.Context, certID string) (*store.
 		CaProfile:        shape.CAProfile,
 		KeyUsage:         shape.KeyUsage,
 		ExtendedKeyUsage: shape.ExtendedKeyUsage,
+		// Restated on every renewal (#102). Without it the gateway applied its
+		// own default, and a 90-day certificate came back lasting a year.
+		ValidityDays: int32(shape.ValidityDays),
 	}
 	if cert.CertificatePEM != nil {
 		renewReq.CurrentCertificatePem = []byte(*cert.CertificatePEM)
@@ -175,6 +178,9 @@ func (e *Executor) RenewCertificate(ctx context.Context, certID string) (*store.
 	if err != nil {
 		return nil, e.recordFailure(ctx, cert,
 			fmt.Errorf("renewed certificate could not be checked for conformance: %w", err))
+	}
+	if !shape.ValidityDeclared {
+		findings = inferredLifetimeIsReported(findings)
 	}
 	// Enforcement is a template property; a certificate with no template has
 	// nothing to enforce against, the same reasoning applyTemplateFloor

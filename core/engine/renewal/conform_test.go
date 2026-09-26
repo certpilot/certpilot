@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/certpilot/certpilot/core/engine/policy"
 	"github.com/certpilot/certpilot/core/store"
@@ -370,5 +371,27 @@ func TestRenewalDoesNotCountTheCommonNameTwice(t *testing.T) {
 	}
 	if len(got.Unfixable) != 1 {
 		t.Errorf("one naming problem was reported %d times: %v", len(got.Unfixable), got.Unfixable)
+	}
+}
+
+// A lifetime read off a certificate is rounded, not truncated. Let's Encrypt
+// ends a 90-day certificate one second short of 90 days; truncating asked for
+// 89 on its renewal, and a day shorter again on the one after (#102).
+func TestTheLifetimeReadOffACertificateIsRounded(t *testing.T) {
+	notBefore := time.Date(2026, 9, 22, 21, 30, 7, 0, time.UTC)
+	for _, tc := range []struct {
+		lifetime time.Duration
+		want     int
+	}{
+		{90*24*time.Hour - time.Second, 90},
+		{90*24*time.Hour + 30*time.Second, 90},
+		{6*24*time.Hour - time.Second, 6},
+		{47 * 24 * time.Hour, 47},
+	} {
+		notAfter := notBefore.Add(tc.lifetime)
+		cert := &store.Certificate{NotBefore: &notBefore, NotAfter: &notAfter}
+		if got := validityOrDefault(0, cert); got != tc.want {
+			t.Errorf("lifetime %v: asked for %d days, want %d", tc.lifetime, got, tc.want)
+		}
 	}
 }
