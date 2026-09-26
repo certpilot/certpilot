@@ -59,15 +59,15 @@ silent gaps, and a step nobody exercised is worth less than one that says why.
 
 ## Three defects these turned up
 
-Walking the paths end to end found things that reading the pages did not. They are open,
-and each one is linked from the step that hits it:
+Walking the paths end to end found things that reading the pages did not. Each one is
+linked from the step that hits it:
 
-- [#107](https://github.com/certpilot/certpilot/issues/107) — manually renewing an
-  agent-held certificate makes CertPilot hold its private key.
-- [#108](https://github.com/certpilot/certpilot/issues/108) — a SAN-only certificate
-  cannot be found by name.
-- [#109](https://github.com/certpilot/certpilot/issues/109) — a certificate shorter than
-  the renewal lead time renews on every agent cycle.
+- [#107](https://github.com/certpilot/certpilot/issues/107), fixed — manually renewing an
+  agent-held certificate made CertPilot hold its private key. The core now refuses it.
+- [#108](https://github.com/certpilot/certpilot/issues/108), open — a SAN-only
+  certificate cannot be found by name.
+- [#109](https://github.com/certpilot/certpilot/issues/109), open — a certificate shorter
+  than the renewal lead time renews on every agent cycle.
 
 ## Before any of them
 

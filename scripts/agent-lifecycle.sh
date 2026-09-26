@@ -468,5 +468,33 @@ on_disk="$(openssl x509 -in "$WORK/served/cert.pem" -outform DER 2>/dev/null | o
   || die "the core recorded $reported and the file on disk is $on_disk — the two halves do not hold the same certificate"
 pass "the installed file is the certificate the core issued ($on_disk)"
 
+# ── A key the core does not hold is not renewed by the core (#107) ────────────
+#
+# The agent generated this certificate's key and never sent it. A manual renewal
+# from the core used to be accepted anyway: the gateway made a new keypair, the
+# core sealed it into this record, and the host went on serving the certificate
+# checked above while the record described another. This is the one place a real
+# agent-held certificate exists to ask about, so it is asked here.
+cert_id="$(api "$API/api/v1/certificates" | python3 -c "
+import sys, json
+for c in json.load(sys.stdin).get('data', []):
+    if c.get('common_name') == '$CERT_NAME':
+        print(c.get('id', ''))
+        break
+")"
+[[ -n "$cert_id" ]] || die "could not find $CERT_NAME to ask about renewing it"
+
+code="$(api -o "$WORK/renew.json" -w '%{http_code}' -X POST "$API/api/v1/certificates/$cert_id/renew")"
+[[ "$code" == "400" ]] \
+  || die "renewing an agent-held certificate from the core answered $code, not 400: $(cat "$WORK/renew.json")"
+grep -q 'certpilot-agent request' "$WORK/renew.json" \
+  || die "the refusal does not say how to renew it from the host: $(cat "$WORK/renew.json")"
+
+code="$(api -o /dev/null -w '%{http_code}' "$API/api/v1/certificates/$cert_id/private-key")"
+[[ "$code" == "404" ]] || die "the core answered $code for $CERT_NAME's private key; it should hold none"
+custody="$(api "$API/api/v1/certificates/$cert_id" | field '.get("key_custody","")')"
+[[ "$custody" == "AGENT" ]] || die "key_custody reads '$custody' after a refused renewal, not AGENT"
+pass "a renewal from the core is refused, and the core holds no key for $CERT_NAME"
+
 say ""
 say "the agent and this core agree, end to end."

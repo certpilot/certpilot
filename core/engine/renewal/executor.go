@@ -73,14 +73,15 @@ func (e *Executor) RenewCertificate(ctx context.Context, certID string) (*store.
 	 * it, and key_custody goes on reading EXTERNAL while CertPilot quietly
 	 * holds a key, which is the one question that field exists to answer.
 	 *
-	 * Refusing is the honest outcome. Renewing it needs a new signing request
-	 * from whoever holds the key, and there is no way to ask for one from here.
+	 * An agent-held key is the same case, and this guard used to test for
+	 * EXTERNAL alone. A manual renewal of an agent's certificate therefore went
+	 * through: the core sealed a key for a record still naming the host as its
+	 * holder, and the host went on serving the certificate the record no longer
+	 * described (#107). The API refuses both now, and the queue cancels both;
+	 * this stays as the last line for any path that reaches here regardless.
 	 */
-	if cert.KeyCustody == store.KeyCustodyExternal {
-		return nil, fmt.Errorf(
-			"certificate %s is renewed by whoever holds its private key, not by CertPilot: "+
-				"key_custody is EXTERNAL, so renewal here would issue against a key this "+
-				"certificate does not use. Submit a new signing request instead", certID)
+	if err := KeyHeldElsewhere(ctx, e.store, cert); err != nil {
+		return nil, err
 	}
 
 	caAccount, err := e.store.GetCAAccount(ctx, *cert.CAAccountID)

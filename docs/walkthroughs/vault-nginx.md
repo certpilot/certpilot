@@ -337,11 +337,12 @@ on each cycle and asks for a replacement when it has passed.
 
 So there is nothing to schedule. Leave `certpilot-agent run` up.
 
-> **Do not use `POST /certificates/:id/renew` on one of these.** It is accepted, it
-> succeeds, and it is wrong in three ways at once: CertPilot ends up holding a private
-> key for a certificate whose `key_custody` still says `AGENT`, the record stops
-> describing what the host is serving, and the replacement can be *shorter* than the
-> original. [#107](https://github.com/certpilot/certpilot/issues/107), open.
+> **`POST /certificates/:id/renew` refuses one of these, with `400`.** It used to be
+> accepted, and it was wrong in three ways at once: CertPilot ended up holding a private
+> key for a certificate whose `key_custody` still said `AGENT`, the record stopped
+> describing what the host was serving, and the replacement could be *shorter* than the
+> original ([#107](https://github.com/certpilot/certpilot/issues/107)). The refusal names
+> the agent that holds the key.
 
 To force a renewal before `renew_after`, do it from the host — `certpilot-agent request`
 with the same name replaces what it holds.

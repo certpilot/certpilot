@@ -590,6 +590,15 @@ func (h *CertificateHandler) Renew(c *gin.Context) {
 		})
 		return
 	}
+	// Refused here rather than in a worker, for the same reason: a renewal
+	// would issue against a new key that whoever serves this certificate does
+	// not have, and seal that key into a record whose key_custody says CertPilot
+	// has none (#107). The caller gets the reason and the host to go to, not a
+	// queued job that fails later.
+	if err := renewal.KeyHeldElsewhere(c.Request.Context(), h.store, cert); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	actorID := c.GetString(middleware.ContextUserID)
 	actorEmail := c.GetString(middleware.ContextUserEmail)

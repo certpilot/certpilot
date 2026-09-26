@@ -278,6 +278,20 @@ func (q *Queue) execute(ctx context.Context, job *store.RenewalJob) {
 		return
 	}
 
+	// Cancelled for the same reason, and before the CA is asked anything. A job
+	// for a certificate whose key is on a host or behind somebody's signing
+	// request can never succeed here: whoever holds the key renews it. Left
+	// PENDING it would be retried for ever and escalated as a failing renewal,
+	// paging somebody about a certificate that its key holder, the only party
+	// able to renew it, is renewing correctly. The API refuses these now; this
+	// closes the ones queued before it did (#107).
+	if err := KeyHeldElsewhere(ctx, q.store, cert); err != nil {
+		slog.Info("a renewal job was for a key CertPilot does not hold; cancelled",
+			"job", job.ID, "certificate", job.CertificateID, "key_custody", cert.KeyCustody)
+		finish(store.RenewalCancelled, err, false)
+		return
+	}
+
 	// The crash guard.
 	//
 	// A worker that finalised an order and died before writing the result would
