@@ -20,9 +20,8 @@ has started asking the reader for something new, and this is where that shows.
 Each assertion names the sentence on the page that it verifies, and fails if
 that sentence is no longer there. Otherwise the page could be reworded to say
 something different and this would go on checking the old claim, passing,
-forever. That includes the page's known-defect callout for #102: the day that
-defect is fixed, this fails, because the page will still be telling readers to
-expect it.
+forever. That included the page's known-defect callout for #102, which this
+asserted until the day the fix made it fail; it now asserts the fix.
 
 Not indiscriminate execution: one page, allow-listed, in a throwaway directory,
 against containers it starts and removes. It needs Docker, Compose v2, and ports
@@ -267,12 +266,12 @@ def main() -> int:
               renewed.get("renewal_count") == 1 and renewed.get("serial_number") != serial_before,
               f"renewal_count {renewed.get('renewal_count')}, serial unchanged: "
               f"{renewed.get('serial_number') == serial_before}")
-        # #102. Asserted as the page states it, so that fixing the defect fails
-        # this until the page stops warning about it.
+        # #102, fixed in core v0.2.0 and gateway v0.4.0: a renewal asks for the
+        # lifetime the account did, and this is the claim that says so. It used
+        # to assert the defect, 364 days, so that the fix would fail it.
         days = renewed.get("days_remaining") or 0
-        claim("you will see `days_remaining` jump to\naround 364", 360 <= days <= 366,
-              f"days_remaining after renewal is {days}. If #102 has been fixed, the page's "
-              f"known-defect callout is now wrong and should go")
+        claim("`days_remaining` is 89 again", 88 <= days <= 90,
+              f"days_remaining after renewal is {days}; the account asked for 90")
 
         # ── 6. Check the audit chain ─────────────────────────────────────────
         audit = json_after(run(6, 0))
