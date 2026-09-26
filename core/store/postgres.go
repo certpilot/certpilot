@@ -559,12 +559,15 @@ func (s *PostgresStore) GetCertificatesDueForRenewal(ctx context.Context, defaul
 		  -- of rows predating the column, and excluding them would silently stop
 		  -- renewing certificates that have been renewing all along.
 		  AND coalesce(key_custody, '') NOT IN ('AGENT', 'EXTERNAL')
+		  -- Both the lead time and the safety floor are bounded by the
+		  -- certificate's own lifetime (renewalLeadSQL, #109): unbounded, a
+		  -- certificate shorter than either was due the moment it was issued.
 		  AND CASE
 		        WHEN renewal_scheduled_at IS NOT NULL THEN
 		          renewal_scheduled_at <= now()
-		          OR not_after <= (now() + make_interval(days => $2))
+		          OR not_after <= (now() + ` + renewalLeadSQL("$2") + `)
 		        ELSE
-		          not_after <= (now() + (COALESCE(renewal_lead_days, $1) || ' days')::interval)
+		          not_after <= (now() + ` + renewalLeadSQL("COALESCE(renewal_lead_days, $1)") + `)
 		      END
 	`
 	rows, err := s.pool.Query(ctx, query, defaultLeadDays, RenewalSafetyFloorDays)

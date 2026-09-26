@@ -436,7 +436,6 @@ func (m *MemoryStore) GetCertificatesDueForRenewal(ctx context.Context, leadDays
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	now := time.Now()
-	floor := now.Add(RenewalSafetyFloorDays * 24 * time.Hour)
 
 	due := make([]*Certificate, 0)
 	for _, c := range m.certificates {
@@ -461,13 +460,30 @@ func (m *MemoryStore) GetCertificatesDueForRenewal(ctx context.Context, leadDays
 		// certificate inside the safety floor renews anyway. A bad window, or a
 		// stale one left behind by a poller that stopped running, must not talk
 		// this system out of renewing something about to stop working.
+		//
+		// Both the floor and the lead time are bounded by the certificate's own
+		// lifetime, as in the SQL (RenewalLead, #109).
+		var notBefore time.Time
+		if c.NotBefore != nil {
+			notBefore = *c.NotBefore
+		}
+		inside := func(days int) bool {
+			if c.NotAfter == nil {
+				return c.DaysRemaining <= days
+			}
+			return !c.NotAfter.After(now.Add(RenewalLead(notBefore, *c.NotAfter, days)))
+		}
 		if c.RenewalScheduledAt != nil {
-			if !c.RenewalScheduledAt.After(now) || (c.NotAfter != nil && !c.NotAfter.After(floor)) {
+			if !c.RenewalScheduledAt.After(now) || (c.NotAfter != nil && inside(RenewalSafetyFloorDays)) {
 				due = append(due, clone(c))
 			}
 			continue
 		}
-		if c.DaysRemaining <= leadDays || c.Status == "EXPIRING" || c.Status == "RENEWAL_FAILED" {
+		lead := leadDays
+		if c.RenewalLeadDays > 0 {
+			lead = c.RenewalLeadDays
+		}
+		if inside(lead) || c.Status == "EXPIRING" || c.Status == "RENEWAL_FAILED" {
 			due = append(due, clone(c))
 		}
 	}

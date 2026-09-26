@@ -377,9 +377,12 @@ pass "enrolled as $agent_id"
 # `enrol` has no way to set a label — so the id is the only handle that exists,
 # and it does not exist until the agent has enrolled.
 
+# Six days, under the default 30-day lead time, on purpose. A certificate shorter
+# than its lead time was handed a renew_after that had already passed, and the
+# host renewed it on every cycle (#109); the second cycle below is the check.
 ca_id="$(api "$API/api/v1/ca-accounts" | field '["data"][0]["id"]')"
 template_id="$(api -X POST "$API/api/v1/certificate-templates" -H 'Content-Type: application/json' \
-  -d "{\"slug\":\"lifecycle-host\",\"name\":\"Lifecycle host\",\"ca_account_id\":\"$ca_id\"}" \
+  -d "{\"slug\":\"lifecycle-host\",\"name\":\"Lifecycle host\",\"ca_account_id\":\"$ca_id\",\"validity_days\":6}" \
   | field '["id"]')"
 api -X POST "$API/api/v1/agent-grants" -H 'Content-Type: application/json' \
   -d "{\"name\":\"lifecycle\",\"template_id\":\"$template_id\",\"names\":[\"*.lifecycle.test\"],\"agent_id\":\"$agent_id\"}" \
@@ -467,6 +470,29 @@ on_disk="$(openssl x509 -in "$WORK/served/cert.pem" -outform DER 2>/dev/null | o
 [[ "$reported" == "$on_disk" ]] \
   || die "the core recorded $reported and the file on disk is $on_disk — the two halves do not hold the same certificate"
 pass "the installed file is the certificate the core issued ($on_disk)"
+
+# ── A short-lived certificate is not renewed on every cycle (#109) ────────────
+#
+# The certificate above lives six days and the lead time is thirty. The core
+# used to compute renew_after as not_after minus the lead, which put it 24 days
+# before the certificate existed, and the agent — correctly doing what the core
+# said — ordered a replacement on every five-minute cycle. A second cycle with
+# nothing changed must leave the installed certificate exactly as it was.
+lifetime_days="$(openssl x509 -in "$WORK/served/cert.pem" -noout -startdate -enddate | python3 -c '
+import sys
+from datetime import datetime
+d = dict(line.strip().split("=", 1) for line in sys.stdin)
+f = "%b %d %H:%M:%S %Y %Z"
+print(round((datetime.strptime(d["notAfter"], f) - datetime.strptime(d["notBefore"], f)).total_seconds() / 86400))')"
+[[ "$lifetime_days" -lt 30 ]] \
+  || die "the certificate lives $lifetime_days days, not under the 30-day lead time, so this check proves nothing"
+
+"$AGENT_BIN" run --once --state-dir "$WORK/state" --installs "$WORK/installs.json" \
+  >"$WORK/run2.log" 2>&1 || { cat "$WORK/run2.log" >&2; die "the agent's second cycle failed"; }
+again="$(openssl x509 -in "$WORK/served/cert.pem" -outform DER 2>/dev/null | openssl dgst -sha256 -hex | awk '{print $NF}')"
+[[ "$again" == "$on_disk" ]] \
+  || die "a second cycle with nothing changed replaced the $lifetime_days-day certificate ($on_disk -> $again): its renew_after is already in the past (#109)"
+pass "a second cycle leaves the $lifetime_days-day certificate alone"
 
 # ── A key the core does not hold is not renewed by the core (#107) ────────────
 #
