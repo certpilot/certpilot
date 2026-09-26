@@ -98,6 +98,16 @@ export function truncate(value: string | null | undefined, max = 48): string {
   return value.length <= max ? value : `${value.slice(0, max - 1)}…`
 }
 
+/**
+ * What to call a certificate: its common name, or its first SAN when it has
+ * none. Conforming CAs are dropping the subject common name — Pebble already
+ * issues without one by default — so an empty one is a real certificate with a
+ * real name, not a blank row (#108).
+ */
+export function certName(cert: { common_name?: string | null; sans?: string[] | null }): string {
+  return cert.common_name || cert.sans?.[0] || '(no name)'
+}
+
 /** Extracts the CN from a distinguished name, falling back to the whole string. */
 export function commonNameFromDN(dn: string | null | undefined): string {
   if (!dn) return '—'

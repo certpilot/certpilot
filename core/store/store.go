@@ -599,6 +599,9 @@ type Store interface {
 type CertificateFilter struct {
 	Status      string
 	Environment string
+	// CommonName matches any of a certificate's names, the common name or any
+	// SAN, by substring and ignoring case. Named for the query parameter it
+	// came from; a certificate with no common name is found by its SANs (#108).
 	CommonName  string
 	CAAccountID string
 	Limit       int

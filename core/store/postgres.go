@@ -192,7 +192,14 @@ func (s *PostgresStore) ListCertificates(ctx context.Context, filter Certificate
 		argIdx++
 	}
 	if filter.CommonName != "" {
-		where = append(where, fmt.Sprintf("common_name ILIKE $%d", argIdx))
+		// Any of the certificate's names, not only the column (#108). A
+		// certificate with an empty subject has its only name in the SANs, and
+		// that is what conforming CAs are moving to: Pebble already issues that
+		// way by default. One row per certificate however many names match,
+		// because EXISTS cannot multiply rows the way a join would.
+		where = append(where, fmt.Sprintf(
+			"(common_name ILIKE $%d OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(coalesce(sans, '[]'::jsonb)) AS san(name) WHERE san.name ILIKE $%d))",
+			argIdx, argIdx))
 		args = append(args, "%"+filter.CommonName+"%")
 		argIdx++
 	}
