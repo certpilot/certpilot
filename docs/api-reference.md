@@ -308,6 +308,9 @@ a policy that finds something must say so even when it does not block.
 `POST /certificates/:id/renew` runs the same path. The key is rotated and the
 new one persisted; a renewal that produced a certificate without storing its
 matching key would leave a record that looks healthy and cannot terminate TLS.
+That is only possible for a key CertPilot already holds: a certificate whose
+`key_custody` is `AGENT` or `EXTERNAL` is refused with `400`, and renewed by
+whoever holds its key (see [Asking for one](#asking-for-one)).
 
 On failure the record is marked `RENEWAL_FAILED` with `renewal_error` set, and
 the previous certificate is left intact.
@@ -995,6 +998,15 @@ Two certificates issued because somebody clicked twice is a real way to spend a
 weekly rate limit. A certificate with no CA account — anything discovered rather
 than issued — is refused with **400** at this point rather than becoming a job
 that fails forever.
+
+So is a certificate whose private key CertPilot does not hold, again with
+**400**. When `key_custody` is `AGENT`, the refusal names the agent and says how
+to renew it on that host (`certpilot-agent request --name …`). When it is
+`EXTERNAL`, it asks for a new signing request from whoever holds the key. A
+renewal here always ends with the gateway generating a fresh keypair. For these
+certificates, CertPilot would then hold a key it promised never to hold, and
+the record would describe a certificate the key holder is not serving. A job
+for one that was queued some other way is cancelled, not retried.
 
 ### Where a job stands
 

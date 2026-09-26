@@ -259,8 +259,8 @@ curl -b "$JAR" localhost:8080/api/v1/agent-installations
 
 ## Renewal
 
-As with Vault, **the host renews this**, and `POST /certificates/:id/renew` should not
-be used on it ([#107](https://github.com/certpilot/certpilot/issues/107)).
+As with Vault, **the host renews this**, and `POST /certificates/:id/renew` refuses it
+with `400` ([#107](https://github.com/certpilot/certpilot/issues/107)).
 
 One thing is specific to ACME. A CA that publishes **renewal information** (RFC 9773) is
 telling you when *it* wants the certificate replaced, and the gateway reports that

@@ -380,6 +380,42 @@ func TestAJobThatOutlivesItsCertificateIsCancelled(t *testing.T) {
 	}
 }
 
+// #107. A job for a certificate whose key is held elsewhere can never succeed
+// here, because whoever holds the key is the one who renews it. Left pending, it
+// would be retried for ever and escalated as a failing renewal, paging somebody
+// about a certificate that is being renewed correctly by the only party able to.
+func TestAJobForAKeyHeldElsewhereIsCancelledWithoutAskingTheCA(t *testing.T) {
+	for _, custody := range []string{store.KeyCustodyAgent, store.KeyCustodyExternal} {
+		t.Run(custody, func(t *testing.T) {
+			st := store.NewMemoryStore()
+			ctx := context.Background()
+			cert := testCertificate(t, st, "held.example.com", 10*24*time.Hour)
+			cert.KeyCustody = custody
+			if err := st.UpdateCertificate(ctx, cert); err != nil {
+				t.Fatal(err)
+			}
+			_, _ = NewScheduler(st, 30).Enqueue(ctx, cert, store.RenewalReasonManual, nil, nil)
+
+			gateway := &fakeRenewer{}
+			q := NewQueue(st, gateway, nil)
+			if !q.RunOnce(ctx) {
+				t.Fatal("the queue claimed nothing")
+			}
+
+			jobs, _, _ := st.ListRenewalJobs(ctx, store.RenewalJobFilter{CertificateID: cert.ID})
+			if len(jobs) != 1 {
+				t.Fatalf("got %d jobs, want 1", len(jobs))
+			}
+			if jobs[0].Status != store.RenewalCancelled {
+				t.Errorf("status = %s, want CANCELLED", jobs[0].Status)
+			}
+			if gateway.callCount() != 0 {
+				t.Errorf("a certificate whose key is held elsewhere (%s) was sent to the gateway for renewal", custody)
+			}
+		})
+	}
+}
+
 // A success closes the job so the next sweep can enqueue a fresh one when the
 // certificate comes due again.
 func TestASuccessfulRenewalClosesTheJob(t *testing.T) {

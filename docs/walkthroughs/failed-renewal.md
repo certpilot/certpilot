@@ -105,11 +105,11 @@ You cannot stack duplicate renewals for one certificate, which is deliberate: th
 failure mode it prevents is somebody clicking retry six times and six certificates being
 ordered from the CA.
 
-> **Do not run this on a certificate whose `key_custody` is `AGENT`.** It is accepted
-> and it should not be: CertPilot ends up holding a private key for a certificate whose
-> record says the key is on a host, and the host never installs the result.
-> [#107](https://github.com/certpilot/certpilot/issues/107), open. For those, renew from
-> the host — `certpilot-agent request` with the same name.
+> **A certificate whose `key_custody` is `AGENT` is refused here, with `400`.** Its key
+> is on a host, and a renewal from the core would make CertPilot hold a new key the host
+> never installs. The refusal names the agent. Renew it from that host instead:
+> `certpilot-agent request` with the same name. This used to be accepted
+> ([#107](https://github.com/certpilot/certpilot/issues/107)).
 
 ## Step 2: did it reach the host?
 
@@ -230,10 +230,11 @@ Three ways to arrive here:
 - **A reload that never happened.** nginx reads its certificate files at start and at
   reload and never again, so a renewed file with no reload changes nothing. The agent
   reloads; a hand-copied certificate does not.
-- **A manual renewal of an agent-held certificate.** CertPilot's record moves and the
-  host does not, and the agent's next cycle says `already holds this certificate;
-  nothing was written and nothing was reloaded`, which is true and looks like success.
-  [#107](https://github.com/certpilot/certpilot/issues/107).
+- **A manual renewal of an agent-held certificate, on a core older than the fix for
+  [#107](https://github.com/certpilot/certpilot/issues/107).** CertPilot's record moves
+  and the host does not, and the agent's next cycle says `already holds this
+  certificate; nothing was written and nothing was reloaded`, which is true and looks
+  like success. A current core refuses the renewal instead.
 
 ## A short checklist
 
