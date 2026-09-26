@@ -220,7 +220,10 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 		CertificatePEM: string(resp.Certificate.CertificatePem),
 		ChainPEM:       string(resp.Certificate.ChainPem),
 		NotAfter:       info.NotAfter,
-		RenewAfter:     info.NotAfter.AddDate(0, 0, -decision.RenewBeforeDays),
+		// Bounded by the certificate's own lifetime. Unbounded, a certificate
+		// shorter than the lead time got a renew_after that had already passed,
+		// and the host renewed it on every cycle (#109).
+		RenewAfter: info.NotAfter.Add(-store.RenewalLead(info.NotBefore, info.NotAfter, decision.RenewBeforeDays)),
 	}
 	return issued, nil
 }
