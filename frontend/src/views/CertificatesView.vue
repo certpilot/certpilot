@@ -11,7 +11,7 @@ import {
 import {
   certStateLabel, certUrgency, compareSeverity, sevBg, sevClass,
 } from '@/lib/severity'
-import { formatDate, formatDaysShort, truncate } from '@/lib/format'
+import { certName, formatDate, formatDaysShort, truncate } from '@/lib/format'
 import { downloadText, fullChain, pemFilename } from '@/lib/download'
 import { useAuthStore } from '@/stores/auth'
 import MetadataInput from '@/components/metadata/MetadataInput.vue'
@@ -186,7 +186,7 @@ async function renewCert(cert: Certificate) {
     await api.post(`/api/v1/certificates/${cert.id}/renew`)
     await certs.refresh()
   } catch (err) {
-    actionError.value = `Renewing ${cert.common_name} failed: ${
+    actionError.value = `Renewing ${certName(cert)} failed: ${
       err instanceof Error ? err.message : String(err)
     }`
   } finally {
@@ -235,7 +235,7 @@ async function exportPrivateKey(cert: Certificate) {
     // Fetched on demand and never held in component state: a key parked in a
     // reactive ref survives in the heap and in the devtools inspector for as
     // long as the page is open.
-    downloadText(pemFilename(cert.common_name, 'key'), res.private_key_pem)
+    downloadText(pemFilename(certName(cert), 'key'), res.private_key_pem)
   } catch (err) {
     exportError.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -372,15 +372,15 @@ async function exportPEM(cert: Certificate, what: 'cert' | 'chain' | 'fullchain'
     if (!full.certificate_pem) throw new Error('no certificate body is stored for this record')
     switch (what) {
       case 'cert':
-        downloadText(pemFilename(full.common_name, 'crt'), full.certificate_pem)
+        downloadText(pemFilename(certName(full), 'crt'), full.certificate_pem)
         break
       case 'chain':
         if (!full.chain_pem) throw new Error('no issuer chain is stored for this certificate')
-        downloadText(pemFilename(full.common_name, 'chain.crt'), full.chain_pem)
+        downloadText(pemFilename(certName(full), 'chain.crt'), full.chain_pem)
         break
       case 'fullchain':
         downloadText(
-          pemFilename(full.common_name, 'fullchain.crt'),
+          pemFilename(certName(full), 'fullchain.crt'),
           fullChain(full.certificate_pem, full.chain_pem),
         )
         break
@@ -636,7 +636,7 @@ async function signCSR() {
                 >
                   <td class="rail" :class="sevBg(certUrgency(cert))"></td>
                   <td class="cell-primary max-w-[16rem] truncate">
-                    {{ cert.common_name }}
+                    {{ certName(cert) }}
                     <span v-if="cert.sans?.length > 1" style="color: var(--text-muted)">
                       +{{ cert.sans.length - 1 }}
                     </span>
@@ -697,7 +697,7 @@ async function signCSR() {
 
           <div class="flex flex-col gap-3 min-w-0">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
-              <span class="detail-title">{{ selected.common_name }}</span>
+              <span class="detail-title">{{ certName(selected) }}</span>
               <SevChip
                 :severity="certUrgency(selected)"
                 :label="certStateLabel(selected)"
@@ -1161,7 +1161,7 @@ async function signCSR() {
                  on screen saying which certificate is about to be revoked. -->
             <dl class="kv">
               <dt>Common name</dt>
-              <dd>{{ revokeTarget.common_name }}</dd>
+              <dd>{{ certName(revokeTarget) }}</dd>
               <dt v-if="revokeTarget.serial_number">Serial</dt>
               <dd v-if="revokeTarget.serial_number">{{ revokeTarget.serial_number }}</dd>
               <dt>Expires</dt>

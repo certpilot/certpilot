@@ -285,7 +285,7 @@ func (m *MemoryStore) ListCertificates(ctx context.Context, filter CertificateFi
 		if filter.Environment != "" && c.Environment != filter.Environment {
 			continue
 		}
-		if filter.CommonName != "" && !strings.Contains(strings.ToLower(c.CommonName), strings.ToLower(filter.CommonName)) {
+		if filter.CommonName != "" && !matchesName(c, filter.CommonName) {
 			continue
 		}
 		// Previously ignored, while Postgres honoured it — so a filtered view
@@ -430,6 +430,23 @@ func (m *MemoryStore) DeleteCertificate(ctx context.Context, id string) error {
 	defer m.mu.Unlock()
 	delete(m.certificates, id)
 	return nil
+}
+
+// matchesName reports whether any of a certificate's names contains query,
+// ignoring case: the common name or any SAN, as the SQL does (#108). A
+// certificate with no common name, which is what conforming CAs are moving to,
+// is otherwise unfindable by the only name it has.
+func matchesName(c *Certificate, query string) bool {
+	q := strings.ToLower(query)
+	if strings.Contains(strings.ToLower(c.CommonName), q) {
+		return true
+	}
+	for _, san := range c.SANs {
+		if strings.Contains(strings.ToLower(san), q) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *MemoryStore) GetCertificatesDueForRenewal(ctx context.Context, leadDays int) ([]*Certificate, error) {

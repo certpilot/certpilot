@@ -11,7 +11,7 @@ import Readout from '@/components/ui/Readout.vue'
 import SevChip from '@/components/ui/SevChip.vue'
 import ExpiryHorizon, { type HorizonItem } from '@/components/horizon/ExpiryHorizon.vue'
 import { caSeverity, certUrgency, sevBg, sevClass, compareSeverity } from '@/lib/severity'
-import { commonNameFromDN, formatDaysShort, formatRelative, truncate } from '@/lib/format'
+import { certName, commonNameFromDN, formatDaysShort, formatRelative, truncate } from '@/lib/format'
 import { describeAudit } from '@/lib/events'
 import type { AuditLog, Certificate, ListResponse } from '@/lib/types'
 
@@ -40,6 +40,14 @@ const activity = useAsyncData<ListResponse<AuditLog>>((s) =>
 )
 
 const certificates = computed(() => certs.data.value?.data ?? [])
+
+// The activity feed records a certificate's common name as it was, which for a
+// SAN-only certificate is empty. Named here from the inventory already loaded
+// rather than by rewriting what the audit log says (#108).
+const certNames = computed(() => new Map(certificates.value.map((c) => [c.id, certName(c)])))
+function auditName(entry: AuditLog): string | undefined {
+  return entry.entity_type === 'certificate' ? certNames.value.get(entry.entity_id) : undefined
+}
 
 function refreshAll() {
   void cas.refresh()
@@ -73,7 +81,7 @@ const horizonItems = computed<HorizonItem[]>(() => [
   })),
   ...certificates.value.map((cert) => ({
     id: `cert:${cert.id}`,
-    label: cert.common_name,
+    label: certName(cert),
     days: cert.days_remaining,
     severity: certUrgency(cert),
     lane: 'certificates' as const,
@@ -111,7 +119,7 @@ const attention = computed(() => {
     ...certificates.value.map((cert) => ({
       key: `cert:${cert.id}`,
       kind: 'CERT' as const,
-      name: cert.common_name,
+      name: certName(cert),
       detail: commonNameFromDN(cert.issuer_dn),
       days: cert.days_remaining,
       severity: certUrgency(cert),
@@ -227,7 +235,7 @@ const anyLoaded = computed(() => cas.loaded && certs.loaded.value)
           <ul v-if="events.length" class="feed">
             <li v-for="entry in events" :key="entry.id" class="feed-row">
               <span class="feed-time">{{ formatRelative(entry.created_at) }}</span>
-              <span class="feed-text">{{ describeAudit(entry) }}</span>
+              <span class="feed-text">{{ describeAudit(entry, auditName) }}</span>
             </li>
           </ul>
           <p v-else class="empty-note prose-ui">Nothing has been recorded yet.</p>

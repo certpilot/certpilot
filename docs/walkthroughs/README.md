@@ -64,8 +64,8 @@ linked from the step that hits it:
 
 - [#107](https://github.com/certpilot/certpilot/issues/107), fixed — manually renewing an
   agent-held certificate made CertPilot hold its private key. The core now refuses it.
-- [#108](https://github.com/certpilot/certpilot/issues/108), open — a SAN-only
-  certificate cannot be found by name.
+- [#108](https://github.com/certpilot/certpilot/issues/108), fixed — a SAN-only
+  certificate could not be found by name. The name filter now matches the SANs.
 - [#109](https://github.com/certpilot/certpilot/issues/109), fixed — a certificate
   shorter than the renewal lead time renewed on every agent cycle. The lead time is now
   bounded by the certificate's own lifetime.

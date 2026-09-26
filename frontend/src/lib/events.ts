@@ -68,25 +68,25 @@ export function describeEvent(event: StreamEvent): string {
 
     case 'cert.issued': {
       const p = payload as unknown as CertEventPayload
-      return `Issued ${p.common_name ?? 'a certificate'}${p.gateway ? ` via ${p.gateway}` : ''}`
+      return `Issued ${p.common_name || 'a certificate'}${p.gateway ? ` via ${p.gateway}` : ''}`
     }
 
     case 'cert.renewed': {
       const p = payload as unknown as CertEventPayload
-      return `Renewed ${p.common_name ?? 'a certificate'}${
+      return `Renewed ${p.common_name || 'a certificate'}${
         p.days_remaining !== undefined ? ` — valid for ${p.days_remaining} more days` : ''
       }`
     }
 
     case 'cert.renewal_failed': {
       const p = payload as unknown as CertEventPayload
-      const subject = p.common_name ?? 'a certificate'
+      const subject = p.common_name || 'a certificate'
       return `Renewal failed for ${subject}${p.error ? `: ${p.error}` : ''}`
     }
 
     case 'cert.expiring': {
       const p = payload as unknown as CertEventPayload
-      return `${p.common_name ?? 'A certificate'} expires in ${p.days_remaining ?? '?'} days`
+      return `${p.common_name || 'A certificate'} expires in ${p.days_remaining ?? '?'} days`
     }
 
     case 'gateway.status': {
@@ -124,13 +124,16 @@ function humanize(value: string | undefined): string {
  * question about the same vocabulary, one for the live stream and one for the
  * recorded log.
  */
-export function describeAudit(log: AuditLog): string {
+export function describeAudit(log: AuditLog, nameOf?: (log: AuditLog) => string | undefined): string {
   if (log.action === 'ca.expiry_alert') {
     const d = parseDetails<CaExpiryAlertDetails>(log.details)
     if (d) return `${d.ca_name} expires in ${d.days_remaining} days (${d.threshold}-day threshold)`
   }
   const d = parseDetails<{ cn?: string; ca_name?: string; error?: string }>(log.details)
-  const subject = d?.cn ?? d?.ca_name ?? log.entity_type
+  // `||`, not `??`: a certificate with no common name is recorded with an empty
+  // one, which is true, and shown as nothing, which is not useful (#108). A
+  // caller holding the certificates can name it; otherwise its kind will do.
+  const subject = d?.cn || nameOf?.(log) || d?.ca_name || log.entity_type
   switch (log.action) {
     case 'cert.issued':
       return `Issued ${subject}`

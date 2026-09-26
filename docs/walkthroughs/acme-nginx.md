@@ -193,18 +193,15 @@ That is a correct, modern certificate: the Baseline Requirements mark
 Let's Encrypt still populates it today.
 
 CertPilot records it accurately — `common_name` empty, `sans` holding the name — and
-then cannot find it:
+finds it by that name, because the name filter matches the SANs as well as the column:
 
 ```bash
 curl -b "$JAR" 'localhost:8080/api/v1/certificates?common_name=shop.example.com'
 ```
 
-```
-hits: 0
-```
-
-It lists as a blank row, too. [#108](https://github.com/certpilot/certpilot/issues/108),
-open. Until it is fixed, list without the filter and match on `sans`.
+The console lists it by its first SAN. Before
+[#108](https://github.com/certpilot/certpilot/issues/108) was fixed, that query found
+nothing and the row was blank.
 
 **The certificate may be much shorter than you expect.** ACME CAs increasingly offer
 short-lived profiles; Pebble issued six days here without being asked. The renewal lead

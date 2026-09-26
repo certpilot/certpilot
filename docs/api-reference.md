@@ -264,6 +264,12 @@ DELETE /api/v1/certificates/:id              Delete the record          (admin, 
 `GET /certificates` filters on `status`, `environment`, `common_name`,
 `ca_account_id`.
 
+Despite its name, `common_name` matches **any** of a certificate's names, the
+subject common name or any SAN, by substring and ignoring case. Conforming CAs
+are dropping the common name (Pebble already issues without one), and a
+certificate whose only name is in its SANs must still be findable by it. A
+certificate matches once however many of its names do.
+
 ### Issuing
 
 ```http
