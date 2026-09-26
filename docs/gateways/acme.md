@@ -209,7 +209,7 @@ the image contains. Pin it anyway.
 To check a build against the contract — including one you wrote yourself:
 
 ```bash
-go run github.com/certpilot/certpilot-gateway-sdk/cmd/conformance@v0.3.0 \
+go run github.com/certpilot/certpilot-gateway-sdk/cmd/conformance@v0.4.0 \
     -addr localhost:9092 -insecure
 ```
 

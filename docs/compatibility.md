@@ -24,7 +24,7 @@ dialling it over mutual TLS.
 
 **Contract** is every check in `cmd/conformance` from
 [certpilot-gateway-sdk](https://github.com/certpilot/certpilot-gateway-sdk)
-except issuance, run at v0.3.0 — the version this core builds against,
+except issuance, run at v0.4.0 — the version this core builds against,
 rather than the newest, because the question is whether this pair works.
 
 **Issuance** is separate because only the self-signed gateway can issue with
@@ -41,7 +41,7 @@ The last column is the probe's own totals across every check including
 issuance, so a row can read "contract: pass" beside a non-zero failure count.
 That is the distinction above, not a contradiction.
 
-Generated 2026-09-21 from core `531ffba`.
+Generated 2026-09-26 from core `52edefc`.
 
 ## The host agent
 
@@ -55,5 +55,5 @@ SHA-256 the core recorded against the SHA-256 of the file actually on the host.
 |:---|:---|:---|:---|
 | `certpilot-agent` | latest | pass | enrolled, requested, installed; the core's fingerprint matches the file on disk |
 
-Generated 2026-09-21 from core `531ffba`.
+Generated 2026-09-26 from core `52edefc`.
 <!-- END agent-compatibility -->

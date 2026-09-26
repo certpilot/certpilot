@@ -61,7 +61,7 @@ carrying Go types and a signing scheme — and both are meant to be depended on
 the way any other module is:
 
 ```
-require github.com/certpilot/certpilot-gateway-sdk v0.3.0
+require github.com/certpilot/certpilot-gateway-sdk v0.4.0
 ```
 
 A `replace` directive pointing at a sibling checkout is for editing the contract
@@ -74,7 +74,7 @@ is the one in your working tree.
 The contract and the probe are released together, so pinning one pins the other:
 
 ```bash
-go run github.com/certpilot/certpilot-gateway-sdk/cmd/conformance@v0.3.0 \
+go run github.com/certpilot/certpilot-gateway-sdk/cmd/conformance@v0.4.0 \
     -addr localhost:9094 -insecure -domain test.example.com
 ```
 
