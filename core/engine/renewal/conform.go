@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 
 	"github.com/certpilot/certpilot/core/engine/policy"
@@ -18,8 +19,15 @@ type conformance struct {
 	// certificate already has when it still conforms.
 	KeyType string
 	KeySize int
-	// ValidityDays is what to ask for, when a template supplies one.
+	// ValidityDays is what to ask for: the template's, or failing that the
+	// certificate's own current lifetime. Always set. It used to be left at
+	// zero when no template supplied one, and zero reached the gateway as "use
+	// your default" and the lifetime check as "nothing to check", which is how
+	// a 90-day certificate renewed into a 365-day one with no finding (#102).
 	ValidityDays int
+	// ValidityDeclared is whether a template supplied ValidityDays, as opposed
+	// to it being read off the certificate. See inferredLifetimeIsReported.
+	ValidityDeclared bool
 
 	// Domains is what to renew for, deduplicated.
 	Domains []string
@@ -102,11 +110,16 @@ func conform(ctx context.Context, s store.Store, eng *policy.Engine, cert *store
 		out.Unfixable = append(out.Unfixable, templateMismatches(tpl, cert, domains)...)
 		if tpl.ValidityDays > 0 {
 			out.ValidityDays = tpl.ValidityDays
+			out.ValidityDeclared = true
 		}
 		out.CAProfile = tpl.CAProfile
 		out.KeyUsage = tpl.KeyUsage
 		out.ExtendedKeyUsage = tpl.ExtendedKeyUsage
 	}
+
+	// Assigned, not only computed for the policy request below as it was: the
+	// gateway and the post-renewal lifetime check both read it from here.
+	out.ValidityDays = validityOrDefault(out.ValidityDays, cert)
 
 	// The floor, judged on the key renewal is actually going to ask for rather
 	// than the one the certificate has — otherwise a template upgrade that
@@ -116,7 +129,7 @@ func conform(ctx context.Context, s store.Store, eng *policy.Engine, cert *store
 		Domains:      domains,
 		KeyType:      out.KeyType,
 		KeySize:      out.KeySize,
-		ValidityDays: validityOrDefault(out.ValidityDays, cert),
+		ValidityDays: out.ValidityDays,
 	})
 	if err != nil {
 		// Unlike issuance, this does not refuse. A database blip must not stop
@@ -240,11 +253,37 @@ func validityOrDefault(days int, cert *store.Certificate) int {
 		return days
 	}
 	if cert.NotBefore != nil && cert.NotAfter != nil {
-		if d := int(cert.NotAfter.Sub(*cert.NotBefore).Hours() / 24); d > 0 {
+		// Rounded, not truncated. CAs commonly end a certificate one second
+		// short of a whole number of days — Let's Encrypt's 90 is 89.99998 —
+		// and asking for 89 on every renewal would shave a day each time.
+		if d := int(math.Round(cert.NotAfter.Sub(*cert.NotBefore).Hours() / 24)); d > 0 {
 			return d
 		}
 	}
 	return 90
+}
+
+// inferredLifetimeIsReported downgrades a lifetime finding to REPORT when the
+// lifetime renewal asked for was read off the certificate rather than declared
+// by a template.
+//
+// Renewal now always asks for a lifetime, so a CA or gateway that issues longer
+// is on the record rather than invisible (#102). But a lifetime read off the
+// certificate is this system's inference, not a rule anybody wrote, and every
+// gateway released before the contract carried it ignores it. Refusing under
+// an ENFORCE template would turn a core upgraded ahead of its gateways into a
+// failed and revoked renewal for every certificate, which is a worse outcome
+// than the one being reported. A lifetime a template declares keeps the
+// refusal it has always had.
+func inferredLifetimeIsReported(findings []store.ConformanceFinding) []store.ConformanceFinding {
+	for i := range findings {
+		if findings[i].Field == "validity" && findings[i].Severity == store.FindingBlock {
+			findings[i].Severity = store.FindingReport
+			findings[i].Message += ". Reported rather than refused: the lifetime asked for was the certificate's own, " +
+				"not one a template declares, and a gateway older than certpilot-gateway-sdk v0.4.0 does not honour it on renewal"
+		}
+	}
+	return findings
 }
 
 func keyTypePermitted(tpl *store.CertificateTemplate, keyType string) bool {

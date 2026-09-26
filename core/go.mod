@@ -6,7 +6,7 @@ replace github.com/certpilot/certpilot/pkg => ../pkg
 
 require (
 	github.com/certpilot/certpilot-agent-sdk v0.1.0
-	github.com/certpilot/certpilot-gateway-sdk v0.3.0
+	github.com/certpilot/certpilot-gateway-sdk v0.3.1-0.20260926115033-869819370566
 	github.com/certpilot/certpilot/pkg v0.0.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
