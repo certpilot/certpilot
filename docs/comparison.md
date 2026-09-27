@@ -77,12 +77,12 @@ it, and the weekly documentation run does the same.
   ([#87](https://github.com/certpilot/certpilot/issues/87),
   [#90](https://github.com/certpilot/certpilot/issues/90)). All three commercial
   platforms document one. See [Governance](#governance).
-- **You need Slack notifications, sign-in through your identity provider, or
-  cloud inventory that you can rely on today.** CertPilot has built all three,
-  but each is 🧪: nothing in this project has run it against a real Slack
-  workspace, identity provider or cloud account. Email and webhook alerts are
-  verified: CI delivers them to a real mail server, and to a receiver that checks
-  the signature the way the documentation says to.
+- **You need Slack notifications or cloud inventory that you can rely on
+  today.** CertPilot has built both, but each is 🧪: nothing in this project has
+  run it against a real Slack workspace or cloud account. Email and webhook
+  alerts are verified: CI delivers them to a real mail server, and to a receiver
+  that checks the signature the way the documentation says to. Sign-in through
+  an identity provider is verified against Keycloak.
 - **The platform's own keys must be protected by an HSM or a KMS.** CertPilot
   holds its key encryption key in memory, loaded from an environment variable, a
   file or Vault. Delegated unwrapping is not built. See
@@ -159,7 +159,7 @@ Who may do what, and whether a request can be held for approval.
 
 | | What is documented |
 |:--|:--|
-| CertPilot | ✅ Four roles, admin, operator, auditor and viewer, enforced per route. ⚠️ A policy engine and certificate templates, applied on all three issuance paths. ❌ No approval workflow: [#87](https://github.com/certpilot/certpilot/issues/87) and [#90](https://github.com/certpilot/certpilot/issues/90). 🧪 Sign-in through an identity provider over OIDC. See [status](status.md) and [templates](templates.md) |
+| CertPilot | ✅ Four roles, admin, operator, auditor and viewer, enforced per route. ⚠️ A policy engine and certificate templates, applied on all three issuance paths. ❌ No approval workflow: [#87](https://github.com/certpilot/certpilot/issues/87) and [#90](https://github.com/certpilot/certpilot/issues/90). ✅ Sign-in through an identity provider over OIDC, verified against Keycloak; Okta, Entra ID and Auth0 are untested. See [status](status.md) and [templates](templates.md) |
 | Keyfactor | Workflows with approval steps, whose "Approvers can be defined by selecting security roles directly or by using tokens that resolve to security roles" ([K8](#sources)) |
 | NGTS | "Certificate Approval Workflows offer a structured approach to validating certificate requests" ([V10](#sources)) |
 | DigiCert | "Require manual approval by a Trust Lifecycle Manager admin to authenticate enrollment requests" ([D8](#sources)) |

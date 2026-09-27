@@ -32,3 +32,16 @@ jobs:
       # the STARTTLS certificate is verified rather than skipped.
       - name: Email and webhook delivery, and a CA expiry alert
         run: make live-notifications
+
+  oidc:
+    name: sign-in, against Keycloak
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Authorization code with PKCE, bearer tokens, refusals, key rotation
+        run: make live-oidc
