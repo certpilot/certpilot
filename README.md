@@ -85,9 +85,9 @@ Requires Docker. No clone, no toolchain, no database, no cloud account.
 
 ```bash
 mkdir certpilot-demo && cd certpilot-demo
-base=https://raw.githubusercontent.com/certpilot/certpilot/v0.1.1/deploy
+base=https://raw.githubusercontent.com/certpilot/certpilot/v0.2.0/deploy
 curl -O $base/docker-compose.quickstart.yml -O $base/config.quickstart.yaml
-CERTPILOT_VERSION=0.1.1 GATEWAY_VERSION=0.3.0 \
+CERTPILOT_VERSION=0.2.0 GATEWAY_VERSION=0.4.0 \
   docker compose -f docker-compose.quickstart.yml up -d
 ```
 
