@@ -13,14 +13,22 @@ anything not in it has not been written.
 🧪 is not a claim that something is broken, and it is not a claim that nobody
 has ever run it. It is a narrower and checkable statement: **there is no test
 you can run that would tell you if it stopped working.** Every one of those
-rows names a third party — an identity provider, Slack, an SMTP server, a cloud
-account — and CI holds no credential for any of them.
+rows depends on a service CI cannot start for itself and holds no credential
+for, such as a Slack workspace or a cloud account.
 
-What CI does exercise, on every pull request: PostgreSQL 17 as a real service,
-the full store conformance suite against it, the self-signed gateway issuing
-real certificates, the agent enrolling and installing end to end, and every
-released gateway against the current contract. Its only real dependency is the
-database; there are no third-party secrets in any workflow.
+What CI does exercise, on every pull request:
+
+- PostgreSQL 17 as a real service, and the full store conformance suite against it
+- the self-signed gateway issuing real certificates
+- the agent enrolling and installing end to end
+- every released gateway against the current contract
+- alerts delivered to [Mailpit](https://mailpit.axllent.org), a real SMTP
+  server, over STARTTLS, implicit TLS and a plain relay; and signed webhook
+  alerts checked by a receiver that uses the verification snippet in the
+  [API reference](api-reference.md) — `make live-notifications`
+
+Everything it runs against is started inside the job. There are no third-party
+secrets in any workflow.
 
 That distinction is the point of this table. An evaluator carrying a capability
 into production needs to know which half of it they are trusting.
@@ -46,7 +54,7 @@ This is early development software. Do not run it in production yet.
 | Ownership and acknowledgement | ✅ | Who owns a CA, who acknowledged an alert and why. Silencing suppresses delivery only — an acknowledged CA never leaves the dashboard |
 | Automated renewal | ✅ | Durable queue, leases, deadline-aware backoff, ARI, and post-renewal verification. Safe on N replicas with no leader |
 | CA health monitoring | ✅ | Scheduled sweep, expiry thresholds, CRL freshness, and a real OCSP request whose response signature, delegation and subject are all verified. For an intermediate the question asked is "has my parent revoked me", since the responder in a certificate's AIA is the parent's |
-| CA expiry alerting | 🧪 | Threshold crossings are delivered to Slack, a signed webhook, or email over SMTP, with per-channel severity and topic filters. The delivery paths are tested against fakes; no real workspace or mail server is contacted by CI |
+| CA expiry alerting | ✅ | Threshold crossings are delivered to Slack, a signed webhook, or email over SMTP, with per-channel severity and topic filters. CI registers a CA with twenty days left and checks that its 30-day alert arrives, with nobody prompting it, at a real SMTP server and at a webhook receiver, and that a channel filtered to other topics stays quiet. Delivery to Slack is 🧪, as below |
 | Live dashboard updates | ✅ | Server-Sent Events end to end. The client tracks data age independently, so a dead feed degrades the surface instead of freezing it on green |
 | CA health view | ✅ | Every CA by urgency: expiry countdown, chain position, CRL freshness, issuance volume, owner, and acknowledgement state |
 | Wall display mode | ✅ | `/display` — fullscreen, no chrome, readable across a room, authenticated by a kiosk token in the launch URL |
@@ -62,7 +70,8 @@ This is early development software. Do not run it in production yet.
 | Cloud inventory | 🧪 | Reads ACM, Azure Key Vault, Google Cloud, and Kubernetes TLS secrets. Reports which certificates the provider itself will not renew — the ones everybody assumes are automatic. Written to each provider's published API and tested against fakes; no cloud account is reached by CI |
 | Renewal queue | ✅ | Durable jobs with leases, an attempt log, and backoff that tightens as expiry approaches. Safe on N replicas with no leader. Per-CA rate limits defer rather than fail |
 | Post-renewal verification | ✅ | Re-probes the endpoints discovery has seen serving a certificate and reports when a renewal never reached them — the green-dashboard-over-an-expiring-estate failure, caught |
-| Notifications | 🧪 | Slack (Block Kit), signed generic webhook, SMTP email. Deliberately not Teams or PagerDuty. Every transport is tested against a fake receiver; none against the real service |
+| Notifications: email and webhook | ✅ | SMTP email — STARTTLS, implicit TLS, or a plain relay — and a signed generic webhook. Deliberately not Teams or PagerDuty. CI delivers to Mailpit, a real SMTP server, and checks that a wrong password, a certificate from an unknown CA, and a relay that does not offer STARTTLS are each refused with the reason. Webhook signatures are checked by a receiver using the snippet in the [API reference](api-reference.md), not by CertPilot's own code |
+| Notifications: Slack | 🧪 | Block Kit messages to an incoming webhook. Tested against a fake receiver; no Slack workspace is contacted by CI |
 | Store conformance testing | ✅ | One suite run against both the in-memory store and a real PostgreSQL, covering the four classes of defect that had only ever been found by running the thing. Plain PostgreSQL is a supported target and proven by the suite |
 | Cryptographic posture | ✅ | Which endpoints negotiate a post-quantum key exchange and which do not, from real handshakes; CNSA 2.0 conformance per certificate; CycloneDX 1.6 CBOM export validated against the published schema. Post-quantum *issuance* waits for `crypto/x509` |
 | Deployment to servers | ⚠️ | Durable, retried, audited deployment to a signed webhook, a host running the agent, AWS ACM, Azure Key Vault and F5 BIG-IP. **Three of those five are 🧪.** **A renewal deploys itself**, and a failing target halts the rest of the rollout rather than letting a bad certificate march through the estate. The webhook and agent targets are exercised end to end by CI; AWS ACM, Key Vault and F5 are written to their published APIs and tested against fakes, and none has ever been run against a real AWS account, vault or appliance |
@@ -110,12 +119,9 @@ with their reasoning in [security.md](security.md#known-gaps).
   published APIs and tested against fakes. None has been run against a real
   AWS account, vault or appliance, so ACM's hand-signed requests have never been
   checked by AWS itself.
-- **Six capabilities are marked 🧪 above**: External Account Binding, OIDC
-  authentication, CA expiry alerting, notifications, cloud inventory and
-  Certificate Transparency. Each depends on a third party — an identity
-  provider, a Slack workspace, an SMTP server, a cloud account, a public log —
-  and CI holds no credential for any of them, so each is tested against a fake.
-  They may well work; nothing here would tell you if they stopped.
+- **Each capability still marked 🧪 above** depends on a service CI cannot
+  start for itself and holds no credential for, so it is tested against a fake.
+  It may well work; nothing here would tell you if it stopped.
 - The key encryption key is held in the core's memory. It can be loaded from a
   file or from Vault, but delegated unwrapping through a transit or KMS backend
   needs an envelope format that does not exist yet.

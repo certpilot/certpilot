@@ -77,10 +77,12 @@ it, and the weekly documentation run does the same.
   ([#87](https://github.com/certpilot/certpilot/issues/87),
   [#90](https://github.com/certpilot/certpilot/issues/90)). All three commercial
   platforms document one. See [Governance](#governance).
-- **You need notifications, sign-in through your identity provider, or cloud
-  inventory that you can rely on today.** CertPilot has built all three, but each
-  is 🧪: nothing in this project has run it against a real Slack workspace, mail
-  server, identity provider or cloud account.
+- **You need Slack notifications, sign-in through your identity provider, or
+  cloud inventory that you can rely on today.** CertPilot has built all three,
+  but each is 🧪: nothing in this project has run it against a real Slack
+  workspace, identity provider or cloud account. Email and webhook alerts are
+  verified: CI delivers them to a real mail server, and to a receiver that checks
+  the signature the way the documentation says to.
 - **The platform's own keys must be protected by an HSM or a KMS.** CertPilot
   holds its key encryption key in memory, loaded from an environment variable, a
   file or Vault. Delegated unwrapping is not built. See
@@ -112,7 +114,7 @@ whether their revocation endpoints answer?
 
 | | What is documented |
 |:--|:--|
-| CertPilot | ✅ A scheduled sweep of every CA: expiry thresholds, CRL freshness, and a real OCSP request whose signature, delegation and subject are verified. ✅ Vault issuers are imported into the CA inventory the moment a CA account connects. 🧪 Delivering the resulting alerts to Slack, a webhook or email is tested against fakes only. See [status](status.md) and [monitoring](monitoring.md) |
+| CertPilot | ✅ A scheduled sweep of every CA: expiry thresholds, CRL freshness, and a real OCSP request whose signature, delegation and subject are verified. ✅ Vault issuers are imported into the CA inventory the moment a CA account connects. ✅ The resulting alerts reach email and signed webhooks, which CI checks against a real mail server and the documented signature check. 🧪 Delivery to Slack is tested against a fake only. See [status](status.md) and [monitoring](monitoring.md) |
 | Keyfactor | Revocation Monitoring gives a "Warning of upcoming expiration for a CRL" and a "Notification of expired CRLs" ([K10](#sources)). For OCSP, it "provides only information on whether or not the OCSP endpoint is responsive" ([K3](#sources)) |
 | NGTS | Self-Hosted: "Certificate Revocation and CDP Monitoring is a feature that must be enabled when you install Trust Protection Foundation" ([V3](#sources)). SaaS: not found in the documentation reviewed |
 | DigiCert | Not found in the documentation reviewed. DigiCert documents creating intermediate CAs and issuing from them ([D1](#sources)), but not monitoring another CA's CRL or OCSP health |
