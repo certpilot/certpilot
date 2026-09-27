@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/certpilot/certpilot/pkg/config"
@@ -131,10 +132,25 @@ type UserDirectory interface {
 	TouchUser(ctx context.Context, id string, seenAt time.Time) error
 }
 
+// jwksRefetchFloor bounds how often a key id the core has not seen makes it
+// fetch the provider's key set again, outside the cache's own schedule.
+//
+// Short, because the case it exists for — the provider has just rotated — is
+// an outage of sign-in until the fetch happens. Not zero, because the key id is
+// read from a token before its signature is checked, so anybody can put any
+// value there, and one fetch per token would let them drive traffic at the
+// identity provider through the core.
+const jwksRefetchFloor = 10 * time.Second
+
 // Authenticator verifies bearer tokens.
 type Authenticator struct {
 	cfg   config.AuthConfig
 	cache *jwk.Cache
+
+	// refetchMu guards lastRefetch, the last time an unknown key id sent the
+	// core back to the provider. See jwksRefetchFloor.
+	refetchMu   sync.Mutex
+	lastRefetch time.Time
 
 	// users resolves a verified token's subject to the role CertPilot holds
 	// for that person. When nil the role falls back to the token's own claim,
@@ -411,6 +427,15 @@ func (a *Authenticator) keyFunc(ctx context.Context) jwt.Keyfunc {
 
 		key, found := set.LookupKeyID(kid)
 		if !found {
+			// The provider may have rotated since the set was cached: it signs
+			// with a new key the moment one is added. Look once more rather
+			// than refuse every token and every sign-in until the cache's own
+			// schedule comes round, which is at least fifteen minutes.
+			if fresh, ok := a.refetchKeys(ctx); ok {
+				key, found = fresh.LookupKeyID(kid)
+			}
+		}
+		if !found {
 			return nil, fmt.Errorf("auth: no key in the JWKS matches key ID %q", kid)
 		}
 
@@ -420,6 +445,27 @@ func (a *Authenticator) keyFunc(ctx context.Context) jwt.Keyfunc {
 		}
 		return pubKey, nil
 	}
+}
+
+// refetchKeys fetches the key set again, at most once per jwksRefetchFloor.
+// The second result is false when no fetch was made or it failed; the caller
+// then refuses the token exactly as it would have without looking again.
+func (a *Authenticator) refetchKeys(ctx context.Context) (jwk.Set, bool) {
+	a.refetchMu.Lock()
+	defer a.refetchMu.Unlock()
+
+	if !a.lastRefetch.IsZero() && time.Since(a.lastRefetch) < jwksRefetchFloor {
+		return nil, false
+	}
+	a.lastRefetch = time.Now()
+
+	set, err := a.cache.Refresh(ctx, a.cfg.JWKSURL)
+	if err != nil {
+		slog.Warn("a token named a signing key the cached key set does not hold, "+
+			"and fetching the key set again failed", "jwks_url", a.cfg.JWKSURL, "error", err)
+		return nil, false
+	}
+	return set, true
 }
 
 // RequireRole enforces that the authenticated user holds one of the allowed
