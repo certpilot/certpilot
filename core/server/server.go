@@ -110,18 +110,37 @@ func NewServer(ctx context.Context, cfg *config.CoreConfig, dbConnStr string) (*
 	}
 	pm := pluginmgr.NewManager(gwTLS)
 
+	// Every gateway this core knows how to reach: the config file's, and the
+	// ones CA accounts created through the API name. Only the first kind used
+	// to be dialled here, so after every restart an account like the
+	// quickstart's selfsigned-eval had no connection, and issuing, renewing or
+	// revoking through it failed until somebody pressed Check now.
+	//
+	// All at once, so a gateway that is down costs one dial timeout rather than
+	// one per gateway. A gateway that is down is expected (it may not be
+	// running yet), is logged, and is retried by the health sweep and by the
+	// first request that needs it.
+	endpoints := make([]pluginmgr.Endpoint, 0, len(cfg.Plugins.Gateways))
+	named := map[string]bool{}
 	for _, gw := range cfg.Plugins.Gateways {
 		if gw.Addr == "" {
 			continue
 		}
-		if _, err := pm.RegisterGateway(ctx, gw.Name, gw.Addr, gw.Type, gw.ServerName); err != nil {
-			// A gateway that is down at startup is expected — it may simply
-			// not be running yet — so this is a warning, and reconnection
-			// happens on demand.
-			slog.Warn("could not connect to configured gateway at startup",
-				"name", gw.Name, "addr", gw.Addr, "error", err)
+		named[gw.Name] = true
+		endpoints = append(endpoints, pluginmgr.Endpoint{Name: gw.Name, Addr: gw.Addr, Type: gw.Type, ServerName: gw.ServerName})
+	}
+	if accounts, err := st.ListCAAccounts(ctx); err != nil {
+		slog.Warn("could not list CA accounts to connect their gateways; they will connect on first use", "error", err)
+	} else {
+		for _, acc := range accounts {
+			if acc.GatewayAddr == "" || named[acc.Name] {
+				continue
+			}
+			named[acc.Name] = true
+			endpoints = append(endpoints, pluginmgr.Endpoint{Name: acc.Name, Addr: acc.GatewayAddr, Type: acc.ProviderType, ServerName: acc.ServerName})
 		}
 	}
+	pm.ConnectAll(ctx, endpoints)
 
 	// 4. Engines.
 	//
@@ -412,12 +431,11 @@ func (s *Server) Start() error {
 	s.ariPoller.Start()
 	s.verifier.Start()
 
-	// Gateways reconnect on demand today — the next request that needs one, or
-	// an operator clicking "Check now". Between those moments a gateway that
-	// came back on its own, or went quiet, is invisible. Two minutes is often
-	// enough that the connected/disconnected indicator on the gateway list
-	// means something, and cheap enough that it is a HealthCheck RPC against
-	// each configured gateway, nothing more.
+	// Gateways reconnect when a request needs one, and here: the sweep checks
+	// every gateway, reconnects one that answers again, and dials again any
+	// that was down when it was first tried. Two minutes is often enough that
+	// the connected/disconnected indicator on the gateway list means
+	// something, and cheap enough that it is a HealthCheck RPC per gateway.
 	s.pluginMgr.Start(2 * time.Minute)
 
 	// An expiring CA takes down everything it signs, so this sweep has to run
