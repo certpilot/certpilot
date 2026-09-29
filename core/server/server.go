@@ -110,37 +110,7 @@ func NewServer(ctx context.Context, cfg *config.CoreConfig, dbConnStr string) (*
 	}
 	pm := pluginmgr.NewManager(gwTLS)
 
-	// Every gateway this core knows how to reach: the config file's, and the
-	// ones CA accounts created through the API name. Only the first kind used
-	// to be dialled here, so after every restart an account like the
-	// quickstart's selfsigned-eval had no connection, and issuing, renewing or
-	// revoking through it failed until somebody pressed Check now.
-	//
-	// All at once, so a gateway that is down costs one dial timeout rather than
-	// one per gateway. A gateway that is down is expected (it may not be
-	// running yet), is logged, and is retried by the health sweep and by the
-	// first request that needs it.
-	endpoints := make([]pluginmgr.Endpoint, 0, len(cfg.Plugins.Gateways))
-	named := map[string]bool{}
-	for _, gw := range cfg.Plugins.Gateways {
-		if gw.Addr == "" {
-			continue
-		}
-		named[gw.Name] = true
-		endpoints = append(endpoints, pluginmgr.Endpoint{Name: gw.Name, Addr: gw.Addr, Type: gw.Type, ServerName: gw.ServerName})
-	}
-	if accounts, err := st.ListCAAccounts(ctx); err != nil {
-		slog.Warn("could not list CA accounts to connect their gateways; they will connect on first use", "error", err)
-	} else {
-		for _, acc := range accounts {
-			if acc.GatewayAddr == "" || named[acc.Name] {
-				continue
-			}
-			named[acc.Name] = true
-			endpoints = append(endpoints, pluginmgr.Endpoint{Name: acc.Name, Addr: acc.GatewayAddr, Type: acc.ProviderType, ServerName: acc.ServerName})
-		}
-	}
-	pm.ConnectAll(ctx, endpoints)
+	connectGateways(ctx, cfg.Plugins.Gateways, st, pm)
 
 	// 4. Engines.
 	//
@@ -510,4 +480,53 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.pluginMgr.Close()
 	s.store.Close()
 	return s.httpServer.Shutdown(ctx)
+}
+
+// connectGateways dials every gateway this core knows how to reach: the config
+// file's, and the ones CA accounts created through the API name.
+//
+// Only the first kind used to be dialled at startup, so after every restart an
+// account like the quickstart's selfsigned-eval had no connection, and issuing,
+// renewing or revoking through it failed until somebody pressed Check now.
+//
+// The config file's gateways are connected before startup goes on, as they
+// always were. The accounts' are connected in the background: the first version
+// of this waited for them too, and a sample account naming a gateway that was
+// not running held the HTTP port shut for a full dial timeout. A gateway that is
+// down is expected, is logged, and is retried by the health sweep and by the
+// first request that needs it. The returned channel closes when the background
+// connections have finished, for tests.
+func connectGateways(ctx context.Context, configured []config.GatewayConfig, st store.Store, pm *pluginmgr.Manager) <-chan struct{} {
+	fromConfig := make([]pluginmgr.Endpoint, 0, len(configured))
+	named := map[string]bool{}
+	for _, gw := range configured {
+		if gw.Addr == "" {
+			continue
+		}
+		named[gw.Name] = true
+		fromConfig = append(fromConfig, pluginmgr.Endpoint{Name: gw.Name, Addr: gw.Addr, Type: gw.Type, ServerName: gw.ServerName})
+	}
+	pm.ConnectAll(ctx, fromConfig)
+
+	var fromAccounts []pluginmgr.Endpoint
+	if accounts, err := st.ListCAAccounts(ctx); err != nil {
+		slog.Warn("could not list CA accounts to connect their gateways; they will connect on first use", "error", err)
+	} else {
+		for _, acc := range accounts {
+			if acc.GatewayAddr == "" || named[acc.Name] {
+				continue
+			}
+			named[acc.Name] = true
+			fromAccounts = append(fromAccounts, pluginmgr.Endpoint{Name: acc.Name, Addr: acc.GatewayAddr, Type: acc.ProviderType, ServerName: acc.ServerName})
+		}
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Not the caller's context: it may end when New returns, and these
+		// dials are bounded by the manager's own timeout.
+		pm.ConnectAll(context.Background(), fromAccounts)
+	}()
+	return done
 }
