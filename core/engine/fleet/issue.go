@@ -9,6 +9,7 @@ import (
 
 	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"github.com/certpilot/certpilot-gateway-sdk/x509util"
+	"github.com/certpilot/certpilot/core/engine/deploy"
 	"github.com/certpilot/certpilot/core/engine/issuance"
 	"github.com/certpilot/certpilot/core/engine/policy"
 	"github.com/certpilot/certpilot/core/events"
@@ -127,8 +128,17 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 		return nil, err
 	}
 
+	// Settled before the CA is asked for anything, so a host that names a
+	// certificate it does not hold is refused without a certificate being
+	// issued and thrown away.
+	prev, err := i.replaces(ctx, agent, req.Renews, decision.Domains, decision.KeyType)
+	if err != nil {
+		i.announceRefusal(agent, names, err)
+		return nil, err
+	}
+
 	account := decision.Account
-	gateway, err := i.gateway(account)
+	gateway, err := i.gateway(ctx, account)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +218,7 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 			decision.Template.Slug, strings.Join(messages, "; "))
 	}
 
-	cert, err := i.record(ctx, agent, grant, decision, req, info, resp, findings)
+	cert, err := i.record(ctx, agent, grant, decision, req, info, resp, findings, prev)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +245,7 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 // key is on a host and we could not produce it if we were ordered to".
 func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.TemplateGrant,
 	decision *issuance.Decision, req Request, info *x509util.CertInfo,
-	resp *providerv1.IssueCertificateResponse, findings []store.ConformanceFinding) (*store.Certificate, error) {
+	resp *providerv1.IssueCertificateResponse, findings []store.ConformanceFinding, prev *store.Certificate) (*store.Certificate, error) {
 
 	notBefore, notAfter := info.NotBefore, info.NotAfter
 	certPEM := string(resp.Certificate.CertificatePem)
@@ -276,6 +286,10 @@ func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.Te
 	if len(resp.Certificate.ChainPem) > 0 {
 		chain := string(resp.Certificate.ChainPem)
 		cert.ChainPEM = &chain
+	}
+
+	if prev != nil {
+		return i.recordRenewal(ctx, agent, prev, cert)
 	}
 
 	if err := i.store.CreateCertificate(ctx, cert); err != nil {
@@ -393,12 +407,10 @@ func requestedNames(csr *x509util.CSRInfo) ([]string, error) {
 	return out, nil
 }
 
-func (i *Issuer) gateway(account *store.CAAccount) (*pluginmgr.GatewayClient, error) {
-	gw, err := i.pluginMgr.GetGateway(account.Name)
-	if err == nil {
-		return gw, nil
-	}
-	gw, err = i.pluginMgr.GetGateway(account.ProviderType)
+func (i *Issuer) gateway(ctx context.Context, account *store.CAAccount) (*pluginmgr.GatewayClient, error) {
+	gw, err := i.pluginMgr.GatewayFor(ctx, pluginmgr.Endpoint{
+		Name: account.Name, Addr: account.GatewayAddr, Type: account.ProviderType, ServerName: account.ServerName,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("the gateway for CA account %s is not connected: %w", account.Name, err)
 	}
@@ -441,4 +453,167 @@ func (i *Issuer) announceRefusal(agent *store.Agent, names []string, cause error
 			"reason":   cause.Error(),
 		},
 	})
+}
+
+// liveStatuses are the states a certificate is still in service in. A revoked
+// or expired record is history, and a new certificate for the same names is a
+// new record rather than an overwrite of the one that says what happened.
+var liveStatuses = map[string]bool{"ISSUED": true, "EXPIRING": true, "RENEWAL_FAILED": true}
+
+// replaces finds the certificate this request renews, if it renews one.
+//
+// An agent renews by asking again, with a new key. The core used to record
+// every answer as a new certificate, so the one it replaced stayed ISSUED:
+// counted in the inventory, on the horizon, and alerting as it neared expiry
+// about a certificate nothing was serving any more. A renewal the core does
+// updates its record in place, and so does this.
+//
+// renews, when the agent sends it, names the certificate outright, and naming
+// one this host does not hold is refused: it is either a bug or a credential
+// being tried against something it should not reach. Without it (every agent
+// up to 0.2.x), the match is this host's own live certificate for exactly
+// these names and this key type. The key type is part of it because a host
+// may serve an RSA and an ECDSA certificate for the same names side by side,
+// and one is not a renewal of the other.
+func (i *Issuer) replaces(ctx context.Context, agent *store.Agent, renews string, names []string, keyType string) (*store.Certificate, error) {
+	heldHere := func(c *store.Certificate) bool {
+		return c.KeyCustody == store.KeyCustodyAgent && c.KeyHolderAgentID != nil && *c.KeyHolderAgentID == agent.ID
+	}
+
+	if renews = strings.TrimSpace(renews); renews != "" {
+		c, err := i.store.GetCertificate(ctx, renews)
+		if err != nil || c == nil {
+			return nil, fmt.Errorf("%s asked to renew certificate %s, which this core has no record of", agent.Name, renews)
+		}
+		if !heldHere(c) {
+			return nil, fmt.Errorf("%s asked to renew certificate %s, whose key it does not hold", agent.Name, renews)
+		}
+		if !liveStatuses[c.Status] || !sameNames(certNames(c), names) {
+			return nil, nil
+		}
+		return c, nil
+	}
+
+	if len(names) == 0 {
+		return nil, nil
+	}
+	candidates, _, err := i.store.ListCertificates(ctx, store.CertificateFilter{CommonName: names[0], Limit: 500})
+	if err != nil {
+		return nil, fmt.Errorf("could not look for the certificate this renews: %w", err)
+	}
+	var match *store.Certificate
+	for _, c := range candidates {
+		if !heldHere(c) || !liveStatuses[c.Status] || !strings.EqualFold(c.KeyType, keyType) || !sameNames(certNames(c), names) {
+			continue
+		}
+		// Hosts renewed before this existed left several; the newest is the
+		// one in service.
+		if match == nil || (c.NotAfter != nil && match.NotAfter != nil && c.NotAfter.After(*match.NotAfter)) {
+			match = c
+		}
+	}
+	return match, nil
+}
+
+// recordRenewal writes a renewal over the record of the certificate it
+// replaces, the way the core's own renewal does: new material, one more
+// renewal, and the old fingerprint kept for the verifier to tell old from new.
+func (i *Issuer) recordRenewal(ctx context.Context, agent *store.Agent, prev, next *store.Certificate) (*store.Certificate, error) {
+	previousFingerprint := prev.FingerprintSHA256
+
+	prev.FingerprintSHA256 = next.FingerprintSHA256
+	prev.CommonName = next.CommonName
+	prev.SANs = next.SANs
+	prev.SerialNumber = next.SerialNumber
+	prev.IssuerDN = next.IssuerDN
+	prev.NotBefore = next.NotBefore
+	prev.NotAfter = next.NotAfter
+	prev.DaysRemaining = next.DaysRemaining
+	prev.KeyType = next.KeyType
+	prev.KeySize = next.KeySize
+	prev.CertificatePEM = next.CertificatePEM
+	prev.ChainPEM = next.ChainPEM
+	prev.CAAccountID = next.CAAccountID
+	prev.TemplateID = next.TemplateID
+	prev.TemplateVersion = next.TemplateVersion
+	prev.GrantID = next.GrantID
+	prev.RenewalLeadDays = next.RenewalLeadDays
+	prev.ConformanceFindings = next.ConformanceFindings
+	prev.Status = "ISSUED"
+	prev.RenewalError = nil
+	prev.RenewalCount++
+
+	if err := i.store.UpdateCertificate(ctx, prev); err != nil {
+		return nil, fmt.Errorf("the certificate was renewed and could not be recorded: %w", err)
+	}
+
+	// The host installs what it renews in the same cycle, so the check is
+	// scheduled as for a finished rollout rather than a renewal nobody
+	// deployed. Through the narrow writer, as the core's renewal does:
+	// UpdateCertificate's column list does not carry these.
+	verifyAt := time.Now().Add(deploy.DeployedVerifyGrace)
+	if err := i.store.UpdateCertificateVerification(ctx, prev.ID, store.VerificationUpdate{
+		State:               store.VerificationPending,
+		CheckedAt:           time.Now(),
+		VerifyAfter:         &verifyAt,
+		PreviousFingerprint: previousFingerprint,
+	}); err != nil {
+		slog.Error("a host renewed a certificate but its deployment check could not be scheduled",
+			"cert_id", prev.ID, "agent", agent.Name, "error", err)
+	}
+	prev.PreviousFingerprint = previousFingerprint
+
+	_ = i.store.CreateAuditLog(ctx, &store.AuditLog{
+		Action:     "cert.renewed_by_agent",
+		EntityType: "certificate",
+		EntityID:   &prev.ID,
+		Details: fmt.Sprintf(`{"cn":%q,"agent":%q,"serial":%q,"renewal_count":%d,"key_custody":"AGENT"}`,
+			prev.CommonName, agent.Name, prev.SerialNumber, prev.RenewalCount),
+	})
+
+	if i.broker != nil {
+		i.broker.Publish(events.Event{
+			Topic:    events.TopicCertRenewed,
+			Severity: events.SeverityInfo,
+			EntityID: prev.ID,
+			Payload: map[string]any{
+				"common_name":    prev.CommonName,
+				"serial_number":  prev.SerialNumber,
+				"days_remaining": prev.DaysRemaining,
+				"not_after":      prev.NotAfter.Format(time.RFC3339),
+				"renewal_count":  prev.RenewalCount,
+				"renewed_by":     agent.Name + " (key generated on the host)",
+			},
+		})
+	}
+	return prev, nil
+}
+
+// certNames is every name a certificate carries, its common name included.
+func certNames(c *store.Certificate) []string {
+	return append([]string{c.CommonName}, c.SANs...)
+}
+
+// sameNames compares two sets of DNS names, ignoring order, case, duplicates
+// and a trailing dot.
+func sameNames(a, b []string) bool {
+	set := func(names []string) map[string]bool {
+		out := map[string]bool{}
+		for _, n := range names {
+			if n = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(n), ".")); n != "" {
+				out[n] = true
+			}
+		}
+		return out
+	}
+	x, y := set(a), set(b)
+	if len(x) != len(y) {
+		return false
+	}
+	for n := range x {
+		if !y[n] {
+			return false
+		}
+	}
+	return true
 }

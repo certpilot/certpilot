@@ -89,14 +89,15 @@ func (e *Executor) RenewCertificate(ctx context.Context, certID string) (*store.
 		return nil, fmt.Errorf("failed to fetch CA account: %w", err)
 	}
 
-	gw, err := e.pluginMgr.GetGateway(caAccount.Name)
+	// The account's own gateway, connected if it is not (after a restart, an
+	// account created through the API has no connection until something asks),
+	// then the provider type, for deployments that run one shared gateway per
+	// protocol rather than one per account.
+	gw, err := e.pluginMgr.GatewayFor(ctx, pluginmgr.Endpoint{
+		Name: caAccount.Name, Addr: caAccount.GatewayAddr, Type: caAccount.ProviderType, ServerName: caAccount.ServerName,
+	})
 	if err != nil {
-		// Fall back to matching by provider type, for deployments that run one
-		// shared gateway per protocol rather than one per account.
-		gw, err = e.pluginMgr.GetGateway(caAccount.ProviderType)
-		if err != nil {
-			return nil, fmt.Errorf("gateway for CA account %s is not connected: %w", caAccount.Name, err)
-		}
+		return nil, fmt.Errorf("gateway for CA account %s is not connected: %w", caAccount.Name, err)
 	}
 
 	providerConfig, err := e.decryptCAConfig(caAccount)

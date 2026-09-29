@@ -92,6 +92,15 @@ type MeResponse struct {
 	// is the one credential with no user row behind it.
 	UserID     string `json:"user_id,omitempty"`
 	RoleSource string `json:"role_source,omitempty"`
+	// SignIn is how this person got in: "password" for a local account,
+	// "sso" for a browser session made by single sign-on, "bearer" for a token
+	// from an identity provider, "display_token" for a wall display. A browser
+	// session reads "session" in AuthMethod either way, which is what left the
+	// console calling a local password "Identity provider".
+	SignIn string `json:"sign_in,omitempty"`
+	// Issuer names the identity provider behind a sign-in. Empty for a local
+	// account, which has none.
+	Issuer string `json:"issuer,omitempty"`
 	// MustChangePassword is set for a generated credential the account holder
 	// has not replaced — the one printed at first start.
 	MustChangePassword bool `json:"must_change_password,omitempty"`
@@ -118,10 +127,34 @@ func (h *SessionHandler) Me(c *gin.Context) {
 			resp.DisplayName = u.DisplayName
 			resp.RoleSource = u.RoleSource
 			resp.MustChangePassword = u.MustChangePassword
+			if u.Issuer != store.LocalIssuer {
+				resp.Issuer = u.Issuer
+			}
+			resp.SignIn = signInMethod(resp.AuthMethod, u.Issuer)
 		}
+	}
+	if resp.AuthMethod == middleware.AuthMethodDisplayToken {
+		resp.SignIn = signInMethod(resp.AuthMethod, "")
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// signInMethod names how a caller signed in, from how the request was
+// authenticated and the issuer of the account behind it.
+func signInMethod(authMethod, issuer string) string {
+	switch authMethod {
+	case middleware.AuthMethodSession:
+		if issuer == store.LocalIssuer {
+			return "password"
+		}
+		return "sso"
+	case middleware.AuthMethodBearer:
+		return "bearer"
+	case middleware.AuthMethodDisplayToken:
+		return "display_token"
+	}
+	return ""
 }
 
 // audit records an authentication event.

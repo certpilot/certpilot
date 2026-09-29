@@ -216,6 +216,13 @@ func (h *CAAccountHandler) importIssuers(c *gin.Context, acc *store.CAAccount) *
 	return &result
 }
 
+// gatewayEndpoint is how to reach the gateway serving a CA account: its own
+// address when it was created with one, and its provider type as the fallback
+// for deployments that run one shared gateway per protocol.
+func gatewayEndpoint(acc *store.CAAccount) pluginmgr.Endpoint {
+	return pluginmgr.Endpoint{Name: acc.Name, Addr: acc.GatewayAddr, Type: acc.ProviderType, ServerName: acc.ServerName}
+}
+
 // HealthCheck handles POST /api/v1/ca-accounts/:id/health.
 func (h *CAAccountHandler) HealthCheck(c *gin.Context) {
 	id := c.Param("id")

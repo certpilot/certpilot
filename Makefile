@@ -255,7 +255,9 @@ test-frontend:
 	cd frontend && npx vue-tsc --noEmit \
 		&& node scripts/check-sse.mjs \
 		&& node scripts/check-chain.mjs \
-		&& node scripts/check-display-token.mjs
+		&& node scripts/check-display-token.mjs \
+		&& node scripts/check-signin.mjs \
+		&& node scripts/check-renewal.mjs
 
 test-coverage:
 	@for m in $(MODULES); do \
@@ -329,7 +331,7 @@ help:
 	@echo "Check"
 	@echo "  make test                    Run all tests"
 	@echo "  make test-race               Run all tests under the race detector"
-	@echo "  make test-frontend           Typecheck the UI and check the SSE parser"
+	@echo "  make test-frontend           Typecheck the UI and run its checks"
 	@echo "  make lint                    go vet and gofmt"
 	@echo ""
 	@echo "Clean"
