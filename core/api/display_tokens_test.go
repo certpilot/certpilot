@@ -102,10 +102,13 @@ func realRouterWithPlugins(t *testing.T) (*gin.Engine, store.Store, *pluginmgr.M
 	// role-resolution path exactly as a deployment would.
 	//
 	// It stands aside for any request that brought its own credential, which is
-	// what keeps the display-token tests below meaningful.
+	// what keeps the display-token tests below meaningful, and a session cookie
+	// is one: without this a test signing in with a password would be answered
+	// as the administrator instead.
 	engine.Use(func(c *gin.Context) {
 		if c.GetHeader("Authorization") == "" &&
 			c.GetHeader("X-Display-Token") == "" &&
+			c.GetHeader("Cookie") == "" &&
 			c.Query("display_token") == "" {
 			c.Request.Header.Set("Authorization", "Bearer "+apiAdminToken(t))
 		}
