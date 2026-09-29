@@ -38,16 +38,48 @@ type Manager struct {
 	mu       sync.RWMutex
 	gateways map[string]*GatewayClient
 
+	// known is every gateway this manager has been told how to reach, whether
+	// or not it answered: the config file's, and those the CA accounts name.
+	// A gateway that was down when it was first dialled has no entry in
+	// gateways at all, so without this the health sweep would never learn it
+	// exists and nothing would connect it when it came up.
+	known map[string]Endpoint
+	// failedAt is when a dial to each gateway last failed, so a request that
+	// needs a gateway that is down pays for one dial, not one per request.
+	failedAt map[string]time.Time
+
+	dialTimeout time.Duration
+	// onDemandDial bounds a dial made for a request that is waiting on it.
+	// A request path has to fit inside the server's write timeout, and a
+	// gateway that answers at all answers in milliseconds.
+	onDemandDial time.Duration
+	redialPause  time.Duration
+
 	stopCh   chan struct{}
 	stopOnce sync.Once
+}
+
+// Endpoint is how to reach one gateway: the name it is registered under (a
+// CA account's name, or a gateway's in the config file), its address, its
+// provider type, and the TLS server name when the address does not carry it.
+type Endpoint struct {
+	Name       string
+	Addr       string
+	Type       string
+	ServerName string
 }
 
 // NewManager creates a new plugin manager.
 func NewManager(tls grpckit.TLSConfig) *Manager {
 	return &Manager{
-		tls:      tls,
-		gateways: make(map[string]*GatewayClient),
-		stopCh:   make(chan struct{}),
+		tls:          tls,
+		gateways:     make(map[string]*GatewayClient),
+		known:        make(map[string]Endpoint),
+		failedAt:     make(map[string]time.Time),
+		stopCh:       make(chan struct{}),
+		dialTimeout:  15 * time.Second,
+		onDemandDial: 5 * time.Second,
+		redialPause:  30 * time.Second,
 	}
 }
 
@@ -58,13 +90,19 @@ func NewManager(tls grpckit.TLSConfig) *Manager {
 // the address.
 func (m *Manager) RegisterGateway(ctx context.Context, name, addr, gwType, serverName string) (*GatewayClient, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Check if already registered
+	if addr != "" {
+		m.known[name] = Endpoint{Name: name, Addr: addr, Type: gwType, ServerName: serverName}
+	}
 	if existing, ok := m.gateways[name]; ok && existing.IsConnected {
+		m.mu.Unlock()
 		return existing, nil
 	}
+	m.mu.Unlock()
 
+	// Everything from here to the swap happens without the lock. A dial to a
+	// gateway that does not answer waits out its whole deadline, and every
+	// issuance looks its own gateway up under this lock; holding it here once
+	// stalled all of them behind one wedged gateway.
 	slog.Info("connecting to gateway plugin", "name", name, "addr", addr, "type", gwType)
 
 	tlsCfg := m.tls
@@ -81,11 +119,14 @@ func (m *Manager) RegisterGateway(ctx context.Context, name, addr, gwType, serve
 		}
 	}
 
-	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	dialCtx, cancel := context.WithTimeout(ctx, m.dialTimeout)
 	defer cancel()
 
 	conn, err := grpckit.Dial(dialCtx, addr, tlsCfg)
 	if err != nil {
+		m.mu.Lock()
+		m.failedAt[name] = time.Now()
+		m.mu.Unlock()
 		return nil, fmt.Errorf("failed to dial gateway %s at %s: %w", name, addr, err)
 	}
 
@@ -113,6 +154,17 @@ func (m *Manager) RegisterGateway(ctx context.Context, name, addr, gwType, serve
 		IsConnected:  true,
 	}
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Two callers can dial the same gateway at once now that the dial is
+	// outside the lock. The first to finish wins and the other's connection
+	// is closed, so there is only ever one per name.
+	if existing, ok := m.gateways[name]; ok && existing.IsConnected {
+		conn.Close()
+		return existing, nil
+	}
+
 	// A previous entry under this name is being replaced — most often a
 	// reconnect after the earlier connection was marked disconnected by a
 	// failed health check. Nothing else can be holding a reference to its
@@ -126,8 +178,79 @@ func (m *Manager) RegisterGateway(ctx context.Context, name, addr, gwType, serve
 	}
 
 	m.gateways[name] = gw
+	delete(m.failedAt, name)
 	slog.Info("gateway registered successfully", "name", name, "type", gwType)
 	return gw, nil
+}
+
+// GatewayFor returns the gateway that serves a CA account, connecting to it
+// if it is not connected.
+//
+// The lookup every caller used to repeat was "by the account's name, then by
+// its provider type", and neither step could connect anything. So a CA
+// account created through the API, whose gateway is registered under its own
+// name, was unusable after every core restart until somebody pressed Check
+// now: every issuance, renewal and revocation through it failed with "not
+// connected". This dials the account's own address when nothing is connected
+// under its name, and falls back to the provider type as before.
+//
+// A dial that fails is not retried for redialPause, so while a gateway is down
+// the requests that need it fail at once rather than each waiting out a dial.
+func (m *Manager) GatewayFor(ctx context.Context, ep Endpoint) (*GatewayClient, error) {
+	if gw, err := m.GetGateway(ep.Name); err == nil {
+		return gw, nil
+	}
+
+	var dialErr error
+	if ep.Addr != "" {
+		m.mu.RLock()
+		failed, recently := m.failedAt[ep.Name]
+		m.mu.RUnlock()
+		if recently && time.Since(failed) < m.redialPause {
+			dialErr = fmt.Errorf("gateway %s at %s could not be reached %s ago; not retrying yet",
+				ep.Name, ep.Addr, time.Since(failed).Round(time.Second))
+		} else {
+			dialCtx, cancel := context.WithTimeout(ctx, m.onDemandDial)
+			gw, err := m.RegisterGateway(dialCtx, ep.Name, ep.Addr, ep.Type, ep.ServerName)
+			cancel()
+			if err == nil {
+				return gw, nil
+			}
+			dialErr = err
+		}
+	}
+
+	if ep.Type != "" && ep.Type != ep.Name {
+		if gw, err := m.GetGateway(ep.Type); err == nil {
+			return gw, nil
+		}
+	}
+	if dialErr != nil {
+		return nil, dialErr
+	}
+	return nil, fmt.Errorf("gateway %s not found or disconnected", ep.Name)
+}
+
+// ConnectAll dials every endpoint at once and waits for them all, so startup
+// costs one dial timeout at most rather than one per gateway that is down.
+// A gateway that cannot be reached is logged and left to the health sweep,
+// which keeps trying it.
+func (m *Manager) ConnectAll(ctx context.Context, eps []Endpoint) {
+	var wg sync.WaitGroup
+	for _, ep := range eps {
+		if ep.Addr == "" {
+			continue
+		}
+		wg.Add(1)
+		go func(ep Endpoint) {
+			defer wg.Done()
+			if _, err := m.RegisterGateway(ctx, ep.Name, ep.Addr, ep.Type, ep.ServerName); err != nil {
+				slog.Warn("could not connect to gateway; the health sweep will keep trying",
+					"name", ep.Name, "addr", ep.Addr, "error", err)
+			}
+		}(ep)
+	}
+	wg.Wait()
 }
 
 // GetGateway returns a registered gateway by name.
@@ -159,14 +282,37 @@ func (m *Manager) HealthCheckAll(ctx context.Context) map[string]*providerv1.Hea
 	// Snapshot under the read lock, then make the network calls without it.
 	// Holding a lock across a gRPC round trip would stall every issuance for
 	// as long as the slowest gateway takes to answer.
+	//
+	// Disconnected gateways are checked too. The sweep used to skip them, so
+	// one failed check (a gateway restarting, a network blip) left a gateway
+	// unusable until somebody pressed Check now, however long ago it came
+	// back. Its connection redials on its own; a health check that answers is
+	// what says it is usable again.
 	m.mu.RLock()
 	snapshot := make(map[string]*GatewayClient, len(m.gateways))
 	for name, gw := range m.gateways {
-		if gw.IsConnected {
-			snapshot[name] = gw
+		snapshot[name] = gw
+	}
+	var absent []Endpoint
+	for name, ep := range m.known {
+		if _, ok := m.gateways[name]; !ok {
+			absent = append(absent, ep)
 		}
 	}
 	m.mu.RUnlock()
+
+	// Gateways that were down the first time they were dialled have no
+	// connection to check, so they are dialled again here.
+	if len(absent) > 0 {
+		m.ConnectAll(ctx, absent)
+		m.mu.RLock()
+		for _, ep := range absent {
+			if gw, ok := m.gateways[ep.Name]; ok {
+				snapshot[ep.Name] = gw
+			}
+		}
+		m.mu.RUnlock()
+	}
 
 	results := make(map[string]*providerv1.HealthCheckResponse, len(snapshot))
 	for name, gw := range snapshot {
@@ -182,6 +328,10 @@ func (m *Manager) HealthCheckAll(ctx context.Context) map[string]*providerv1.Hea
 			m.mu.Unlock()
 			continue
 		}
+		if !gw.IsConnected {
+			slog.Info("gateway is answering again", "name", name)
+		}
+		gw.IsConnected = true
 		gw.LastHealth = resp
 		needsCaps := gw.Capabilities == nil
 		m.mu.Unlock()
@@ -226,9 +376,8 @@ func (m *Manager) refreshCapabilities(ctx context.Context, name string, gw *Gate
 
 // Start runs HealthCheckAll on a timer.
 //
-// Registration only ever happens at startup or when the API is asked to
-// reconnect a specific account; nothing else notices a gateway that recovers
-// on its own, or one that goes quiet between requests. This is what makes
+// Between requests, nothing else notices a gateway that recovers on its own,
+// or one that goes quiet. This is what makes
 // "is_connected" on the gateway list reflect reality between those moments,
 // rather than only after the next certificate request happens to fail.
 func (m *Manager) Start(interval time.Duration) {
