@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useApi } from '@/composables/useApi'
 import { useAsyncData } from '@/composables/useAsyncData'
+import { describeSignIn } from '@/lib/signin'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import DataState from '@/components/common/DataState.vue'
@@ -130,7 +131,7 @@ function refreshAll() {
           <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
             <div class="flex items-center justify-between gap-3">
               <dt class="text-[color:var(--text-muted)]">Authentication</dt>
-              <dd>{{ isAuthEnabled ? 'Identity provider' : 'Anonymous (development)' }}</dd>
+              <dd>{{ describeSignIn(me) }}</dd>
             </div>
             <div class="flex items-center justify-between gap-3">
               <dt class="text-[color:var(--text-muted)]">Signed in as</dt>
