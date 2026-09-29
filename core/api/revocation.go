@@ -93,20 +93,17 @@ func (h *CertificateHandler) Revoke(c *gin.Context) {
 		return
 	}
 
-	gw, err := h.pluginMgr.GetGateway(caAccount.Name)
+	gw, err := h.pluginMgr.GatewayFor(c.Request.Context(), gatewayEndpoint(caAccount))
 	if err != nil {
-		gw, err = h.pluginMgr.GetGateway(caAccount.ProviderType)
-		if err != nil {
-			// Deliberately not recorded as revoked. An unreachable gateway
-			// means the CA has not been told, and marking it here would leave
-			// a certificate that reads REVOKED in the console and answers
-			// handshakes in production.
-			c.JSON(http.StatusBadGateway, gin.H{
-				"error": fmt.Sprintf("gateway for CA %s is not connected, so the CA has not been told; "+
-					"nothing has been changed", caAccount.Name),
-			})
-			return
-		}
+		// Deliberately not recorded as revoked. An unreachable gateway
+		// means the CA has not been told, and marking it here would leave
+		// a certificate that reads REVOKED in the console and answers
+		// handshakes in production.
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": fmt.Sprintf("gateway for CA %s is not connected, so the CA has not been told; "+
+				"nothing has been changed", caAccount.Name),
+		})
+		return
 	}
 
 	providerConfig, err := h.decryptCAConfig(caAccount)

@@ -128,7 +128,7 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 	}
 
 	account := decision.Account
-	gateway, err := i.gateway(account)
+	gateway, err := i.gateway(ctx, account)
 	if err != nil {
 		return nil, err
 	}
@@ -393,12 +393,10 @@ func requestedNames(csr *x509util.CSRInfo) ([]string, error) {
 	return out, nil
 }
 
-func (i *Issuer) gateway(account *store.CAAccount) (*pluginmgr.GatewayClient, error) {
-	gw, err := i.pluginMgr.GetGateway(account.Name)
-	if err == nil {
-		return gw, nil
-	}
-	gw, err = i.pluginMgr.GetGateway(account.ProviderType)
+func (i *Issuer) gateway(ctx context.Context, account *store.CAAccount) (*pluginmgr.GatewayClient, error) {
+	gw, err := i.pluginMgr.GatewayFor(ctx, pluginmgr.Endpoint{
+		Name: account.Name, Addr: account.GatewayAddr, Type: account.ProviderType, ServerName: account.ServerName,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("the gateway for CA account %s is not connected: %w", account.Name, err)
 	}

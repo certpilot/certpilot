@@ -199,6 +199,29 @@ func TestRevokingTellsTheCAFirstAndOnlyThenTheRecord(t *testing.T) {
 	}
 }
 
+// TestRevokingReachesAGatewayNobodyRegisteredSinceARestart.
+//
+// After a core restart only the config file's gateways were dialled again. An
+// account created through the API names its own gateway address, and nothing
+// reconnected it, so revoking through it answered "not connected" until
+// somebody pressed Check now. Here nothing registers the gateway: the account's
+// address is all there is, as it is straight after a restart.
+func TestRevokingReachesAGatewayNobodyRegisteredSinceARestart(t *testing.T) {
+	r, st, _ := realRouterWithPlugins(t)
+	gw := startRevokeGateway(t)
+	cert := seedCertificate(t, st, func(_ *store.Certificate, acc *store.CAAccount) {
+		acc.GatewayAddr = gw.addr
+	})
+
+	w := do(r, http.MethodPost, "/api/v1/certificates/"+cert.ID+"/revoke", gin.H{"reason": 1}, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if got := gw.revokeCalls.Load(); got != 1 {
+		t.Fatalf("the CA should have been asked once, was asked %d times", got)
+	}
+}
+
 // TestARefusedRevocationChangesNothing. The CA answered, and said no. That is
 // not a transport problem and must not be recorded as a revocation.
 func TestARefusedRevocationChangesNothing(t *testing.T) {
