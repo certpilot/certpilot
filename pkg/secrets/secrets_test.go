@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -425,5 +426,44 @@ func TestMACDoesNotUseTheKEKDirectly(t *testing.T) {
 	direct.Write([]byte("data"))
 	if bytes.Equal(tag, direct.Sum(nil)) {
 		t.Error("the tag was computed with the raw KEK rather than a derived subkey")
+	}
+}
+
+// TestAKeyringKnowsOnlyTheKeysItHolds.
+//
+// A tag or envelope names the key that wrote it. Asking whether a keyring
+// holds that key is how the core tells, before it writes anything, that a
+// database was sealed with a key it was not given.
+func TestAKeyringKnowsOnlyTheKeysItHolds(t *testing.T) {
+	primary := bytes.Repeat([]byte{1}, KEKSize)
+	retired := bytes.Repeat([]byte{2}, KEKSize)
+	stranger := bytes.Repeat([]byte{3}, KEKSize)
+	kr, err := NewKeyring(primary, retired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idOf := func(k []byte) string { id := keyID(k); return fmt.Sprintf("%x", id) }
+
+	if !kr.Knows(idOf(primary)) {
+		t.Error("the keyring does not know its own primary key")
+	}
+	if !kr.Knows(idOf(retired)) {
+		t.Error("the keyring does not know a retired key it was given")
+	}
+	if kr.Knows(idOf(stranger)) {
+		t.Error("the keyring claims a key it was never given")
+	}
+	for _, bad := range []string{"", "not-hex", "abcd"} {
+		if kr.Knows(bad) {
+			t.Errorf("the keyring claims the malformed identifier %q", bad)
+		}
+	}
+
+	ids := kr.KeyIDs()
+	if len(ids) != 2 || ids[0] != idOf(primary) {
+		t.Fatalf("KeyIDs = %v, want the primary first and then the retired key", ids)
+	}
+	if ids[1] != idOf(retired) {
+		t.Errorf("KeyIDs = %v, missing the retired key", ids)
 	}
 }

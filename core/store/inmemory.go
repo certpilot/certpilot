@@ -3942,3 +3942,16 @@ func (s *MemoryStore) ArchiveMetadataField(_ context.Context, id string) error {
 	f.UpdatedAt = time.Now()
 	return nil
 }
+
+func (m *MemoryStore) LatestAuditKey(ctx context.Context) (int64, string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	// auditLogs is newest-first, and the sample entry this store seeds is
+	// unchained, so the first chained entry from the front is the head.
+	for _, l := range m.auditLogs {
+		if l.Seq > 0 {
+			return l.Seq, l.ChainKeyID, nil
+		}
+	}
+	return 0, "", nil
+}

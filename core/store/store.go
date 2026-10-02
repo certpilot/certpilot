@@ -587,6 +587,11 @@ type Store interface {
 	// VerifyAuditChain walks the chain from a sequence number and reports the
 	// first break. A limit of zero walks to the end.
 	VerifyAuditChain(ctx context.Context, from int64, limit int) (*AuditChainReport, error)
+	// LatestAuditKey reports the newest chained entry's sequence number and the
+	// identifier of the key that signed it; zero and "" when nothing is chained.
+	// The core reads it at startup to check it was given the key this database
+	// was sealed with.
+	LatestAuditKey(ctx context.Context) (seq int64, keyID string, err error)
 
 	// ── Dashboard ───────────────────────────────────────────
 	GetDashboardStats(ctx context.Context) (*DashboardStats, error)
