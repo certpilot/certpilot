@@ -173,13 +173,12 @@ func (i *Importer) SweepAll(ctx context.Context) ([]Result, error) {
 func (i *Importer) ImportAccount(ctx context.Context, account *store.CAAccount) Result {
 	result := Result{Account: account.Name}
 
-	gateway, err := i.plugins.GetGateway(account.Name)
+	gateway, err := i.plugins.GatewayFor(ctx, pluginmgr.Endpoint{
+		Name: account.Name, Addr: account.GatewayAddr, Type: account.ProviderType, ServerName: account.ServerName,
+	})
 	if err != nil {
-		gateway, err = i.plugins.GetGateway(account.ProviderType)
-		if err != nil {
-			result.Error = fmt.Sprintf("no gateway is connected for %s", account.ProviderType)
-			return result
-		}
+		result.Error = fmt.Sprintf("no gateway is connected for %s", account.ProviderType)
+		return result
 	}
 	// Asking a gateway that does not implement this produces an Unimplemented
 	// error per call, on a timer, for ever. The capability exists so the answer

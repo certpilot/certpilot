@@ -12,6 +12,7 @@ import {
   certStateLabel, certUrgency, compareSeverity, sevBg, sevClass,
 } from '@/lib/severity'
 import { certName, formatDate, formatDaysShort, truncate } from '@/lib/format'
+import { rebind, waitForRenewal } from '@/lib/renewal'
 import { downloadText, fullChain, pemFilename } from '@/lib/download'
 import { useAuthStore } from '@/stores/auth'
 import MetadataInput from '@/components/metadata/MetadataInput.vue'
@@ -178,13 +179,31 @@ async function requestCert() {
 // ── Renew ─────────────────────────────────────────────────
 const renewingId = ref<string | null>(null)
 const actionError = ref<string | null>(null)
+const actionNotice = ref<string | null>(null)
 
+// The renewal is queued, not done, when this call returns: the list used to be
+// refreshed there, before the queue had run the job, so the open detail panel
+// kept the old serial and renewal count and the button looked as if it had
+// done nothing. So wait for the job, then refresh, then point the panel at the
+// refreshed record.
 async function renewCert(cert: Certificate) {
   renewingId.value = cert.id
   actionError.value = null
+  actionNotice.value = null
   try {
-    await api.post(`/api/v1/certificates/${cert.id}/renew`)
+    const accepted = await api.post<{ data: { id: string } }>(`/api/v1/certificates/${cert.id}/renew`)
+    const outcome = await waitForRenewal(() =>
+      api
+        .get<{ data: { status: string }; summary?: string }>(`/api/v1/renewals/${accepted.data.id}`)
+        .then((r) => ({ job: r.data, summary: r.summary })),
+    )
     await certs.refresh()
+    selected.value = rebind(certificates.value, selected.value)
+    if (outcome.status === 'FAILED' || outcome.status === 'CANCELLED') {
+      actionError.value = `Renewing ${certName(cert)} did not complete: ${outcome.summary}`
+    } else if (!outcome.done) {
+      actionNotice.value = `Renewing ${certName(cert)} is still queued: ${outcome.summary}`
+    }
   } catch (err) {
     actionError.value = `Renewing ${certName(cert)} failed: ${
       err instanceof Error ? err.message : String(err)
@@ -534,6 +553,9 @@ async function signCSR() {
     <div v-if="actionError" role="alert" class="action-error">
       <CircleX class="w-3.5 h-3.5 shrink-0 sev-critical" />
       <span>{{ actionError }}</span>
+    </div>
+    <div v-if="actionNotice" role="status" class="notice py-2" data-tone="signal">
+      <span class="text-xs">{{ actionNotice }}</span>
     </div>
 
     <DataState

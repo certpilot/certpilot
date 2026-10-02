@@ -255,12 +255,11 @@ func (p *ARIPoller) fetch(ctx context.Context, cert *store.Certificate) (*provid
 		return nil, err
 	}
 
-	gw, err := p.pluginMgr.GetGateway(account.Name)
+	gw, err := p.pluginMgr.GatewayFor(ctx, pluginmgr.Endpoint{
+		Name: account.Name, Addr: account.GatewayAddr, Type: account.ProviderType, ServerName: account.ServerName,
+	})
 	if err != nil {
-		gw, err = p.pluginMgr.GetGateway(account.ProviderType)
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	config, err := decryptCAConfig(p.keyring, account)

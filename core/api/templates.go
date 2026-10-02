@@ -455,10 +455,7 @@ func (h *TemplateHandler) validateCAProfile(ctx context.Context, t *store.Certif
 	if err != nil {
 		return nil // Reported already, by the ca_account_id check above.
 	}
-	gw, err := h.pluginMgr.GetGateway(account.Name)
-	if err != nil {
-		gw, err = h.pluginMgr.GetGateway(account.ProviderType)
-	}
+	gw, err := h.pluginMgr.GatewayFor(ctx, gatewayEndpoint(account))
 	if err != nil {
 		slog.Warn("could not reach the gateway to check ca_profile against advertised profiles",
 			"template", t.Slug, "ca_profile", t.CAProfile, "error", err)
@@ -525,7 +522,7 @@ func (h *TemplateHandler) validateKeyUsage(ctx context.Context, t *store.Certifi
 	if strings.EqualFold(account.ProviderType, "acme") {
 		config, _ := decryptCAConfig(h.keyring, account)
 		advertised := "none"
-		if gw, gwErr := h.pluginMgr.GetGateway(account.Name); gwErr == nil {
+		if gw, gwErr := h.pluginMgr.GatewayFor(ctx, gatewayEndpoint(account)); gwErr == nil {
 			callCtx, cancel := context.WithTimeout(ctx, gatewayCallTimeout)
 			info, err := gw.Client.GetCAInfo(callCtx, &providerv1.GetCAInfoRequest{ProviderConfig: config})
 			cancel()
@@ -550,10 +547,7 @@ func (h *TemplateHandler) validateKeyUsage(ctx context.Context, t *store.Certifi
 		return nil
 	}
 
-	gw, err := h.pluginMgr.GetGateway(account.Name)
-	if err != nil {
-		gw, err = h.pluginMgr.GetGateway(account.ProviderType)
-	}
+	gw, err := h.pluginMgr.GatewayFor(ctx, gatewayEndpoint(account))
 	if err != nil {
 		slog.Warn("could not reach the gateway to check key usage against the profile",
 			"template", t.Slug, "ca_profile", t.CAProfile, "error", err)

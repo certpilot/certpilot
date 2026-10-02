@@ -3249,6 +3249,20 @@
           "required": false
         },
         {
+          "name": "sign_in",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "SignIn is how this person got in: \"password\" for a local account, \"sso\" for a browser session made by single sign-on, \"bearer\" for a token from an identity provider, \"display_token\" for a wall display. A browser session reads \"session\" in AuthMethod either way, which is what left the console calling a local password \"Identity provider\"."
+        },
+        {
+          "name": "issuer",
+          "type": "string",
+          "go_type": "string",
+          "required": false,
+          "doc": "Issuer names the identity provider behind a sign-in. Empty for a local account, which has none."
+        },
+        {
           "name": "must_change_password",
           "type": "boolean",
           "go_type": "bool",

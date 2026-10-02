@@ -238,13 +238,10 @@ func (h *CertificateHandler) Create(c *gin.Context) {
 	}
 
 	// 3. Find Gateway
-	gw, err := h.pluginMgr.GetGateway(caAccount.Name)
+	gw, err := h.pluginMgr.GatewayFor(c.Request.Context(), gatewayEndpoint(caAccount))
 	if err != nil {
-		gw, err = h.pluginMgr.GetGateway(caAccount.ProviderType)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("gateway for CA %s is not connected", caAccount.Name)})
-			return
-		}
+		c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("gateway for CA %s is not connected: %v", caAccount.Name, err)})
+		return
 	}
 
 	// 4. Request Issuance from Gateway.

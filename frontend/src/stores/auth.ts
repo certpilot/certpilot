@@ -23,6 +23,10 @@ interface Me {
   auth_method: string
   user_id?: string
   role_source?: string
+  /** How this person signed in: password, sso, bearer or display_token. */
+  sign_in?: string
+  /** The identity provider behind it; absent for a local account. */
+  issuer?: string
   must_change_password?: boolean
 }
 
