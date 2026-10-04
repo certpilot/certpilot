@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct all build build-core test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct live-kubernetes all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -199,6 +199,12 @@ CT_DOMAIN ?= badssl.com
 live-ct:
 	CT_DOMAIN="$(CT_DOMAIN)" ./scripts/live-ct.sh
 
+## Does the Kubernetes inventory work against a real cluster? A kind cluster
+## with cert-manager, a token scoped as documented, an Ingress, and more TLS
+## secrets than one page holds. Needs Docker; fetches kind if it is missing.
+live-kubernetes:
+	./scripts/live-kubernetes.sh
+
 run-core:
 	$(GO) run ./core/cmd/ --config=config.dev.yaml
 
@@ -354,6 +360,7 @@ help:
 	@echo "  make live-notifications      Alerts to a real SMTP server and webhook receiver"
 	@echo "  make live-oidc               Sign-in and bearer tokens against Keycloak"
 	@echo "  make live-ct                 CT monitoring against crt.sh (needs the internet)"
+	@echo "  make live-kubernetes         Kubernetes inventory against a kind cluster"
 	@echo ""
 	@echo "Check"
 	@echo "  make test                    Run all tests"

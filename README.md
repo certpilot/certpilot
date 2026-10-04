@@ -155,7 +155,7 @@ certificate, pointing at a real CA, and putting it on a wall.
 | **Issue** | ACME (RFC 8555) with `dns-01` and `http-01`, wildcards, ARI (RFC 9773), and External Account Binding 🧪. HashiCorp Vault PKI. A self-signed gateway for development |
 | **Renew** | A durable queue with leases, an attempt log, and backoff that tightens as expiry approaches. Safe on N replicas with no leader election. A renewal deploys itself |
 | **Watch** | Scheduled CA health sweeps with expiry thresholds, CRL freshness, and a real OCSP request whose signature and delegation are verified. Live updates over SSE |
-| **Find** | Network and CIDR scans. Certificate Transparency logs, and cloud inventory 🧪 across ACM, Azure Key Vault, Google Cloud and Kubernetes secrets |
+| **Find** | Network and CIDR scans. Certificate Transparency logs. Kubernetes TLS secrets, and cloud inventory 🧪 across ACM, Azure Key Vault and Google Cloud |
 | **Deploy** | Signed webhook and host agent; AWS ACM, Azure Key Vault and F5 BIG-IP 🧪 — in declared waves, so a canary is one target rather than one per worker |
 | **Install** | The host agent installs to ten tested platforms by name: nginx, Apache, HAProxy, Caddy, Tomcat, PostgreSQL, MariaDB and MySQL, Postfix, Dovecot, and IIS through the Windows certificate store. Each writes the files or imports to the store, validates the configuration, reloads the service, and rolls back if the reload fails. See **[supported platforms](https://github.com/certpilot/certpilot-agent/blob/main/docs/platforms/README.md)** |
 | **Prove** | A hash-chained audit log, CNSA 2.0 conformance per certificate, and CycloneDX 1.6 CBOM export |

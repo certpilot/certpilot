@@ -168,6 +168,32 @@ CertPilot reports which. "This certificate in your load balancer will not renew
 and expires in 34 days" is the sentence, and it is one nobody gets from the
 provider's own console.
 
+### Kubernetes
+
+Give the connection a service account token that can get and list `secrets`
+and `ingresses.networking.k8s.io`, and nothing more, and the cluster's CA as
+`ca_cert`:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: certpilot-inventory}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list]
+```
+
+A secret cert-manager issued reads as renewed by cert-manager, from the
+`cert-manager.io/certificate-name` annotation cert-manager writes. Anything else
+reads as renewed by nothing. Without the right to read Ingresses the sync still
+works, and says it does not know which secrets are attached rather than
+reporting them all unattached. `make live-kubernetes` runs all of this against a
+kind cluster.
+
 ---
 
 ## What discovery does not do

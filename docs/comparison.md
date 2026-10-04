@@ -77,12 +77,13 @@ it, and the weekly documentation run does the same.
   ([#87](https://github.com/certpilot/certpilot/issues/87),
   [#90](https://github.com/certpilot/certpilot/issues/90)). All three commercial
   platforms document one. See [Governance](#governance).
-- **You need Slack notifications or cloud inventory that you can rely on
-  today.** CertPilot has built both, but each is 🧪: nothing in this project has
-  run it against a real Slack workspace or cloud account. Email and webhook
-  alerts are verified: CI delivers them to a real mail server, and to a receiver
-  that checks the signature the way the documentation says to. Sign-in through
-  an identity provider is verified against Keycloak.
+- **You need Slack notifications, or inventory of ACM, Azure Key Vault or
+  Google Cloud, that you can rely on today.** CertPilot has built both, but each
+  is 🧪: nothing in this project has run it against a real Slack workspace or
+  cloud account. Email and webhook alerts are verified: CI delivers them to a
+  real mail server, and to a receiver that checks the signature the way the
+  documentation says to. Sign-in through an identity provider is verified
+  against Keycloak, and Kubernetes inventory against a real cluster.
 - **The platform's own keys must be protected by an HSM or a KMS.** CertPilot
   holds its key encryption key in memory, loaded from an environment variable, a
   file or Vault. Delegated unwrapping is not built. See

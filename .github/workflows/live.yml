@@ -50,6 +50,21 @@ jobs:
       - name: Authorization code with PKCE, bearer tokens, refusals, key rotation
         run: make live-oidc
 
+  kubernetes:
+    name: Kubernetes inventory, against kind
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      # kind and Docker are on the runner image already; the script fetches a
+      # pinned kind itself if they ever are not.
+      - name: TLS secrets, Ingresses, cert-manager, RBAC and paging
+        run: make live-kubernetes
+
   ct:
     name: CT, against crt.sh
     # crt.sh is a free community service and answers 502 often enough that a
