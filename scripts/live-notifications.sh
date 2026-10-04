@@ -232,7 +232,7 @@ tls_cfg="{\"host\":\"127.0.0.1\",\"port\":12465,\"encryption\":\"tls\",
   \"from\":\"certpilot@live.test\",\"to\":[\"security@live.test\"]"
 
 id="$(create_channel "TLS, unverified CA" "$tls_cfg}")"
-expect_refused "untrusted certificate" "$(test_channel "$id")" "certificate"
+expect_refused "untrusted certificate" "$(test_channel "$id")" "failed to verify certificate"
 pass "a server certificate from an unknown CA is refused by default"
 
 id="$(create_channel "TLS, verification off" "$tls_cfg,\"insecure_skip_verify\":true}")"

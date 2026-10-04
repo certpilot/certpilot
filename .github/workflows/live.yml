@@ -65,6 +65,19 @@ jobs:
       - name: TLS secrets, Ingresses, cert-manager, RBAC and paging
         run: make live-kubernetes
 
+  eab:
+    name: External Account Binding, against Pebble
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: A binding that opens an account, and three that must not
+        run: make live-eab
+
   ct:
     name: CT, against crt.sh
     # crt.sh is a free community service and answers 502 often enough that a

@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct live-kubernetes all build build-core test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct live-kubernetes live-eab all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -205,6 +205,13 @@ live-ct:
 live-kubernetes:
 	./scripts/live-kubernetes.sh
 
+## Does External Account Binding work against an ACME server that requires it?
+## The released ACME gateway against Pebble with a binding required: a correct
+## one issues and renews; none, a wrong HMAC key, and an unknown key id are
+## refused. Needs Docker.
+live-eab:
+	./scripts/live-eab.sh
+
 run-core:
 	$(GO) run ./core/cmd/ --config=config.dev.yaml
 
@@ -361,6 +368,7 @@ help:
 	@echo "  make live-oidc               Sign-in and bearer tokens against Keycloak"
 	@echo "  make live-ct                 CT monitoring against crt.sh (needs the internet)"
 	@echo "  make live-kubernetes         Kubernetes inventory against a kind cluster"
+	@echo "  make live-eab                ACME External Account Binding against Pebble"
 	@echo ""
 	@echo "Check"
 	@echo "  make test                    Run all tests"

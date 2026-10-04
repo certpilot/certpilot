@@ -152,7 +152,7 @@ certificate, pointing at a real CA, and putting it on a wall.
 
 | | |
 |:---|:---|
-| **Issue** | ACME (RFC 8555) with `dns-01` and `http-01`, wildcards, ARI (RFC 9773), and External Account Binding 🧪. HashiCorp Vault PKI. A self-signed gateway for development |
+| **Issue** | ACME (RFC 8555) with `dns-01` and `http-01`, wildcards, ARI (RFC 9773), and External Account Binding. HashiCorp Vault PKI. A self-signed gateway for development |
 | **Renew** | A durable queue with leases, an attempt log, and backoff that tightens as expiry approaches. Safe on N replicas with no leader election. A renewal deploys itself |
 | **Watch** | Scheduled CA health sweeps with expiry thresholds, CRL freshness, and a real OCSP request whose signature and delegation are verified. Live updates over SSE |
 | **Find** | Network and CIDR scans. Certificate Transparency logs. Kubernetes TLS secrets, and cloud inventory 🧪 across ACM, Azure Key Vault and Google Cloud |
