@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation compatibility agent-lifecycle agent-compatibility live-notifications live-oidc all build build-core test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -188,6 +188,17 @@ live-notifications:
 live-oidc:
 	./scripts/live-oidc.sh
 
+## Does CT monitoring work against the real index? A public site's served
+## certificate, imported through discovery, must be found in crt.sh and matched
+## to the inventory. Needs the internet, so CI runs it daily, not per pull request.
+##
+##   make live-ct
+##   make live-ct CT_DOMAIN=example.org
+CT_DOMAIN ?= badssl.com
+
+live-ct:
+	CT_DOMAIN="$(CT_DOMAIN)" ./scripts/live-ct.sh
+
 run-core:
 	$(GO) run ./core/cmd/ --config=config.dev.yaml
 
@@ -342,6 +353,7 @@ help:
 	@echo "  make agent-compatibility     The same, for every released agent, into docs/"
 	@echo "  make live-notifications      Alerts to a real SMTP server and webhook receiver"
 	@echo "  make live-oidc               Sign-in and bearer tokens against Keycloak"
+	@echo "  make live-ct                 CT monitoring against crt.sh (needs the internet)"
 	@echo ""
 	@echo "Check"
 	@echo "  make test                    Run all tests"

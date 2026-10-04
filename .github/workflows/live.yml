@@ -12,6 +12,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Daily, for the checks that depend on a public service being up. The others
+  # run too, which costs a few minutes and catches a pinned image going away.
+  schedule:
+    - cron: "23 5 * * *"
 
 concurrency:
   group: live-${{ github.ref }}
@@ -45,3 +49,20 @@ jobs:
 
       - name: Authorization code with PKCE, bearer tokens, refusals, key rotation
         run: make live-oidc
+
+  ct:
+    name: CT, against crt.sh
+    # crt.sh is a free community service and answers 502 often enough that a
+    # pull request must not wait on it. The script retries; a run that still
+    # fails is worth reading, and belongs here rather than on somebody's change.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: A public site's certificate, found in crt.sh and matched to the inventory
+        run: make live-ct
