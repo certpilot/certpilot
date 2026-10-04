@@ -200,6 +200,9 @@ func (m *Manager) GatewayFor(ctx context.Context, ep Endpoint) (*GatewayClient, 
 	if gw, err := m.GetGateway(ep.Name); err == nil {
 		return gw, nil
 	}
+	if gw, ok := m.connectedAt(ep.Addr); ok {
+		return gw, nil
+	}
 
 	var dialErr error
 	if ep.Addr != "" {
@@ -231,6 +234,28 @@ func (m *Manager) GatewayFor(ctx context.Context, ep Endpoint) (*GatewayClient, 
 	return nil, fmt.Errorf("gateway %s not found or disconnected", ep.Name)
 }
 
+// connectedAt returns a connected gateway at addr, whatever it is called.
+//
+// A gateway already connected at an account's address is that account's
+// gateway: the same process, reached the same way. Dialling it again under the
+// account's name is at best a second connection, and at worst a failure: v0.1.x
+// never stored a CA account's server_name, so an account from before v0.2.0
+// that names the address the config file already connects, as the quickstart's
+// selfsigned-eval does, dialled without one and failed hostname verification.
+func (m *Manager) connectedAt(addr string) (*GatewayClient, bool) {
+	if addr == "" {
+		return nil, false
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, gw := range m.gateways {
+		if gw.IsConnected && gw.Addr == addr {
+			return gw, true
+		}
+	}
+	return nil, false
+}
+
 // ConnectAll dials every endpoint at once and waits for them all, so startup
 // costs one dial timeout at most rather than one per gateway that is down.
 // A gateway that cannot be reached is logged and left to the health sweep,
@@ -239,6 +264,9 @@ func (m *Manager) ConnectAll(ctx context.Context, eps []Endpoint) {
 	var wg sync.WaitGroup
 	for _, ep := range eps {
 		if ep.Addr == "" {
+			continue
+		}
+		if _, ok := m.connectedAt(ep.Addr); ok {
 			continue
 		}
 		wg.Add(1)
