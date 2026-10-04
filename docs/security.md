@@ -425,7 +425,9 @@ entry N-1                     entry N
 
 Each entry also records **which** KEK signed it, in the same short hex form the
 encryption envelopes use, so rotating `CERTPILOT_KEK` does not invalidate
-history. Without that, the safe thing to do would be never to rotate.
+history, provided the old key stays in `CERTPILOT_KEK_RETIRED`. Checking an
+entry needs the key that signed it, so a retired key is kept for as long as the
+audit log is ([operations.md](operations.md#rotating-the-kek)).
 
 `GET /api/v1/audit/verify` (admin) walks the chain and reports the first break,
 its sequence number, and a reason. It is surfaced in **Settings → Audit record**.

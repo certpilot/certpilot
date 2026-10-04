@@ -19,6 +19,22 @@ Symptom, cause, fix. Grouped by where the symptom shows up.
 The core will not start against a database without one. `make generate-kek`,
 then put it somewhere durable — see [operations.md](operations.md#first-run).
 
+**`this database's schema is at migration …, and this core needs migration …`**
+
+The migrations for this release have not been run. Run them, then start the
+core: `certpilot-core --migrate`, `make migrate`, or
+`docker compose … --profile migrate run --rm migrate`. See
+[operations.md](operations.md#migrations).
+
+**`this database was sealed with key encryption key …, and this core was given …`**
+
+The core was given a different key from the one this database was sealed with:
+usually a restore started with another environment's `CERTPILOT_KEK`. It stops
+before writing anything, so the database is exactly as it was restored. Set
+`CERTPILOT_KEK` to the key the message names, or keep it in
+`CERTPILOT_KEK_RETIRED` if you have rotated since. If that key is lost for good,
+see [operations.md](operations.md#backups-and-restore).
+
 **`config: auth.allow_anonymous no longer exists and must be removed`**
 
 Working as intended, and it is refused rather than ignored on purpose: an
@@ -74,10 +90,23 @@ without setting `server_name` fails verification.
 **`gateway for <CA> is not connected`**
 
 The core could not reach the gateway serving that CA account. It looks for a
-gateway connected under the account's **name**, dials the account's own
-**address** if nothing is, and then falls back to a gateway registered under the
-**provider type**. A gateway named `vault` in the config serves any `vault`
-account that has no better match.
+gateway connected under the account's **name**, then for one already connected
+at the account's **address**, whatever it is called. It dials the address if
+neither is, and then falls back to a gateway registered under the **provider
+type**. A gateway named `vault` in the config serves any `vault` account that
+has no better match.
+
+**After upgrading from v0.1.x**, an account created before v0.2.0 has no
+`server_name`: v0.1.x accepted it and never stored it. If the account's
+address is a gateway in the config file, the connection made for that gateway
+serves it. If not, and the gateway's certificate does not name the address
+that is dialled, the dial fails hostname verification after its timeout, which
+reads like the gateway being down. There is no API to change an account, so
+set it in the database:
+
+```sql
+update ca_accounts set server_name = 'localhost' where name = 'selfsigned-eval';
+```
 
 The message ends with why the dial failed. A dial that failed is not repeated
 for 30 seconds, so requests that need a gateway that is down fail at once
