@@ -73,6 +73,10 @@ func NewServer(ctx context.Context, cfg *config.CoreConfig, dbConnStr string) (*
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to the database: %w", err)
 		}
+		if err := pgStore.CheckSchema(ctx); err != nil {
+			pgStore.Close()
+			return nil, err
+		}
 		st = pgStore
 	} else {
 		if cfg.Server.IsProduction() {

@@ -340,7 +340,16 @@ make migrate          # if the release adds migrations
 ```
 
 Order matters in one direction only: **migrate before starting the new core.**
-The core assumes its schema exists. Gateways are independent and can be
+A core started on an older schema refuses, naming both versions:
+
+```
+this database's schema is at migration 039, and this core needs migration 043.
+Run the migrations before starting it: certpilot-core --migrate, …
+```
+
+Core v0.2.1 and earlier started anyway, reported themselves healthy, and
+renewed nothing until somebody read the log. A newer schema than the core
+needs is accepted, so rolling the binary back after a migration still starts. Gateways are independent and can be
 restarted whenever — the core reconnects and re-negotiates capabilities.
 
 Rolling back a schema change is not supported. Migrations are append-only and
