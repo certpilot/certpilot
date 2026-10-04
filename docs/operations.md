@@ -270,6 +270,39 @@ export CERTPILOT_KEK='<the key that sealed it>'
 Then check the estate reconciles: the CA health sweep and the renewal scheduler
 both run on startup, so a restored database converges without intervention.
 
+**Given the wrong key, the core refuses to start.** It compares the key that
+signed the newest audit entry with the keys it was given, and stops before
+writing anything if none of them matches:
+
+```
+this database was sealed with key encryption key cb9cffa7e89e96e5, which signed
+its newest audit entry (4), and this core was given key b09f5d25a3121a51. …
+```
+
+Core v0.2.1 and earlier started anyway, and could read nothing they had sealed.
+The first sign-in then wrote an audit entry signed with the wrong key, which
+could never be checked once the right key was back, so the audit chain reported
+itself broken from then on.
+
+**If the key is lost for good,** everything it sealed is lost with it: the
+private keys of certificates CertPilot holds, and the configuration of every CA
+account, deployment target, notification channel and cloud connection. Restart
+once with the lost key's identifier, as printed in the refusal:
+
+```bash
+export CERTPILOT_KEK='<a new key>'
+export CERTPILOT_KEK_ABANDON=cb9cffa7e89e96e5
+```
+
+The core starts, and writes a `secrets.kek_abandoned` audit entry, signed with
+the new key, naming the one given up. Remove the variable afterwards: the next
+start no longer needs it. Then recreate those accounts, targets, channels and
+connections, and reissue the certificates whose keys CertPilot held.
+Certificates held by agents are unaffected, because their keys never left the
+host. The audit chain stays readable, but entries signed with the lost key can
+no longer be checked, so `/api/v1/audit/verify` reports the chain from its
+first entry as unverifiable.
+
 What is *not* in the database and needs its own handling:
 
 | | |

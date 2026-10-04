@@ -97,6 +97,13 @@ func NewServer(ctx context.Context, cfg *config.CoreConfig, dbConnStr string) (*
 	// tamper-evident is one nobody can reason about.
 	st.UseAuditChain(store.NewAuditChainer(keyring))
 
+	// Before anything can write: a database sealed with a key this core was
+	// not given must stay exactly as it was restored. See guardAuditKey.
+	if err := guardAuditKey(ctx, st, keyring, os.Getenv(abandonKeyEnv)); err != nil {
+		st.Close()
+		return nil, err
+	}
+
 	// 3. Plugin manager.
 	gwTLS := grpckit.TLSConfig{
 		CertFile: cfg.Plugins.TLS.CertFile,
