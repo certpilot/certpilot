@@ -22,6 +22,8 @@
 #   live_start_core [extra YAML appended to the config]
 #                     LIVE_CORE_ENV="K=V …" adds to the core's environment
 #                     LIVE_GATEWAYS is YAML for plugins.gateways, if any
+#                     LIVE_AUTH is more YAML under auth:, and
+#                     LIVE_BOOTSTRAP_ADMINS more entries in its list
 #   live_sign_in
 #   api …             curl with the session cookie
 #   live_on_exit cmd  run at teardown, before the core stops
@@ -107,7 +109,7 @@ server:
 auth:
   role_claim: certpilot_role
   bootstrap_admins:
-    - admin@certpilot.local
+    - admin@certpilot.local${LIVE_BOOTSTRAP_ADMINS:-}${LIVE_AUTH:-}
 plugins:
   # Plain gRPC on loopback. Whether the core can dial a gateway over mutual TLS
   # is what gateway-compatibility.sh measures; none of these checks is about it.

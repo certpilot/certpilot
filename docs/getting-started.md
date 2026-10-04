@@ -338,8 +338,9 @@ password, and prints it once:
 `make dev` also writes it to `.certpilot/dev-admin`. There is no default
 password and no anonymous mode.
 
-For anything else, point `auth.jwks_url` at your identity provider — Keycloak,
-Okta, Azure AD, Auth0, or Authentik all work. The core then
+For anything else, point `auth.jwks_url` at your identity provider. CI runs
+this against Keycloak; Okta, Entra ID, Auth0 and Authentik speak the same
+standard but have not been tested by this project. The core then
 verifies asymmetrically signed tokens against published public keys and holds
 nothing capable of minting one.
 
