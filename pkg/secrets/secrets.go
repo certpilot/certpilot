@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 )
 
 // Context strings identify which field a ciphertext belongs to. They are bound
@@ -404,4 +405,41 @@ func mac(kek []byte, purpose string, data []byte) []byte {
 	h := hmac.New(sha256.New, subkey)
 	h.Write(data)
 	return h.Sum(nil)
+}
+
+// Knows reports whether the keyring holds the key named by keyIDHex, as primary
+// or retired.
+//
+// Every envelope and audit tag names the key that wrote it, so this is how the
+// core can tell, before writing anything, that a database was sealed with a
+// key it was not given.
+func (kr *Keyring) Knows(keyIDHex string) bool {
+	if kr == nil {
+		return false
+	}
+	raw, err := hex.DecodeString(keyIDHex)
+	if err != nil || len(raw) != keyIDSize {
+		return false
+	}
+	var id [keyIDSize]byte
+	copy(id[:], raw)
+	_, ok := kr.keks[id]
+	return ok
+}
+
+// KeyIDs lists the identifiers of every key the keyring holds: the primary
+// first, then the retired ones in a stable order. For messages that have to
+// say which keys were tried.
+func (kr *Keyring) KeyIDs() []string {
+	if kr == nil {
+		return nil
+	}
+	var retired []string
+	for id := range kr.keks {
+		if id != kr.primaryID {
+			retired = append(retired, fmt.Sprintf("%x", id))
+		}
+	}
+	sort.Strings(retired)
+	return append([]string{kr.PrimaryKeyID()}, retired...)
 }

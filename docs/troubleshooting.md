@@ -19,6 +19,22 @@ Symptom, cause, fix. Grouped by where the symptom shows up.
 The core will not start against a database without one. `make generate-kek`,
 then put it somewhere durable — see [operations.md](operations.md#first-run).
 
+**`this database's schema is at migration …, and this core needs migration …`**
+
+The migrations for this release have not been run. Run them, then start the
+core: `certpilot-core --migrate`, `make migrate`, or
+`docker compose … --profile migrate run --rm migrate`. See
+[operations.md](operations.md#migrations).
+
+**`this database was sealed with key encryption key …, and this core was given …`**
+
+The core was given a different key from the one this database was sealed with:
+usually a restore started with another environment's `CERTPILOT_KEK`. It stops
+before writing anything, so the database is exactly as it was restored. Set
+`CERTPILOT_KEK` to the key the message names, or keep it in
+`CERTPILOT_KEK_RETIRED` if you have rotated since. If that key is lost for good,
+see [operations.md](operations.md#backups-and-restore).
+
 **`config: auth.allow_anonymous no longer exists and must be removed`**
 
 Working as intended, and it is refused rather than ignored on purpose: an
