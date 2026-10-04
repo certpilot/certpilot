@@ -5333,3 +5333,24 @@ func (s *PostgresStore) ArchiveMetadataField(ctx context.Context, id string) err
 		`UPDATE public.metadata_fields SET is_archived = true, updated_at = now() WHERE id = $1`, id)
 	return err
 }
+
+// LatestAuditKey reports the sequence number of the newest chained audit entry
+// and the identifier of the key that signed it, or zero and "" when nothing is
+// chained yet.
+func (s *PostgresStore) LatestAuditKey(ctx context.Context) (int64, string, error) {
+	var seq int64
+	var keyID string
+	err := s.pool.QueryRow(ctx, `
+		SELECT seq, coalesce(chain_key_id, '')
+		FROM public.audit_logs
+		WHERE seq IS NOT NULL
+		ORDER BY seq DESC
+		LIMIT 1`).Scan(&seq, &keyID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, "", nil
+	}
+	if err != nil {
+		return 0, "", err
+	}
+	return seq, keyID, nil
+}
