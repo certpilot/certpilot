@@ -1,0 +1,34 @@
+name: Against the real thing
+
+# The checks that turned a 🧪 on docs/status.md into a ✅. Each runs the core
+# built from this commit against an independent implementation of what it
+# talks to — a mail server, an identity provider — started inside the job, so
+# none needs a secret and none can be skipped for want of one.
+#
+# Separate from ci.yml so a red run here reads as what it is: CertPilot and a
+# real counterpart disagreeing, not a unit test failing.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  notifications:
+    name: alerts, to Mailpit and a webhook receiver
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      # Linux, so the core is handed the check's CA through SSL_CERT_FILE and
+      # the STARTTLS certificate is verified rather than skipped.
+      - name: Email and webhook delivery, and a CA expiry alert
+        run: make live-notifications

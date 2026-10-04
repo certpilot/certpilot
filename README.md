@@ -161,8 +161,8 @@ certificate, pointing at a real CA, and putting it on a wall.
 | **Prove** | A hash-chained audit log, CNSA 2.0 conformance per certificate, and CycloneDX 1.6 CBOM export |
 
 🧪 marks what is built but has never been run against the real service by
-anything in this project: the notifications, identity-provider sign-in and
-cloud paths all depend on a third party CI holds no credential for. Full
+anything in this project: Slack notifications, identity-provider sign-in and
+the cloud paths all depend on a third party CI holds no credential for. Full
 detail, including what is partial and what does not exist:
 **[docs/status.md](docs/status.md)**.
 
