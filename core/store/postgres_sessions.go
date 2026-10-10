@@ -180,6 +180,14 @@ func (s *PostgresStore) SessionByHash(ctx context.Context, tokenHash string) (*S
 	defer rows.Close()
 
 	if !rows.Next() {
+		// No row, or a read that failed: pgx reports the second through
+		// rows.Err() once Next has returned false. Reading it as "no such
+		// session" signed out every browser that made a request while the
+		// database was unreachable, because the middleware clears a cookie
+		// that does not resolve.
+		if err := rows.Err(); err != nil {
+			return nil, nil, fmt.Errorf("store: could not look up a session: %w", err)
+		}
 		return nil, nil, nil
 	}
 
