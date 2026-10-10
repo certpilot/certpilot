@@ -65,7 +65,7 @@ func (m *MemoryStore) GetCertificateTemplate(ctx context.Context, id string) (*C
 	defer m.mu.RUnlock()
 	t, ok := m.certificateTemplates[id]
 	if !ok {
-		return nil, fmt.Errorf("certificate template %s not found", id)
+		return nil, fmt.Errorf("certificate template %s %w", id, ErrNotFound)
 	}
 	return cloneTemplate(t), nil
 }
@@ -78,7 +78,7 @@ func (m *MemoryStore) GetCertificateTemplateBySlug(ctx context.Context, slug str
 			return cloneTemplate(t), nil
 		}
 	}
-	return nil, fmt.Errorf("certificate template %q not found", slug)
+	return nil, fmt.Errorf("certificate template %q %w", slug, ErrNotFound)
 }
 
 func (m *MemoryStore) CreateCertificateTemplate(ctx context.Context, t *CertificateTemplate) error {
@@ -109,7 +109,7 @@ func (m *MemoryStore) UpdateCertificateTemplate(ctx context.Context, t *Certific
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.certificateTemplates[t.ID]; !ok {
-		return fmt.Errorf("certificate template %s not found", t.ID)
+		return fmt.Errorf("certificate template %s %w", t.ID, ErrNotFound)
 	}
 	for _, existing := range m.certificateTemplates {
 		if existing.Slug == t.Slug && existing.ID != t.ID {
@@ -127,7 +127,7 @@ func (m *MemoryStore) DeleteCertificateTemplate(ctx context.Context, id string) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.certificateTemplates[id]; !ok {
-		return fmt.Errorf("certificate template %s not found", id)
+		return fmt.Errorf("certificate template %s %w", id, ErrNotFound)
 	}
 	delete(m.certificateTemplates, id)
 	return nil

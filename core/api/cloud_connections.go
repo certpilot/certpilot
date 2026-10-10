@@ -137,7 +137,7 @@ func (h *CloudHandler) UpdateConnection(c *gin.Context) {
 
 	conn, err := h.store.GetCloudConnection(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "cloud connection")
 		return
 	}
 
@@ -201,7 +201,7 @@ func (h *CloudHandler) DeleteConnection(c *gin.Context) {
 
 	conn, err := h.store.GetCloudConnection(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "cloud connection")
 		return
 	}
 	if err := h.store.DeleteCloudConnection(c.Request.Context(), id); err != nil {
@@ -227,7 +227,7 @@ func (h *CloudHandler) SyncConnection(c *gin.Context) {
 
 	conn, err := h.store.GetCloudConnection(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "cloud connection")
 		return
 	}
 
@@ -353,7 +353,7 @@ func (h *CloudHandler) ImportCertificate(c *gin.Context) {
 
 	found, err := h.store.GetCloudCertificate(c.Request.Context(), req.CloudCertificateID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "cloud certificate")
 		return
 	}
 	if found.CertificatePEM == "" {

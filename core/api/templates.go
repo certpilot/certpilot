@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -206,17 +207,21 @@ func (h *TemplateHandler) List(c *gin.Context) {
 func (h *TemplateHandler) Get(c *gin.Context) {
 	t, err := h.resolve(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate template")
 		return
 	}
 	c.JSON(http.StatusOK, t)
 }
 
 func (h *TemplateHandler) resolve(ctx context.Context, ref string) (*store.CertificateTemplate, error) {
-	if t, err := h.store.GetCertificateTemplate(ctx, ref); err == nil {
-		return t, nil
+	t, err := h.store.GetCertificateTemplate(ctx, ref)
+	if errors.Is(err, store.ErrNotFound) {
+		// Not an id this store has, so perhaps a slug. Only on not-found: a
+		// failed read would otherwise be retried as a slug and reported as
+		// whatever that lookup said.
+		return h.store.GetCertificateTemplateBySlug(ctx, ref)
 	}
-	return h.store.GetCertificateTemplateBySlug(ctx, ref)
+	return t, err
 }
 
 // Create handles POST /api/v1/certificate-templates.
@@ -276,7 +281,7 @@ func (h *TemplateHandler) Create(c *gin.Context) {
 func (h *TemplateHandler) Update(c *gin.Context) {
 	existing, err := h.resolve(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate template")
 		return
 	}
 
@@ -324,7 +329,7 @@ func (h *TemplateHandler) Update(c *gin.Context) {
 func (h *TemplateHandler) Delete(c *gin.Context) {
 	existing, err := h.resolve(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate template")
 		return
 	}
 	// Refused here rather than at the foreign key.

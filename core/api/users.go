@@ -231,7 +231,11 @@ func (h *UserHandler) ResetPassword(c *gin.Context) {
 	id := c.Param("id")
 
 	user, err := h.store.GetUser(c.Request.Context(), id)
-	if err != nil || user == nil {
+	if err != nil {
+		respondLookup(c, err, "account")
+		return
+	}
+	if user == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "no such account"})
 		return
 	}

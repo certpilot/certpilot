@@ -57,7 +57,7 @@ func (h *AcknowledgementHandler) Acknowledge(c *gin.Context) {
 
 	ca, err := h.store.GetCAAuthority(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "CA authority")
 		return
 	}
 
@@ -211,7 +211,7 @@ func (h *AcknowledgementHandler) SetOwner(c *gin.Context) {
 
 	ca, err := h.store.GetCAAuthority(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "CA authority")
 		return
 	}
 

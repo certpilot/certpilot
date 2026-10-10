@@ -263,7 +263,7 @@ func (s *PostgresStore) GetCertificate(ctx context.Context, id string) (*Certifi
 	`
 	cert, err := scanCertificate(s.pool.QueryRow(ctx, query, id))
 	if noSuchRow(err) {
-		return nil, fmt.Errorf("certificate %s not found", id)
+		return nil, fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return nil, err
@@ -521,7 +521,7 @@ func (s *PostgresStore) GetCertificatePrivateKey(ctx context.Context, id string)
 	err := s.pool.QueryRow(ctx,
 		"SELECT private_key_encrypted FROM public.certificates WHERE id = $1", id).Scan(&sealed)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", fmt.Errorf("certificate %s not found", id)
+		return "", fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return "", err
@@ -710,7 +710,7 @@ func (s *PostgresStore) GetCAAuthority(ctx context.Context, id string) (*CAAutho
 	ca, err := scanCAAuthority(s.pool.QueryRow(ctx,
 		"SELECT "+caColumns(true)+" FROM public.ca_authorities WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("CA authority %s not found", id)
+		return nil, fmt.Errorf("CA authority %s %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return nil, err
@@ -937,7 +937,7 @@ func (s *PostgresStore) GetCAAccount(ctx context.Context, id string) (*CAAccount
 		&acc.CreatedAt, &acc.UpdatedAt,
 	)
 	if noSuchRow(err) {
-		return nil, fmt.Errorf("CA account %s not found", id)
+		return nil, fmt.Errorf("CA account %s %w", id, ErrNotFound)
 	}
 	return acc, err
 }
@@ -1022,7 +1022,7 @@ func (s *PostgresStore) GetDeploymentTarget(ctx context.Context, id string) (*De
 	t, err := scanDeploymentTarget(s.pool.QueryRow(ctx,
 		"SELECT "+deploymentTargetColumns+" FROM public.deployment_targets WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("deployment target %s not found", id)
+		return nil, fmt.Errorf("deployment target %s %w", id, ErrNotFound)
 	}
 	return t, err
 }
@@ -1054,7 +1054,7 @@ func (s *PostgresStore) UpdateDeploymentTarget(ctx context.Context, target *Depl
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("deployment target %s not found", target.ID)
+		return fmt.Errorf("deployment target %s %w", target.ID, ErrNotFound)
 	}
 	return nil
 }
@@ -1157,7 +1157,7 @@ func (s *PostgresStore) GetCertificateDeployment(ctx context.Context, id string)
 		 LEFT JOIN public.deployment_targets t ON t.id = d.target_id
 		 WHERE d.id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("deployment %s not found", id)
+		return nil, fmt.Errorf("deployment %s %w", id, ErrNotFound)
 	}
 	return d, err
 }
@@ -1216,7 +1216,7 @@ func (s *PostgresStore) RecordDeploymentOutcome(ctx context.Context, id string, 
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("deployment %s not found", id)
+		return fmt.Errorf("deployment %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -1249,8 +1249,14 @@ func (s *PostgresStore) GetPolicy(ctx context.Context, id string) (*Policy, erro
 	err := s.pool.QueryRow(ctx, "SELECT id, name, description, is_enabled, rule_type, rule_config, domain_pattern, severity, created_by, created_at, updated_at FROM public.policies WHERE id = $1", id).Scan(
 		&p.ID, &p.Name, &p.Description, &p.IsEnabled, &p.RuleType, &cfgJSON, &p.DomainPattern, &p.Severity, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
 	)
+	if noSuchRow(err) {
+		return nil, fmt.Errorf("policy %s %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return nil, err
+	}
 	p.RuleConfig = string(cfgJSON)
-	return p, err
+	return p, nil
 }
 
 func (s *PostgresStore) CreatePolicy(ctx context.Context, p *Policy) error {
@@ -1311,7 +1317,7 @@ func (s *PostgresStore) GetDisplayTokenByHash(ctx context.Context, tokenHash str
 	t, err := scanDisplayToken(s.pool.QueryRow(ctx,
 		"SELECT "+displayTokenColumns+" FROM public.display_tokens WHERE token_hash = $1", tokenHash))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("display token not found")
+		return nil, fmt.Errorf("display token %w", ErrNotFound)
 	}
 	return t, err
 }
@@ -1343,7 +1349,7 @@ func (s *PostgresStore) RevokeDisplayToken(ctx context.Context, id string, revok
 		var exists bool
 		if err := s.pool.QueryRow(ctx,
 			"SELECT true FROM public.display_tokens WHERE id = $1", id).Scan(&exists); err != nil {
-			return fmt.Errorf("display token %s not found", id)
+			return fmt.Errorf("display token %s %w", id, ErrNotFound)
 		}
 	}
 	return nil
@@ -1653,7 +1659,7 @@ func (s *PostgresStore) GetNotificationChannel(ctx context.Context, id string) (
 	ch, err := scanNotificationChannel(s.pool.QueryRow(ctx,
 		"SELECT "+notificationChannelColumns+" FROM public.notification_channels WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("notification channel %s not found", id)
+		return nil, fmt.Errorf("notification channel %s %w", id, ErrNotFound)
 	}
 	return ch, err
 }
@@ -1693,7 +1699,7 @@ func (s *PostgresStore) UpdateNotificationChannel(ctx context.Context, ch *Notif
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("notification channel %s not found", ch.ID)
+		return fmt.Errorf("notification channel %s %w", ch.ID, ErrNotFound)
 	}
 	return nil
 }
@@ -1882,7 +1888,7 @@ func (s *PostgresStore) RevokeAcknowledgement(ctx context.Context, id string, re
 		var exists bool
 		if err := s.pool.QueryRow(ctx,
 			"SELECT true FROM public.alert_acknowledgements WHERE id = $1", id).Scan(&exists); err != nil {
-			return fmt.Errorf("acknowledgement %s not found", id)
+			return fmt.Errorf("acknowledgement %s %w", id, ErrNotFound)
 		}
 	}
 	return nil
@@ -1949,7 +1955,7 @@ func (s *PostgresStore) UpdateDiscoveryScan(ctx context.Context, scan *Discovery
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("discovery scan %s not found", scan.ID)
+		return fmt.Errorf("discovery scan %s %w", scan.ID, ErrNotFound)
 	}
 	return nil
 }
@@ -1958,7 +1964,7 @@ func (s *PostgresStore) GetDiscoveryScan(ctx context.Context, id string) (*Disco
 	scan, err := scanDiscoveryScan(s.pool.QueryRow(ctx,
 		"SELECT "+discoveryScanColumns+" FROM public.discovery_scans WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("discovery scan %s not found", id)
+		return nil, fmt.Errorf("discovery scan %s %w", id, ErrNotFound)
 	}
 	return scan, err
 }
@@ -2171,7 +2177,7 @@ func (s *PostgresStore) GetDiscoveryResult(ctx context.Context, id string) (*Dis
 	r, err := scanDiscoveryResult(s.pool.QueryRow(ctx,
 		"SELECT "+discoveryResultColumns+" FROM public.discovery_results WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("discovery result %s not found", id)
+		return nil, fmt.Errorf("discovery result %s %w", id, ErrNotFound)
 	}
 	return r, err
 }
@@ -2189,7 +2195,7 @@ func (s *PostgresStore) MarkDiscoveryResultImported(ctx context.Context, id, cer
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("discovery result %s not found", id)
+		return fmt.Errorf("discovery result %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -2293,7 +2299,7 @@ func (s *PostgresStore) GetDiscoverySchedule(ctx context.Context, id string) (*D
 	sched, err := scanDiscoverySchedule(s.pool.QueryRow(ctx,
 		"SELECT "+discoveryScheduleColumns+" FROM public.discovery_schedules WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("discovery schedule %s not found", id)
+		return nil, fmt.Errorf("discovery schedule %s %w", id, ErrNotFound)
 	}
 	return sched, err
 }
@@ -2340,7 +2346,7 @@ func (s *PostgresStore) UpdateDiscoverySchedule(ctx context.Context, sched *Disc
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("discovery schedule %s not found", sched.ID)
+		return fmt.Errorf("discovery schedule %s %w", sched.ID, ErrNotFound)
 	}
 	return nil
 }
@@ -2351,7 +2357,7 @@ func (s *PostgresStore) DeleteDiscoverySchedule(ctx context.Context, id string) 
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("discovery schedule %s not found", id)
+		return fmt.Errorf("discovery schedule %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -2392,7 +2398,7 @@ func (s *PostgresStore) MarkDiscoveryScheduleRun(ctx context.Context, id string,
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("discovery schedule %s not found", id)
+		return fmt.Errorf("discovery schedule %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -2440,7 +2446,7 @@ func (s *PostgresStore) GetCTMonitor(ctx context.Context, id string) (*CTMonitor
 	m, err := scanCTMonitor(s.pool.QueryRow(ctx,
 		"SELECT "+ctMonitorColumns+" FROM public.ct_monitors WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("certificate transparency monitor %s not found", id)
+		return nil, fmt.Errorf("certificate transparency monitor %s %w", id, ErrNotFound)
 	}
 	return m, err
 }
@@ -2474,7 +2480,7 @@ func (s *PostgresStore) UpdateCTMonitor(ctx context.Context, m *CTMonitor) error
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("certificate transparency monitor %s not found", m.ID)
+		return fmt.Errorf("certificate transparency monitor %s %w", m.ID, ErrNotFound)
 	}
 	return nil
 }
@@ -2485,7 +2491,7 @@ func (s *PostgresStore) DeleteCTMonitor(ctx context.Context, id string) error {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("certificate transparency monitor %s not found", id)
+		return fmt.Errorf("certificate transparency monitor %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -2535,7 +2541,7 @@ func (s *PostgresStore) MarkCTMonitorChecked(ctx context.Context, id string, che
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("certificate transparency monitor %s not found", id)
+		return fmt.Errorf("certificate transparency monitor %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -2721,7 +2727,7 @@ func (s *PostgresStore) GetCloudConnection(ctx context.Context, id string) (*Clo
 	c, err := scanCloudConnection(s.pool.QueryRow(ctx,
 		"SELECT "+cloudConnectionColumns+" FROM public.cloud_connections WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("cloud connection %s not found", id)
+		return nil, fmt.Errorf("cloud connection %s %w", id, ErrNotFound)
 	}
 	return c, err
 }
@@ -2766,7 +2772,7 @@ func (s *PostgresStore) UpdateCloudConnection(ctx context.Context, conn *CloudCo
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("cloud connection %s not found", conn.ID)
+		return fmt.Errorf("cloud connection %s %w", conn.ID, ErrNotFound)
 	}
 	return nil
 }
@@ -2777,7 +2783,7 @@ func (s *PostgresStore) DeleteCloudConnection(ctx context.Context, id string) er
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("cloud connection %s not found", id)
+		return fmt.Errorf("cloud connection %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -2828,7 +2834,7 @@ func (s *PostgresStore) MarkCloudConnectionSynced(ctx context.Context, id string
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("cloud connection %s not found", id)
+		return fmt.Errorf("cloud connection %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -3057,7 +3063,7 @@ func (s *PostgresStore) GetCloudCertificate(ctx context.Context, id string) (*Cl
 	c, err := scanCloudCertificate(s.pool.QueryRow(ctx,
 		"SELECT "+cloudCertificateColumns+" FROM public.cloud_certificates WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("cloud certificate %s not found", id)
+		return nil, fmt.Errorf("cloud certificate %s %w", id, ErrNotFound)
 	}
 	return c, err
 }
@@ -3074,7 +3080,7 @@ func (s *PostgresStore) MarkCloudCertificateImported(ctx context.Context, id, ce
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("cloud certificate %s not found", id)
+		return fmt.Errorf("cloud certificate %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -3249,7 +3255,7 @@ func (s *PostgresStore) CompleteRenewalJob(ctx context.Context, id, status strin
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("renewal job %s not found", id)
+		return fmt.Errorf("renewal job %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -3258,7 +3264,7 @@ func (s *PostgresStore) GetRenewalJob(ctx context.Context, id string) (*RenewalJ
 	job, err := scanRenewalJob(s.pool.QueryRow(ctx,
 		"SELECT "+renewalJobColumns+" FROM public.renewal_jobs WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("renewal job %s not found", id)
+		return nil, fmt.Errorf("renewal job %s %w", id, ErrNotFound)
 	}
 	return job, err
 }
@@ -3378,7 +3384,7 @@ func (s *PostgresStore) DeferRenewalJob(ctx context.Context, id string, runAfter
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("renewal job %s not found", id)
+		return fmt.Errorf("renewal job %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -3433,7 +3439,7 @@ func (s *PostgresStore) UpdateCertificateRenewalInfo(ctx context.Context, id str
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("certificate %s not found", id)
+		return fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -3525,7 +3531,7 @@ func (s *PostgresStore) UpdateCertificateVerification(ctx context.Context, id st
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("certificate %s not found", id)
+		return fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -3798,7 +3804,7 @@ func (s *PostgresStore) CompleteDeploymentJob(ctx context.Context, id, status st
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("deployment job %s not found", id)
+		return fmt.Errorf("deployment job %s %w", id, ErrNotFound)
 	}
 	return nil
 }
@@ -3807,7 +3813,7 @@ func (s *PostgresStore) GetDeploymentJob(ctx context.Context, id string) (*Deplo
 	job, err := scanDeploymentJob(s.pool.QueryRow(ctx,
 		"SELECT "+deploymentJobColumns+" FROM public.deployment_jobs WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("deployment job %s not found", id)
+		return nil, fmt.Errorf("deployment job %s %w", id, ErrNotFound)
 	}
 	return job, err
 }
@@ -3990,7 +3996,7 @@ func (s *PostgresStore) GetAgent(ctx context.Context, id string) (*Agent, error)
 	a, err := scanAgent(s.pool.QueryRow(ctx,
 		"SELECT "+agentColumns+" FROM public.agents WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("agent %s not found", id)
+		return nil, fmt.Errorf("agent %s %w", id, ErrNotFound)
 	}
 	return a, err
 }
@@ -4520,7 +4526,7 @@ func (s *PostgresStore) GetTemplateGrant(ctx context.Context, id string) (*Templ
 	g, err := scanTemplateGrant(s.pool.QueryRow(ctx,
 		"SELECT "+templateGrantColumns+" FROM public.template_grants WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("grant %s not found", id)
+		return nil, fmt.Errorf("grant %s %w", id, ErrNotFound)
 	}
 	return g, err
 }
@@ -5288,7 +5294,11 @@ func (s *PostgresStore) ListMetadataFields(ctx context.Context, includeArchived 
 func (s *PostgresStore) GetMetadataField(ctx context.Context, id string) (*MetadataField, error) {
 	row := s.pool.QueryRow(ctx,
 		`SELECT `+metadataFieldColumns+` FROM public.metadata_fields WHERE id = $1`, id)
-	return scanMetadataField(row)
+	field, err := scanMetadataField(row)
+	if noSuchRow(err) {
+		return nil, fmt.Errorf("metadata field %s %w", id, ErrNotFound)
+	}
+	return field, err
 }
 
 func (s *PostgresStore) CreateMetadataField(ctx context.Context, field *MetadataField) error {

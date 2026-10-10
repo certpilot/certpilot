@@ -47,8 +47,14 @@ func realRouter(t *testing.T) (*gin.Engine, store.Store) {
 // be wired, shipped and documented as absent without a single test touching it.
 func realRouterWithPlugins(t *testing.T) (*gin.Engine, store.Store, *pluginmgr.Manager) {
 	t.Helper()
+	return realRouterOn(t, store.NewMemoryStore())
+}
 
-	st := store.NewMemoryStore()
+// realRouterOn is realRouterWithPlugins over a store the test supplies, for
+// tests that need the store itself to misbehave.
+func realRouterOn(t *testing.T, st store.Store) (*gin.Engine, store.Store, *pluginmgr.Manager) {
+	t.Helper()
+
 	broker := events.NewBroker()
 
 	keyring, err := secrets.NewEphemeralKeyring()

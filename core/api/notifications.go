@@ -110,7 +110,7 @@ func (h *NotificationHandler) Update(c *gin.Context) {
 
 	channel, err := h.store.GetNotificationChannel(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "notification channel")
 		return
 	}
 
@@ -165,7 +165,7 @@ func (h *NotificationHandler) Delete(c *gin.Context) {
 
 	channel, err := h.store.GetNotificationChannel(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "notification channel")
 		return
 	}
 	if err := h.store.DeleteNotificationChannel(c.Request.Context(), id); err != nil {
@@ -191,7 +191,7 @@ func (h *NotificationHandler) Test(c *gin.Context) {
 
 	channel, err := h.store.GetNotificationChannel(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "notification channel")
 		return
 	}
 

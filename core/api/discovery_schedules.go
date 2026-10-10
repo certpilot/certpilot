@@ -94,7 +94,7 @@ func (h *DiscoveryHandler) UpdateSchedule(c *gin.Context) {
 
 	schedule, err := h.store.GetDiscoverySchedule(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "discovery schedule")
 		return
 	}
 
@@ -134,7 +134,7 @@ func (h *DiscoveryHandler) DeleteSchedule(c *gin.Context) {
 
 	schedule, err := h.store.GetDiscoverySchedule(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "discovery schedule")
 		return
 	}
 	if err := h.store.DeleteDiscoverySchedule(c.Request.Context(), id); err != nil {
@@ -158,7 +158,7 @@ func (h *DiscoveryHandler) RunSchedule(c *gin.Context) {
 
 	schedule, err := h.store.GetDiscoverySchedule(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "discovery schedule")
 		return
 	}
 

@@ -218,7 +218,7 @@ func (h *MetadataHandler) Create(c *gin.Context) {
 func (h *MetadataHandler) Update(c *gin.Context) {
 	existing, err := h.store.GetMetadataField(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "metadata field")
 		return
 	}
 
@@ -252,7 +252,7 @@ func (h *MetadataHandler) Update(c *gin.Context) {
 func (h *MetadataHandler) Archive(c *gin.Context) {
 	field, err := h.store.GetMetadataField(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "metadata field")
 		return
 	}
 	if err := h.store.ArchiveMetadataField(c.Request.Context(), field.ID); err != nil {

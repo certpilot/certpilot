@@ -32,7 +32,7 @@ func (h *PolicyHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 	p, err := h.store.GetPolicy(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "policy")
 		return
 	}
 	c.JSON(http.StatusOK, p)

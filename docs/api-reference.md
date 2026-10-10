@@ -155,8 +155,8 @@ all — supply a replacement configuration instead.
 | 400 | Malformed request, or a gateway rejected the configuration |
 | 401 | Missing, malformed, invalid, or expired token |
 | 403 | Role not permitted, or the request was blocked by a policy |
-| 404 | Not found |
-| 500 | Internal failure — including "the policy engine could not be consulted", which fails closed |
+| 404 | The record does not exist. Only that: a failure to read it is 500 |
+| 500 | Internal failure — including a record that could not be read (the cause is logged, not returned) and "the policy engine could not be consulted", which fails closed |
 | 502 | The gateway is unreachable, failed, or returned something invalid |
 | 503 | Gateway health check failed |
 

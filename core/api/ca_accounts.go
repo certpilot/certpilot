@@ -228,7 +228,7 @@ func (h *CAAccountHandler) HealthCheck(c *gin.Context) {
 	id := c.Param("id")
 	acc, err := h.store.GetCAAccount(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "CA account")
 		return
 	}
 
@@ -298,7 +298,7 @@ func (h *CAAccountHandler) SetRateLimit(c *gin.Context) {
 
 	acc, err := h.store.GetCAAccount(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "CA account")
 		return
 	}
 

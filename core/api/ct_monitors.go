@@ -125,7 +125,7 @@ func (h *CTHandler) UpdateMonitor(c *gin.Context) {
 
 	monitor, err := h.store.GetCTMonitor(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "CT monitor")
 		return
 	}
 
@@ -165,7 +165,7 @@ func (h *CTHandler) DeleteMonitor(c *gin.Context) {
 
 	monitor, err := h.store.GetCTMonitor(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "CT monitor")
 		return
 	}
 	if err := h.store.DeleteCTMonitor(c.Request.Context(), id); err != nil {
@@ -190,7 +190,7 @@ func (h *CTHandler) CheckMonitor(c *gin.Context) {
 
 	monitor, err := h.store.GetCTMonitor(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "CT monitor")
 		return
 	}
 
