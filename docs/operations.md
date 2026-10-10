@@ -285,6 +285,9 @@ export CERTPILOT_KEK='<the key that sealed it>'
 
 Then check the estate reconciles: the CA health sweep and the renewal scheduler
 both run on startup, so a restored database converges without intervention.
+Restored with the key that sealed it, the database reads as it did: the audit
+chain checks, the private keys CertPilot holds still match their certificates,
+and renewal and issuance work.
 
 **Given the wrong key, the core refuses to start.** It compares the key that
 signed the newest audit entry with the keys it was given, and stops before
@@ -319,14 +322,17 @@ host. The audit chain stays readable, but entries signed with the lost key can
 no longer be checked, so `/api/v1/audit/verify` reports the chain from its
 first entry as unverifiable.
 
-What is *not* in the database and needs its own handling:
+### What to keep, and what can be reissued
 
-| | |
-|:---|:---|
-| The KEK | Secret manager |
-| ACME account keys | The ACME gateway's `--state-dir`. Losing them means re-registering with the CA |
-| Agent identities | Each agent's `--state-dir` on its own host. Losing one means re-enrolling that host |
-| mTLS material | Reissuable from your internal CA |
+| State | Where it lives | If it is lost |
+|:---|:---|:---|
+| Certificates, CA accounts, templates, agents, the audit log | The database | Restore the backup |
+| The KEK | Your secret manager, never beside the backup | Everything it sealed is lost; see above |
+| ACME account keys | `account_key_pem` in the CA account's configuration, sealed in the database, if you set one; otherwise the ACME gateway's `--state-dir` | A new account is registered with the CA. One that requires External Account Binding needs EAB credentials again |
+| Agent identities | Each agent's `--state-dir` on its own host | Re-enrol that host |
+| The self-signed gateway's CA | Nowhere: it is in memory by design, and a restart issues from a new authority | Nothing to keep |
+| Vault credentials | The CA account's configuration, sealed in the database | Restore the backup |
+| Gateway mTLS material | Your internal CA | Reissue it |
 
 ---
 
@@ -348,14 +354,29 @@ Run the migrations before starting it: certpilot-core --migrate, …
 ```
 
 Core v0.2.1 and earlier started anyway, reported themselves healthy, and
-renewed nothing until somebody read the log. A newer schema than the core
-needs is accepted, so rolling the binary back after a migration still starts. Gateways are independent and can be
-restarted whenever — the core reconnects and re-negotiates capabilities.
+renewed nothing until somebody read the log. A newer schema than the core needs
+is accepted, so rolling the binary back after a migration still starts.
+Gateways are independent and can be restarted whenever — the core reconnects
+and re-negotiates capabilities.
+
+A migration run that stops part-way is finished by running it again: each file
+applies whole or not at all, and a file that applied but was never recorded
+applies again harmlessly.
 
 Rolling back a schema change is not supported. Migrations are append-only and
 there are no down-migrations, because a down-migration that drops a column
 drops the data in it, and the moment somebody wants one is the moment that data
 matters. Roll forward.
+
+### The recovery drill
+
+`make test-recovery` runs the procedures on this page against real containers.
+It upgrades a v0.1.1 quickstart to the core built from this tree, and on the
+way starts the new core before migrating, interrupts a migration, rolls the
+binary back, restores a backup, starts with the wrong key, and gives up a lost
+one. Each check names the sentence on this page it proves, and fails when that
+sentence changes. CI runs it weekly, and on changes to the migrations, the
+store, the server's startup or the key handling.
 
 ---
 

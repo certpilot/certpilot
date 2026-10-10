@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct live-kubernetes live-eab all build build-core test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation test-recovery compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct live-kubernetes live-eab all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -143,6 +143,13 @@ test-docs-live:
 ## Under colima, pass a directory it shares: make test-evaluation EVAL_DIR=...
 test-evaluation:
 	python3 scripts/run-evaluation-doc.py $(if $(EVAL_DIR),--workdir $(EVAL_DIR),)
+
+## Upgrade a released quickstart to the core built from this tree, then back
+## up, restore, start with the wrong key and give a lost one up, checking each
+## against the sentence in docs/operations.md that says what should happen.
+## Needs Docker and port 8080; RECOVERY_DIR must be somewhere Docker can mount.
+test-recovery:
+	python3 scripts/run-recovery-drill.py $(if $(RECOVERY_DIR),--workdir $(RECOVERY_DIR),)
 
 ## Measure which released gateways this core still works with, and write
 ## docs/compatibility.md from what happened rather than from memory.

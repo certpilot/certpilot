@@ -1,0 +1,43 @@
+name: Recovery drill
+
+# docs/operations.md says how to upgrade, back up, restore and recover from a
+# lost key. scripts/run-recovery-drill.py does each of those things against real
+# containers and PostgreSQL, upgrading a released quickstart to the core built
+# from this tree, and checks every sentence that says what happens (#85).
+#
+# Its own workflow rather than a job in doc-examples.yml, because what it
+# guards is mostly code: the migrations, the store, the server's startup checks
+# and the key handling. A change to any of them can break a procedure the page
+# still describes, and that is the change this has to run on.
+on:
+  pull_request:
+    paths:
+      - 'migrations/**'
+      - 'core/store/**'
+      - 'core/server/**'
+      - 'core/pluginmgr/**'
+      - 'pkg/secrets/**'
+      - 'deploy/**'
+      - 'docs/operations.md'
+      - 'docs/troubleshooting.md'
+      - 'scripts/run-recovery-drill.py'
+      - '.github/workflows/recovery.yml'
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drill:
+    name: upgrade, restore and key recovery still work
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run the recovery drill
+        run: make test-recovery
