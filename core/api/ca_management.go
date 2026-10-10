@@ -169,7 +169,7 @@ func (h *CAHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 	ca, err := h.store.GetCAAuthority(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "CA authority")
 		return
 	}
 	h.attachAcknowledgements(c.Request.Context(), []*store.CAAuthority{ca})
@@ -292,7 +292,7 @@ func (h *CAHandler) CheckHealth(c *gin.Context) {
 	id := c.Param("id")
 	ca, err := h.store.GetCAAuthority(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "CA authority")
 		return
 	}
 

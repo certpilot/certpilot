@@ -35,7 +35,7 @@ func NewRenewalHandler(s store.Store, sched *renewal.Scheduler, ari *renewal.ARI
 func (h *RenewalHandler) Verify(c *gin.Context) {
 	cert, err := h.store.GetCertificate(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 
@@ -75,7 +75,7 @@ func (h *RenewalHandler) Verify(c *gin.Context) {
 func (h *RenewalHandler) RefreshRenewalInfo(c *gin.Context) {
 	cert, err := h.store.GetCertificate(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 	if cert.CAAccountID == nil || cert.CertificatePEM == nil {
@@ -190,7 +190,7 @@ func (h *RenewalHandler) List(c *gin.Context) {
 func (h *RenewalHandler) Get(c *gin.Context) {
 	job, err := h.store.GetRenewalJob(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "renewal job")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -205,7 +205,7 @@ func (h *RenewalHandler) Cancel(c *gin.Context) {
 
 	job, err := h.store.GetRenewalJob(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "renewal job")
 		return
 	}
 	if err := h.store.CancelRenewalJob(c.Request.Context(), id); err != nil {

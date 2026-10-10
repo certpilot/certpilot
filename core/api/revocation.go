@@ -54,7 +54,7 @@ func (h *CertificateHandler) Revoke(c *gin.Context) {
 	// because Store is an interface and the other convention is legal.
 	cert, err := h.store.GetCertificate(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 	if cert == nil {

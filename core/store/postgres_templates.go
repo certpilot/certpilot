@@ -178,7 +178,7 @@ func (s *PostgresStore) GetCertificateTemplate(ctx context.Context, id string) (
 		"SELECT "+certificateTemplateColumns+
 			" FROM public.certificate_templates WHERE id = $1", id))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("certificate template %s not found", id)
+		return nil, fmt.Errorf("certificate template %s %w", id, ErrNotFound)
 	}
 	return t, err
 }
@@ -188,7 +188,7 @@ func (s *PostgresStore) GetCertificateTemplateBySlug(ctx context.Context, slug s
 		"SELECT "+certificateTemplateColumns+
 			" FROM public.certificate_templates WHERE slug = $1", slug))
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, fmt.Errorf("certificate template %q not found", slug)
+		return nil, fmt.Errorf("certificate template %q %w", slug, ErrNotFound)
 	}
 	return t, err
 }
@@ -267,7 +267,7 @@ func (s *PostgresStore) UpdateCertificateTemplate(ctx context.Context, t *Certif
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("certificate template %s not found", t.ID)
+		return fmt.Errorf("certificate template %s %w", t.ID, ErrNotFound)
 	}
 	return nil
 }
@@ -279,7 +279,7 @@ func (s *PostgresStore) DeleteCertificateTemplate(ctx context.Context, id string
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("certificate template %s not found", id)
+		return fmt.Errorf("certificate template %s %w", id, ErrNotFound)
 	}
 	return nil
 }

@@ -144,7 +144,7 @@ func summarizeAgents(total, stale int64) string {
 func (h *AgentHandler) GetAgent(c *gin.Context) {
 	agent, err := h.store.GetAgent(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "agent")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -185,7 +185,7 @@ func missingText(agent *store.Agent, now time.Time) string {
 func (h *AgentHandler) RevokeAgent(c *gin.Context) {
 	agent, err := h.store.GetAgent(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "agent")
 		return
 	}
 
@@ -212,7 +212,7 @@ func (h *AgentHandler) RevokeAgent(c *gin.Context) {
 func (h *AgentHandler) DeleteAgent(c *gin.Context) {
 	agent, err := h.store.GetAgent(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "agent")
 		return
 	}
 	if agent.Status == store.AgentActive {
@@ -603,7 +603,7 @@ func (h *AgentHandler) Inventory(c *gin.Context) {
 
 	agent, err := h.store.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "agent")
 		return
 	}
 
@@ -941,7 +941,7 @@ func (h *AgentHandler) RequestCertificate(c *gin.Context) {
 
 	agent, err := h.store.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "agent")
 		return
 	}
 

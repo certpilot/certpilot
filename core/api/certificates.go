@@ -93,7 +93,7 @@ func (h *CertificateHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 	cert, err := h.store.GetCertificate(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 	c.JSON(http.StatusOK, cert)
@@ -492,7 +492,7 @@ func (h *CertificateHandler) UpdateMetadata(c *gin.Context) {
 
 	existing, err := h.store.GetCertificate(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 
@@ -573,7 +573,7 @@ func (h *CertificateHandler) Renew(c *gin.Context) {
 
 	cert, err := h.store.GetCertificate(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 	if cert.CAAccountID == nil || *cert.CAAccountID == "" {
@@ -655,7 +655,7 @@ func (h *CertificateHandler) PrivateKey(c *gin.Context) {
 
 	cert, err := h.store.GetCertificate(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 
@@ -720,7 +720,7 @@ func (h *CertificateHandler) Delete(c *gin.Context) {
 
 	cert, err := h.store.GetCertificate(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 	if cert == nil {

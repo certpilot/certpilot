@@ -147,7 +147,7 @@ func (h *DeploymentHandler) CreateTarget(c *gin.Context) {
 func (h *DeploymentHandler) UpdateTarget(c *gin.Context) {
 	existing, err := h.store.GetDeploymentTarget(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "deployment target")
 		return
 	}
 
@@ -208,7 +208,7 @@ func (h *DeploymentHandler) UpdateTarget(c *gin.Context) {
 func (h *DeploymentHandler) DeleteTarget(c *gin.Context) {
 	target, err := h.store.GetDeploymentTarget(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "deployment target")
 		return
 	}
 	if err := h.store.DeleteDeploymentTarget(c.Request.Context(), target.ID); err != nil {
@@ -330,7 +330,7 @@ func connectionRef(config map[string]any) *string {
 func (h *DeploymentHandler) ListBindings(c *gin.Context) {
 	cert, err := h.store.GetCertificate(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 
@@ -460,7 +460,7 @@ type bindingRequest struct {
 func (h *DeploymentHandler) CreateBinding(c *gin.Context) {
 	cert, err := h.store.GetCertificate(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 
@@ -559,7 +559,7 @@ func bindingMessage(cert *store.Certificate, target *store.DeploymentTarget, onR
 func (h *DeploymentHandler) DeleteBinding(c *gin.Context) {
 	binding, err := h.store.GetCertificateDeployment(c.Request.Context(), c.Param("bindingId"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate deployment")
 		return
 	}
 	if binding.CertificateID != c.Param("id") {
@@ -594,7 +594,7 @@ func (h *DeploymentHandler) DeleteBinding(c *gin.Context) {
 func (h *DeploymentHandler) Deploy(c *gin.Context) {
 	cert, err := h.store.GetCertificate(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "certificate")
 		return
 	}
 
@@ -682,7 +682,7 @@ func (h *DeploymentHandler) ListJobs(c *gin.Context) {
 func (h *DeploymentHandler) GetJob(c *gin.Context) {
 	job, err := h.store.GetDeploymentJob(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "deployment job")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": job})
@@ -692,7 +692,7 @@ func (h *DeploymentHandler) GetJob(c *gin.Context) {
 func (h *DeploymentHandler) CancelJob(c *gin.Context) {
 	job, err := h.store.GetDeploymentJob(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "deployment job")
 		return
 	}
 	if err := h.store.CancelDeploymentJob(c.Request.Context(), job.ID); err != nil {

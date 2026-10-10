@@ -4335,6 +4335,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the agent"
+          ]
         }
       ],
       "section": "The agent API",
@@ -4364,7 +4370,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the agent"
+          ]
         }
       ],
       "section": "The agent API",
@@ -4445,7 +4454,11 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the agent",
+            "could not read the deployment job"
+          ]
         },
         {
           "status": 503,
@@ -4700,7 +4713,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the agent"
+          ]
         }
       ],
       "section": "The agent API",
@@ -4782,7 +4798,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the agent"
+          ]
         }
       ],
       "section": "The agent API",
@@ -4880,7 +4899,10 @@
           ]
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the agent"
+          ]
         }
       ],
       "section": "Agents",
@@ -4917,6 +4939,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the agent"
+          ]
         }
       ],
       "section": "Agents",
@@ -4950,6 +4978,12 @@
         },
         {
           "status": 409
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the agent"
+          ]
         }
       ],
       "section": "Agents",
@@ -5454,6 +5488,12 @@
           "status": 404
         },
         {
+          "status": 500,
+          "errors": [
+            "could not read the CA account"
+          ]
+        },
+        {
           "status": 503
         }
       ],
@@ -5520,7 +5560,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the CA account"
+          ]
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
@@ -5811,7 +5854,10 @@
           "status": 409
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate template"
+          ]
         }
       ],
       "section": "Certificate templates",
@@ -5834,6 +5880,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the certificate template"
+          ]
         }
       ],
       "section": "Certificate templates",
@@ -6060,7 +6112,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate template"
+          ]
         }
       ],
       "section": "Certificate templates",
@@ -6315,7 +6370,10 @@
           ]
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         }
       ],
       "section": "Certificates",
@@ -6340,6 +6398,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         }
       ],
       "section": "Certificates",
@@ -6399,7 +6463,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         }
       ],
       "section": "Certificates",
@@ -6448,7 +6515,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         }
       ],
       "section": "Deployment",
@@ -6489,7 +6559,10 @@
           ]
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         }
       ],
       "section": "Certificates",
@@ -6532,7 +6605,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         }
       ],
       "section": "Certificates",
@@ -6577,7 +6653,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         }
       ],
       "section": "Renewal queue",
@@ -6648,7 +6727,10 @@
           ]
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         },
         {
           "status": 502,
@@ -6698,7 +6780,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         }
       ],
       "section": "Deployment",
@@ -6770,7 +6855,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         }
       ],
       "section": "Deployment",
@@ -6807,7 +6895,10 @@
           ]
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate deployment"
+          ]
         }
       ],
       "section": "Deployment",
@@ -6873,7 +6964,10 @@
           ]
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the certificate"
+          ]
         }
       ],
       "section": "Renewal queue",
@@ -7097,7 +7191,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the cloud connection"
+          ]
         }
       ],
       "section": "Cloud inventory",
@@ -7170,7 +7267,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the cloud connection"
+          ]
         }
       ],
       "section": "Cloud inventory",
@@ -7226,7 +7326,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the cloud connection"
+          ]
         },
         {
           "status": 502,
@@ -7331,7 +7434,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the cloud certificate"
+          ]
         }
       ],
       "section": "Cloud inventory",
@@ -7532,7 +7638,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the CT monitor"
+          ]
         }
       ],
       "section": "Certificate Transparency",
@@ -7599,7 +7708,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the CT monitor"
+          ]
         }
       ],
       "section": "Certificate Transparency",
@@ -7650,7 +7762,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the CT monitor"
+          ]
         },
         {
           "status": 502,
@@ -7929,7 +8044,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the deployment target"
+          ]
         }
       ],
       "section": "Deployment",
@@ -8011,7 +8129,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the deployment target"
+          ]
         }
       ],
       "section": "Deployment",
@@ -8120,6 +8241,12 @@
         },
         {
           "status": 409
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the deployment job"
+          ]
         }
       ],
       "section": "Deployment",
@@ -8151,6 +8278,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the deployment job"
+          ]
         }
       ],
       "section": "Deployment",
@@ -8260,7 +8393,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the discovery result"
+          ]
         }
       ],
       "section": "Discovery",
@@ -8560,7 +8696,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the discovery scan"
+          ]
         }
       ],
       "section": "Discovery",
@@ -8597,6 +8736,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the discovery scan"
+          ]
         }
       ],
       "section": "Discovery",
@@ -8740,7 +8885,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the discovery schedule"
+          ]
         }
       ],
       "section": "Discovery",
@@ -8814,7 +8962,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the discovery schedule"
+          ]
         }
       ],
       "section": "Discovery",
@@ -8865,7 +9016,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the discovery schedule"
+          ]
         }
       ],
       "section": "Discovery",
@@ -8991,6 +9145,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not revoke the display token"
+          ]
         }
       ],
       "section": "Display Tokens",
@@ -9212,7 +9372,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the metadata field"
+          ]
         }
       ],
       "section": "Custom metadata fields",
@@ -9294,7 +9457,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the metadata field"
+          ]
         }
       ],
       "section": "Custom metadata fields",
@@ -9451,7 +9617,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the notification channel"
+          ]
         }
       ],
       "section": "Notification channels",
@@ -9531,7 +9700,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the notification channel"
+          ]
         }
       ],
       "section": "Notification channels",
@@ -9567,6 +9739,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the notification channel"
+          ]
         },
         {
           "status": 502,
@@ -9755,6 +9933,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the CA authority"
+          ]
         }
       ],
       "section": "PKI / CA Management",
@@ -9859,7 +10043,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the CA authority"
+          ]
         }
       ],
       "section": "PKI / CA Management",
@@ -9953,7 +10140,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the CA authority"
+          ]
         }
       ],
       "section": "PKI / CA Management",
@@ -10008,7 +10198,10 @@
           "status": 404
         },
         {
-          "status": 500
+          "status": 500,
+          "errors": [
+            "could not read the CA authority"
+          ]
         }
       ],
       "section": "PKI / CA Management",
@@ -10247,6 +10440,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the policy"
+          ]
         }
       ],
       "section": "Policies",
@@ -10526,6 +10725,12 @@
         },
         {
           "status": 409
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the renewal job"
+          ]
         }
       ],
       "section": "Renewal queue",
@@ -10562,6 +10767,12 @@
         },
         {
           "status": 404
+        },
+        {
+          "status": 500,
+          "errors": [
+            "could not read the renewal job"
+          ]
         }
       ],
       "section": "Renewal queue",
@@ -10785,6 +10996,7 @@
         {
           "status": 500,
           "errors": [
+            "could not read the account",
             "could not generate a password"
           ]
         }

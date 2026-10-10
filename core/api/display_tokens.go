@@ -1,7 +1,9 @@
 package api
 
 import (
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -147,6 +149,11 @@ func (h *DisplayTokenHandler) Revoke(c *gin.Context) {
 	actorEmail := c.GetString(middleware.ContextUserEmail)
 
 	if err := h.store.RevokeDisplayToken(c.Request.Context(), id, &actorID); err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			slog.Error("could not revoke a display token", "id", id, "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not revoke the display token"})
+			return
+		}
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}

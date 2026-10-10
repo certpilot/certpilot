@@ -343,7 +343,7 @@ func (m *MemoryStore) GetCertificate(ctx context.Context, id string) (*Certifica
 	defer m.mu.RUnlock()
 	c, ok := m.certificates[id]
 	if !ok {
-		return nil, fmt.Errorf("certificate %s not found", id)
+		return nil, fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	return clone(c), nil
 }
@@ -513,7 +513,7 @@ func (m *MemoryStore) GetCertificatePrivateKey(ctx context.Context, id string) (
 	defer m.mu.RUnlock()
 	c, ok := m.certificates[id]
 	if !ok {
-		return "", fmt.Errorf("certificate %s not found", id)
+		return "", fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	if c.PrivateKeyEncrypted == nil {
 		return "", nil
@@ -569,7 +569,7 @@ func (m *MemoryStore) GetCAAuthority(ctx context.Context, id string) (*CAAuthori
 	defer m.mu.RUnlock()
 	ca, ok := m.caAuthorities[id]
 	if !ok {
-		return nil, fmt.Errorf("CA authority %s not found", id)
+		return nil, fmt.Errorf("CA authority %s %w", id, ErrNotFound)
 	}
 	return clone(ca), nil
 }
@@ -683,7 +683,7 @@ func (m *MemoryStore) GetCAAccount(ctx context.Context, id string) (*CAAccount, 
 			return clone(a), nil
 		}
 	}
-	return nil, fmt.Errorf("CA account %s not found", id)
+	return nil, fmt.Errorf("CA account %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) CreateCAAccount(ctx context.Context, acc *CAAccount) error {
@@ -730,7 +730,7 @@ func (m *MemoryStore) GetDeploymentTarget(ctx context.Context, id string) (*Depl
 	defer m.mu.RUnlock()
 	t, ok := m.targets[id]
 	if !ok {
-		return nil, fmt.Errorf("target %s not found", id)
+		return nil, fmt.Errorf("deployment target %s %w", id, ErrNotFound)
 	}
 	return clone(t), nil
 }
@@ -754,7 +754,7 @@ func (m *MemoryStore) UpdateDeploymentTarget(ctx context.Context, target *Deploy
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.targets[target.ID]; !ok {
-		return fmt.Errorf("deployment target %s not found", target.ID)
+		return fmt.Errorf("deployment target %s %w", target.ID, ErrNotFound)
 	}
 	target.UpdatedAt = time.Now()
 	m.targets[target.ID] = clone(target)
@@ -768,7 +768,7 @@ func (m *MemoryStore) MarkDeploymentTargetUsed(ctx context.Context, id string,
 
 	t, ok := m.targets[id]
 	if !ok {
-		return fmt.Errorf("deployment target %s not found", id)
+		return fmt.Errorf("deployment target %s %w", id, ErrNotFound)
 	}
 
 	when := at
@@ -816,7 +816,7 @@ func (m *MemoryStore) GetPolicy(ctx context.Context, id string) (*Policy, error)
 	defer m.mu.RUnlock()
 	p, ok := m.policies[id]
 	if !ok {
-		return nil, fmt.Errorf("policy %s not found", id)
+		return nil, fmt.Errorf("policy %s %w", id, ErrNotFound)
 	}
 	return clone(p), nil
 }
@@ -882,7 +882,7 @@ func (m *MemoryStore) GetDisplayTokenByHash(ctx context.Context, tokenHash strin
 		}
 	}
 	if found == nil {
-		return nil, fmt.Errorf("display token not found")
+		return nil, fmt.Errorf("display token %w", ErrNotFound)
 	}
 	clone := *found
 	return &clone, nil
@@ -912,7 +912,7 @@ func (m *MemoryStore) RevokeDisplayToken(ctx context.Context, id string, revoked
 
 	t, ok := m.displayTokens[id]
 	if !ok {
-		return fmt.Errorf("display token %s not found", id)
+		return fmt.Errorf("display token %s %w", id, ErrNotFound)
 	}
 	// Revoking twice is not an error. The caller wants the token dead, and it
 	// is; failing here would only encourage retry loops.
@@ -930,7 +930,7 @@ func (m *MemoryStore) TouchDisplayToken(ctx context.Context, id string, seenAt t
 
 	t, ok := m.displayTokens[id]
 	if !ok {
-		return fmt.Errorf("display token %s not found", id)
+		return fmt.Errorf("display token %s %w", id, ErrNotFound)
 	}
 	t.LastSeenAt = &seenAt
 	if ip != "" {
@@ -1083,7 +1083,7 @@ func (m *MemoryStore) GetNotificationChannel(ctx context.Context, id string) (*N
 	defer m.mu.RUnlock()
 	ch, ok := m.notifChannels[id]
 	if !ok {
-		return nil, fmt.Errorf("notification channel %s not found", id)
+		return nil, fmt.Errorf("notification channel %s %w", id, ErrNotFound)
 	}
 	return clone(ch), nil
 }
@@ -1115,7 +1115,7 @@ func (m *MemoryStore) UpdateNotificationChannel(ctx context.Context, ch *Notific
 
 	prev, ok := m.notifChannels[ch.ID]
 	if !ok {
-		return fmt.Errorf("notification channel %s not found", ch.ID)
+		return fmt.Errorf("notification channel %s %w", ch.ID, ErrNotFound)
 	}
 	ch.UpdatedAt = time.Now()
 	stored := clone(ch)
@@ -1138,7 +1138,7 @@ func (m *MemoryStore) MarkNotificationChannelSent(ctx context.Context, id string
 	defer m.mu.Unlock()
 	ch, ok := m.notifChannels[id]
 	if !ok {
-		return fmt.Errorf("notification channel %s not found", id)
+		return fmt.Errorf("notification channel %s %w", id, ErrNotFound)
 	}
 	ch.LastSentAt = &sentAt
 	return nil
@@ -1285,7 +1285,7 @@ func (m *MemoryStore) RevokeAcknowledgement(ctx context.Context, id string, revo
 		}
 		return nil
 	}
-	return fmt.Errorf("acknowledgement %s not found", id)
+	return fmt.Errorf("acknowledgement %s %w", id, ErrNotFound)
 }
 
 // ── Discovery ───────────────────────────────────────────
@@ -1322,7 +1322,7 @@ func (m *MemoryStore) UpdateDiscoveryScan(ctx context.Context, scan *DiscoverySc
 			return nil
 		}
 	}
-	return fmt.Errorf("discovery scan %s not found", scan.ID)
+	return fmt.Errorf("discovery scan %s %w", scan.ID, ErrNotFound)
 }
 
 func (m *MemoryStore) GetDiscoveryScan(ctx context.Context, id string) (*DiscoveryScan, error) {
@@ -1334,7 +1334,7 @@ func (m *MemoryStore) GetDiscoveryScan(ctx context.Context, id string) (*Discove
 			return clone(s), nil
 		}
 	}
-	return nil, fmt.Errorf("discovery scan %s not found", id)
+	return nil, fmt.Errorf("discovery scan %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) ListDiscoveryScans(ctx context.Context, limit, offset int) ([]*DiscoveryScan, int64, error) {
@@ -1442,7 +1442,7 @@ func (m *MemoryStore) GetDiscoveryResult(ctx context.Context, id string) (*Disco
 			return clone(r), nil
 		}
 	}
-	return nil, fmt.Errorf("discovery result %s not found", id)
+	return nil, fmt.Errorf("discovery result %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) MarkDiscoveryResultImported(ctx context.Context, id, certificateID string) error {
@@ -1463,7 +1463,7 @@ func (m *MemoryStore) MarkDiscoveryResultImported(ctx context.Context, id, certi
 		r.MatchedCertificateID = &certID
 		return nil
 	}
-	return fmt.Errorf("discovery result %s not found", id)
+	return fmt.Errorf("discovery result %s %w", id, ErrNotFound)
 }
 
 // GetLatestDiscoveryResults returns what each endpoint was last seen serving.
@@ -1518,7 +1518,7 @@ func (m *MemoryStore) GetDiscoverySchedule(ctx context.Context, id string) (*Dis
 	if s, ok := m.discoverySchedules[id]; ok {
 		return clone(s), nil
 	}
-	return nil, fmt.Errorf("discovery schedule %s not found", id)
+	return nil, fmt.Errorf("discovery schedule %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) CreateDiscoverySchedule(ctx context.Context, s *DiscoverySchedule) error {
@@ -1547,7 +1547,7 @@ func (m *MemoryStore) UpdateDiscoverySchedule(ctx context.Context, s *DiscoveryS
 
 	existing, ok := m.discoverySchedules[s.ID]
 	if !ok {
-		return fmt.Errorf("discovery schedule %s not found", s.ID)
+		return fmt.Errorf("discovery schedule %s %w", s.ID, ErrNotFound)
 	}
 	updated := clone(s)
 	updated.CreatedAt = existing.CreatedAt
@@ -1561,7 +1561,7 @@ func (m *MemoryStore) DeleteDiscoverySchedule(ctx context.Context, id string) er
 	defer m.mu.Unlock()
 
 	if _, ok := m.discoverySchedules[id]; !ok {
-		return fmt.Errorf("discovery schedule %s not found", id)
+		return fmt.Errorf("discovery schedule %s %w", id, ErrNotFound)
 	}
 	delete(m.discoverySchedules, id)
 	return nil
@@ -1587,7 +1587,7 @@ func (m *MemoryStore) MarkDiscoveryScheduleRun(ctx context.Context, id string, r
 
 	s, ok := m.discoverySchedules[id]
 	if !ok {
-		return fmt.Errorf("discovery schedule %s not found", id)
+		return fmt.Errorf("discovery schedule %s %w", id, ErrNotFound)
 	}
 	s.LastRunAt = &ranAt
 	s.NextRunAt = &nextRunAt
@@ -1622,7 +1622,7 @@ func (m *MemoryStore) GetCTMonitor(ctx context.Context, id string) (*CTMonitor, 
 	if mon, ok := m.ctMonitors[id]; ok {
 		return clone(mon), nil
 	}
-	return nil, fmt.Errorf("certificate transparency monitor %s not found", id)
+	return nil, fmt.Errorf("certificate transparency monitor %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) CreateCTMonitor(ctx context.Context, mon *CTMonitor) error {
@@ -1653,7 +1653,7 @@ func (m *MemoryStore) UpdateCTMonitor(ctx context.Context, mon *CTMonitor) error
 
 	existing, ok := m.ctMonitors[mon.ID]
 	if !ok {
-		return fmt.Errorf("certificate transparency monitor %s not found", mon.ID)
+		return fmt.Errorf("certificate transparency monitor %s %w", mon.ID, ErrNotFound)
 	}
 	updated := clone(mon)
 	updated.CreatedAt = existing.CreatedAt
@@ -1667,7 +1667,7 @@ func (m *MemoryStore) DeleteCTMonitor(ctx context.Context, id string) error {
 	defer m.mu.Unlock()
 
 	if _, ok := m.ctMonitors[id]; !ok {
-		return fmt.Errorf("certificate transparency monitor %s not found", id)
+		return fmt.Errorf("certificate transparency monitor %s %w", id, ErrNotFound)
 	}
 	delete(m.ctMonitors, id)
 
@@ -1702,7 +1702,7 @@ func (m *MemoryStore) MarkCTMonitorChecked(ctx context.Context, id string, check
 
 	mon, ok := m.ctMonitors[id]
 	if !ok {
-		return fmt.Errorf("certificate transparency monitor %s not found", id)
+		return fmt.Errorf("certificate transparency monitor %s %w", id, ErrNotFound)
 	}
 	mon.LastCheckedAt = &checkedAt
 	mon.NextCheckAt = &nextCheckAt
@@ -1826,7 +1826,7 @@ func (m *MemoryStore) GetCloudConnection(ctx context.Context, id string) (*Cloud
 	if conn, ok := m.cloudConnections[id]; ok {
 		return clone(conn), nil
 	}
-	return nil, fmt.Errorf("cloud connection %s not found", id)
+	return nil, fmt.Errorf("cloud connection %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) CreateCloudConnection(ctx context.Context, conn *CloudConnection) error {
@@ -1860,7 +1860,7 @@ func (m *MemoryStore) UpdateCloudConnection(ctx context.Context, conn *CloudConn
 
 	existing, ok := m.cloudConnections[conn.ID]
 	if !ok {
-		return fmt.Errorf("cloud connection %s not found", conn.ID)
+		return fmt.Errorf("cloud connection %s %w", conn.ID, ErrNotFound)
 	}
 	updated := clone(conn)
 	// Carried over rather than taken from the caller: an edit is not a sync,
@@ -1885,7 +1885,7 @@ func (m *MemoryStore) DeleteCloudConnection(ctx context.Context, id string) erro
 	defer m.mu.Unlock()
 
 	if _, ok := m.cloudConnections[id]; !ok {
-		return fmt.Errorf("cloud connection %s not found", id)
+		return fmt.Errorf("cloud connection %s %w", id, ErrNotFound)
 	}
 	delete(m.cloudConnections, id)
 
@@ -1920,7 +1920,7 @@ func (m *MemoryStore) MarkCloudConnectionSynced(ctx context.Context, id string, 
 
 	conn, ok := m.cloudConnections[id]
 	if !ok {
-		return fmt.Errorf("cloud connection %s not found", id)
+		return fmt.Errorf("cloud connection %s %w", id, ErrNotFound)
 	}
 	conn.LastSyncedAt = &syncedAt
 	conn.NextSyncAt = &nextSyncAt
@@ -2093,7 +2093,7 @@ func (m *MemoryStore) GetCloudCertificate(ctx context.Context, id string) (*Clou
 			return clone(c), nil
 		}
 	}
-	return nil, fmt.Errorf("cloud certificate %s not found", id)
+	return nil, fmt.Errorf("cloud certificate %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) MarkCloudCertificateImported(ctx context.Context, id, certificateID string) error {
@@ -2112,7 +2112,7 @@ func (m *MemoryStore) MarkCloudCertificateImported(ctx context.Context, id, cert
 		}
 		return nil
 	}
-	return fmt.Errorf("cloud certificate %s not found", id)
+	return fmt.Errorf("cloud certificate %s %w", id, ErrNotFound)
 }
 
 // ── Renewal queue ───────────────────────────────────────────
@@ -2235,7 +2235,7 @@ func (m *MemoryStore) ExtendRenewalLease(ctx context.Context, id, worker string,
 		job.UpdatedAt = time.Now()
 		return nil
 	}
-	return fmt.Errorf("renewal job %s not found", id)
+	return fmt.Errorf("renewal job %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) CompleteRenewalJob(ctx context.Context, id, status string,
@@ -2272,7 +2272,7 @@ func (m *MemoryStore) CompleteRenewalJob(ctx context.Context, id, status string,
 		job.UpdatedAt = time.Now()
 		return nil
 	}
-	return fmt.Errorf("renewal job %s not found", id)
+	return fmt.Errorf("renewal job %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) GetRenewalJob(ctx context.Context, id string) (*RenewalJob, error) {
@@ -2284,7 +2284,7 @@ func (m *MemoryStore) GetRenewalJob(ctx context.Context, id string) (*RenewalJob
 			return clone(job), nil
 		}
 	}
-	return nil, fmt.Errorf("renewal job %s not found", id)
+	return nil, fmt.Errorf("renewal job %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) ListRenewalJobs(ctx context.Context, filter RenewalJobFilter) ([]*RenewalJob, int64, error) {
@@ -2384,7 +2384,7 @@ func (m *MemoryStore) DeferRenewalJob(ctx context.Context, id string, runAfter t
 		job.UpdatedAt = time.Now()
 		return nil
 	}
-	return fmt.Errorf("renewal job %s not found", id)
+	return fmt.Errorf("renewal job %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) CountRecentRenewals(ctx context.Context, caAccountID string, since time.Time) (int, *time.Time, error) {
@@ -2452,7 +2452,7 @@ func (m *MemoryStore) UpdateCertificateRenewalInfo(ctx context.Context, id strin
 
 	cert, ok := m.certificates[id]
 	if !ok {
-		return fmt.Errorf("certificate %s not found", id)
+		return fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	cert.RenewalScheduledAt = info.RenewalScheduledAt
 	cert.ARIWindowStart = info.WindowStart
@@ -2492,7 +2492,7 @@ func (m *MemoryStore) UpdateCertificateVerification(ctx context.Context, id stri
 
 	cert, ok := m.certificates[id]
 	if !ok {
-		return fmt.Errorf("certificate %s not found", id)
+		return fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	cert.VerificationState = update.State
 	cert.VerificationDetail = update.Detail
@@ -2565,7 +2565,7 @@ func (m *MemoryStore) GetCertificateDeployment(ctx context.Context, id string) (
 
 	d, ok := m.deployments[id]
 	if !ok {
-		return nil, fmt.Errorf("deployment %s not found", id)
+		return nil, fmt.Errorf("deployment %s %w", id, ErrNotFound)
 	}
 	copied := clone(d)
 	m.decorateDeploymentLocked(copied)
@@ -2624,7 +2624,7 @@ func (m *MemoryStore) RecordDeploymentOutcome(ctx context.Context, id string, ou
 
 	d, ok := m.deployments[id]
 	if !ok {
-		return fmt.Errorf("deployment %s not found", id)
+		return fmt.Errorf("deployment %s %w", id, ErrNotFound)
 	}
 	d.LastStatus = outcome.Status
 	d.LastError = outcome.Error
@@ -2761,7 +2761,7 @@ func (m *MemoryStore) ExtendDeploymentLease(ctx context.Context, id, worker stri
 		job.UpdatedAt = time.Now()
 		return nil
 	}
-	return fmt.Errorf("deployment job %s not found", id)
+	return fmt.Errorf("deployment job %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) CompleteDeploymentJob(ctx context.Context, id, status string,
@@ -2796,7 +2796,7 @@ func (m *MemoryStore) CompleteDeploymentJob(ctx context.Context, id, status stri
 		job.UpdatedAt = time.Now()
 		return nil
 	}
-	return fmt.Errorf("deployment job %s not found", id)
+	return fmt.Errorf("deployment job %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) GetDeploymentJob(ctx context.Context, id string) (*DeploymentJob, error) {
@@ -2808,7 +2808,7 @@ func (m *MemoryStore) GetDeploymentJob(ctx context.Context, id string) (*Deploym
 			return clone(job), nil
 		}
 	}
-	return nil, fmt.Errorf("deployment job %s not found", id)
+	return nil, fmt.Errorf("deployment job %s %w", id, ErrNotFound)
 }
 
 func (m *MemoryStore) ListDeploymentJobs(ctx context.Context, filter DeploymentJobFilter) ([]*DeploymentJob, int64, error) {
@@ -2918,7 +2918,7 @@ func (m *MemoryStore) GetAgent(ctx context.Context, id string) (*Agent, error) {
 	defer m.mu.RUnlock()
 	a, ok := m.agents[id]
 	if !ok {
-		return nil, fmt.Errorf("agent %s not found", id)
+		return nil, fmt.Errorf("agent %s %w", id, ErrNotFound)
 	}
 	return clone(a), nil
 }
@@ -3032,7 +3032,7 @@ func (m *MemoryStore) MarkAgentStaleAlerted(ctx context.Context, id string, at t
 
 	a, ok := m.agents[id]
 	if !ok {
-		return fmt.Errorf("agent %s not found", id)
+		return fmt.Errorf("agent %s %w", id, ErrNotFound)
 	}
 	when := at
 	a.StaleAlertedAt = &when
@@ -3265,7 +3265,7 @@ func (m *MemoryStore) MarkAgentInventoried(ctx context.Context, id string, summa
 
 	agent, ok := m.agents[id]
 	if !ok {
-		return fmt.Errorf("agent %s not found", id)
+		return fmt.Errorf("agent %s %w", id, ErrNotFound)
 	}
 	when := summary.ScannedAt
 	agent.LastInventoryAt = &when
@@ -3342,7 +3342,7 @@ func (m *MemoryStore) GetTemplateGrant(ctx context.Context, id string) (*Templat
 	defer m.mu.RUnlock()
 	g, ok := m.templateGrants[id]
 	if !ok {
-		return nil, fmt.Errorf("grant %s not found", id)
+		return nil, fmt.Errorf("grant %s %w", id, ErrNotFound)
 	}
 	return cloneGrant(g), nil
 }
@@ -3379,9 +3379,11 @@ func (m *MemoryStore) GetGrantsForAgent(ctx context.Context, agentID string) ([]
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	// An unknown agent holds no grants, which is what PostgreSQL's query
+	// answers too. A list is not a lookup: an empty one is an ordinary answer.
 	agent, ok := m.agents[agentID]
 	if !ok {
-		return nil, fmt.Errorf("agent %s not found", agentID)
+		return []*TemplateGrant{}, nil
 	}
 
 	out := []*TemplateGrant{}
@@ -3792,7 +3794,7 @@ func (m *MemoryStore) UpdateCertificatePosture(ctx context.Context, id string,
 
 	cert, ok := m.certificates[id]
 	if !ok {
-		return fmt.Errorf("certificate %s not found", id)
+		return fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	assessedAt := update.AssessedAt
 	if assessedAt.IsZero() {
@@ -3822,7 +3824,7 @@ func (s *MemoryStore) UpdateCertificateMetadata(
 
 	cert, ok := s.certificates[id]
 	if !ok {
-		return nil, fmt.Errorf("certificate %s not found", id)
+		return nil, fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	if update.Environment != nil {
 		cert.Environment = *update.Environment
@@ -3875,7 +3877,7 @@ func (s *MemoryStore) GetMetadataField(_ context.Context, id string) (*MetadataF
 
 	f, ok := s.metadataFields[id]
 	if !ok {
-		return nil, fmt.Errorf("metadata field %s not found", id)
+		return nil, fmt.Errorf("metadata field %s %w", id, ErrNotFound)
 	}
 	copied := *f
 	copied.Options = append([]MetadataOption(nil), f.Options...)
@@ -3913,7 +3915,7 @@ func (s *MemoryStore) UpdateMetadataField(_ context.Context, field *MetadataFiel
 
 	existing, ok := s.metadataFields[field.ID]
 	if !ok {
-		return fmt.Errorf("metadata field %s not found", field.ID)
+		return fmt.Errorf("metadata field %s %w", field.ID, ErrNotFound)
 	}
 	// The key is the identity certificates store their values under, so it is
 	// carried forward rather than taken from the caller.
@@ -3936,7 +3938,7 @@ func (s *MemoryStore) ArchiveMetadataField(_ context.Context, id string) error {
 
 	f, ok := s.metadataFields[id]
 	if !ok {
-		return fmt.Errorf("metadata field %s not found", id)
+		return fmt.Errorf("metadata field %s %w", id, ErrNotFound)
 	}
 	f.IsArchived = true
 	f.UpdatedAt = time.Now()

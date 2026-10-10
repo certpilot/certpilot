@@ -169,7 +169,7 @@ func (h *DiscoveryHandler) CancelScan(c *gin.Context) {
 
 	scan, err := h.store.GetDiscoveryScan(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "discovery scan")
 		return
 	}
 
@@ -245,7 +245,7 @@ func (h *DiscoveryHandler) ListScans(c *gin.Context) {
 func (h *DiscoveryHandler) GetScan(c *gin.Context) {
 	scan, err := h.store.GetDiscoveryScan(c.Request.Context(), c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "discovery scan")
 		return
 	}
 
@@ -349,7 +349,7 @@ func (h *DiscoveryHandler) Import(c *gin.Context) {
 		var err error
 		result, err = h.store.GetDiscoveryResult(c.Request.Context(), input.ResultID)
 		if err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			respondLookup(c, err, "discovery result")
 			return
 		}
 		if result.CertificatePEM == "" {

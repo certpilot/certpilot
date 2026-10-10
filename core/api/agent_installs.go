@@ -51,7 +51,7 @@ func (h *AgentHandler) ReportInstallations(c *gin.Context) {
 
 	agent, err := h.store.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "agent")
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *AgentHandler) ClaimDeployments(c *gin.Context) {
 
 	agent, err := h.store.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "agent")
 		return
 	}
 
@@ -160,13 +160,13 @@ func (h *AgentHandler) ReportDeploymentResult(c *gin.Context) {
 
 	agent, err := h.store.GetAgent(c.Request.Context(), agentID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "agent")
 		return
 	}
 
 	job, err := h.store.GetDeploymentJob(c.Request.Context(), result.JobID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		respondLookup(c, err, "deployment job")
 		return
 	}
 
