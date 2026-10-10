@@ -713,6 +713,30 @@ func (ix *index) analyse(h *handlerFn, used map[string]bool) handlerInfo {
 			return true
 		}
 
+		// `respondLookup(c, err, "certificate")` answers 404 when the record
+		// does not exist and 500 when it could not be read. It is the one
+		// helper that writes the response for a handler, so it is read here
+		// rather than leaving both statuses out of the inventory.
+		if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "respondLookup" && len(call.Args) == 3 {
+			merge := func(code int, msg string) {
+				r, ok := byStatus[code]
+				if !ok {
+					r = &Response{Status: code}
+					byStatus[code] = r
+				}
+				if msg != "" && !slices.Contains(r.Errors, msg) {
+					r.Errors = append(r.Errors, msg)
+				}
+			}
+			merge(404, "")
+			if what, ok := str(call.Args[2]); ok {
+				merge(500, "could not read the "+what)
+			} else {
+				merge(500, "")
+			}
+			return true
+		}
+
 		sel, ok := call.Fun.(*ast.SelectorExpr)
 		if !ok {
 			return true
