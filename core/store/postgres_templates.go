@@ -177,7 +177,7 @@ func (s *PostgresStore) GetCertificateTemplate(ctx context.Context, id string) (
 	t, err := scanCertificateTemplate(s.pool.QueryRow(ctx,
 		"SELECT "+certificateTemplateColumns+
 			" FROM public.certificate_templates WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("certificate template %s %w", id, ErrNotFound)
 	}
 	return t, err
