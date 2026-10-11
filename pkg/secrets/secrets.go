@@ -39,6 +39,7 @@ const (
 	ContextNotificationConfig    = "notification_channel:config"
 	ContextCloudConnectionConfig = "cloud_connection:config"
 	ContextACMEAccountKey        = "ca_account:acme_account_key"
+	ContextACMEEABKey            = "acme_eab:hmac_key"
 )
 
 const (

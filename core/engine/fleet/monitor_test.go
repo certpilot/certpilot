@@ -176,3 +176,30 @@ func TestARevokedAgentIsNotReportedAsMissing(t *testing.T) {
 		t.Fatalf("a revoked agent should not be reported as missing, got %d", len(stale))
 	}
 }
+
+// A spent ACME nonce is kept only so that it cannot be spent twice, and it
+// cannot be spent at all once it has expired. Nothing else deletes the rows, so
+// the sweep that already runs for the agent replay guard does.
+func TestExpiredACMENoncesAreSweptAndLiveOnesAreKept(t *testing.T) {
+	st := store.NewMemoryStore()
+	broker := events.NewBroker()
+	defer broker.Stop()
+	ctx := context.Background()
+
+	expired, live := []byte("expired-nonce-hash-0000000000000"), []byte("live-nonce-hash-0000000000000000")
+	if ok, err := st.ClaimACMENonce(ctx, expired, time.Now().Add(-time.Minute)); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if ok, err := st.ClaimACMENonce(ctx, live, time.Now().Add(time.Hour)); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+
+	NewMonitor(st, broker).RunSweep(ctx)
+
+	if ok, _ := st.ClaimACMENonce(ctx, expired, time.Now().Add(time.Hour)); !ok {
+		t.Error("the expired nonce row was not swept")
+	}
+	if ok, _ := st.ClaimACMENonce(ctx, live, time.Now().Add(time.Hour)); ok {
+		t.Error("a live nonce was swept, so it could be spent twice")
+	}
+}

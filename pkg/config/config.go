@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -17,6 +18,23 @@ type CoreConfig struct {
 	Renewal RenewalConfig `yaml:"renewal"`
 	Logging LoggingConfig `yaml:"logging"`
 	Secrets SecretsConfig `yaml:"secrets"`
+	ACME    ACMEConfig    `yaml:"acme"`
+}
+
+// ACMEConfig controls the ACME server (RFC 8555), which lets certbot, acme.sh,
+// win-acme and Caddy get certificates from CertPilot without the host agent.
+//
+// Off by default. It opens unauthenticated endpoints on the core's listener,
+// so serving them is something an operator decides, not something an upgrade
+// does.
+type ACMEConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// ExternalURL is the address clients reach this core on, such as
+	// https://certpilot.example.com. Every URL the server hands out is built
+	// from it, and a request is refused unless it was signed for one of them,
+	// so it has to be what a client types. Required in production, where the
+	// core is almost always behind something that changes the scheme or host.
+	ExternalURL string `yaml:"external_url"`
 }
 
 // SecretsConfig says where the key encryption key comes from.
@@ -288,6 +306,14 @@ func (c *CoreConfig) Validate() error {
 	default:
 		return fmt.Errorf("config: secrets.kek_provider %q is not one of env, file, vault",
 			c.Secrets.KEKProvider)
+	}
+
+	if c.ACME.Enabled && c.Server.IsProduction() {
+		if !strings.HasPrefix(c.ACME.ExternalURL, "https://") {
+			return fmt.Errorf("config: acme.enabled needs acme.external_url set to the https address clients use; " +
+				"an ACME client signs every request for the URL it was given, and a core that guesses its own " +
+				"address behind a proxy will refuse them all")
+		}
 	}
 
 	if c.Server.IsProduction() {

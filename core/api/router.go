@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/certpilot/certpilot/core/acmeserver"
 	"github.com/certpilot/certpilot/core/engine/cloudsync"
 	"github.com/certpilot/certpilot/core/engine/ctlog"
 	"github.com/certpilot/certpilot/core/engine/deploy"
@@ -116,6 +117,20 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 	// readable by script on that origin. Doing the exchange here means the
 	// browser gets a session cookie and never handles a token at all.
 	engine.POST("/api/v1/auth/callback", sessionHandler.Callback)
+
+	// ── ACME ──
+	//
+	// Off unless the operator turned it on: these are unauthenticated endpoints
+	// on the core's listener. Mounted outside the authenticated group because an
+	// ACME client has no session; every request that changes anything is
+	// authenticated by the signature on its body instead.
+	if deps.Config.ACME.Enabled {
+		acmeserver.New(acmeserver.Config{
+			Store:       deps.Store,
+			Keyring:     deps.Keyring,
+			ExternalURL: deps.Config.ACME.ExternalURL,
+		}).Register(engine)
+	}
 
 	// ── The agent API ──
 	//
@@ -380,6 +395,16 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 		v1.GET("/agent-enrol-tokens", middleware.RequireRole(middleware.RoleAdmin), agentHandler.ListEnrolTokens)
 		v1.POST("/agent-enrol-tokens", middleware.RequireRole(middleware.RoleAdmin), agentHandler.CreateEnrolToken)
 		v1.DELETE("/agent-enrol-tokens/:id", middleware.RequireRole(middleware.RoleAdmin), agentHandler.RevokeEnrolToken)
+
+		// ── ACME credentials ──
+		//
+		// Admin throughout, including the list. A credential is the permission
+		// to register an ACME client, so the list is a map of who can obtain
+		// certificates under each template.
+		acmeHandler := NewACMECredentialHandler(deps.Store, deps.Keyring, deps.Config)
+		v1.GET("/acme/credentials", middleware.RequireRole(middleware.RoleAdmin), acmeHandler.List)
+		v1.POST("/acme/credentials", middleware.RequireRole(middleware.RoleAdmin), acmeHandler.Create)
+		v1.DELETE("/acme/credentials/:id", middleware.RequireRole(middleware.RoleAdmin), acmeHandler.Revoke)
 
 		// ── Accounts ──
 		//

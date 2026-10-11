@@ -144,6 +144,17 @@ func (m *Monitor) RunSweep(ctx context.Context) {
 		slog.Debug("swept expired agent request signatures", "removed", removed)
 	}
 
+	// ACME nonces that have expired. The ACME server remembers each nonce it has
+	// accepted so that none works twice, and past its expiry a nonce is refused
+	// on its own, so the row is no longer protecting anything. Here because this
+	// is the sweep that already runs, not because it has anything to do with
+	// agents.
+	if removed, err := m.store.SweepACMENonces(ctx, now); err != nil {
+		slog.Warn("could not sweep expired ACME nonces", "error", err)
+	} else if removed > 0 {
+		slog.Debug("swept expired ACME nonces", "removed", removed)
+	}
+
 	agents, err := m.store.GetStaleAgents(ctx, now, batch)
 	if err != nil {
 		slog.Error("could not read the agent fleet; hosts that have gone quiet are not being reported", "error", err)
