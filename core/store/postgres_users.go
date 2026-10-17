@@ -107,7 +107,7 @@ func (s *PostgresStore) ResolveUser(ctx context.Context, identity UserIdentity, 
 func (s *PostgresStore) GetUser(ctx context.Context, id string) (*User, error) {
 	row := s.pool.QueryRow(ctx, `SELECT `+userColumns+` FROM public.users WHERE id = $1`, id)
 	u, err := scanUser(row)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, nil
 	}
 	if err != nil {

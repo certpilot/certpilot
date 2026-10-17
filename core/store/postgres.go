@@ -520,7 +520,7 @@ func (s *PostgresStore) GetCertificatePrivateKey(ctx context.Context, id string)
 	var sealed *string
 	err := s.pool.QueryRow(ctx,
 		"SELECT private_key_encrypted FROM public.certificates WHERE id = $1", id).Scan(&sealed)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return "", fmt.Errorf("certificate %s %w", id, ErrNotFound)
 	}
 	if err != nil {
@@ -709,7 +709,7 @@ func (s *PostgresStore) GetCAAuthority(ctx context.Context, id string) (*CAAutho
 	// a single CA and may want the certificate itself.
 	ca, err := scanCAAuthority(s.pool.QueryRow(ctx,
 		"SELECT "+caColumns(true)+" FROM public.ca_authorities WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("CA authority %s %w", id, ErrNotFound)
 	}
 	if err != nil {
@@ -887,7 +887,12 @@ func (s *PostgresStore) GetCAChain(ctx context.Context, id string) ([]*CAAuthori
 		}
 		chain = append(chain, ca)
 	}
-	return chain, rows.Err()
+	// PostgreSQL reports an id that is not a uuid here, once the rows are read,
+	// and not when the query is sent. It names no chain.
+	if err := rows.Err(); err != nil && !noSuchRow(err) {
+		return nil, err
+	}
+	return chain, nil
 }
 
 // ── CA Accounts ─────────────────────────────────────────
@@ -1021,7 +1026,7 @@ func (s *PostgresStore) ListDeploymentTargets(ctx context.Context) ([]*Deploymen
 func (s *PostgresStore) GetDeploymentTarget(ctx context.Context, id string) (*DeploymentTarget, error) {
 	t, err := scanDeploymentTarget(s.pool.QueryRow(ctx,
 		"SELECT "+deploymentTargetColumns+" FROM public.deployment_targets WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("deployment target %s %w", id, ErrNotFound)
 	}
 	return t, err
@@ -1156,7 +1161,7 @@ func (s *PostgresStore) GetCertificateDeployment(ctx context.Context, id string)
 		 FROM public.certificate_deployments d
 		 LEFT JOIN public.deployment_targets t ON t.id = d.target_id
 		 WHERE d.id = $1`, id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("deployment %s %w", id, ErrNotFound)
 	}
 	return d, err
@@ -1658,7 +1663,7 @@ func (s *PostgresStore) ListNotificationChannels(ctx context.Context) ([]*Notifi
 func (s *PostgresStore) GetNotificationChannel(ctx context.Context, id string) (*NotificationChannel, error) {
 	ch, err := scanNotificationChannel(s.pool.QueryRow(ctx,
 		"SELECT "+notificationChannelColumns+" FROM public.notification_channels WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("notification channel %s %w", id, ErrNotFound)
 	}
 	return ch, err
@@ -1963,7 +1968,7 @@ func (s *PostgresStore) UpdateDiscoveryScan(ctx context.Context, scan *Discovery
 func (s *PostgresStore) GetDiscoveryScan(ctx context.Context, id string) (*DiscoveryScan, error) {
 	scan, err := scanDiscoveryScan(s.pool.QueryRow(ctx,
 		"SELECT "+discoveryScanColumns+" FROM public.discovery_scans WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("discovery scan %s %w", id, ErrNotFound)
 	}
 	return scan, err
@@ -2176,7 +2181,7 @@ func (s *PostgresStore) ListDiscoveryResults(ctx context.Context, filter Discove
 func (s *PostgresStore) GetDiscoveryResult(ctx context.Context, id string) (*DiscoveryResult, error) {
 	r, err := scanDiscoveryResult(s.pool.QueryRow(ctx,
 		"SELECT "+discoveryResultColumns+" FROM public.discovery_results WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("discovery result %s %w", id, ErrNotFound)
 	}
 	return r, err
@@ -2298,7 +2303,7 @@ func (s *PostgresStore) ListDiscoverySchedules(ctx context.Context) ([]*Discover
 func (s *PostgresStore) GetDiscoverySchedule(ctx context.Context, id string) (*DiscoverySchedule, error) {
 	sched, err := scanDiscoverySchedule(s.pool.QueryRow(ctx,
 		"SELECT "+discoveryScheduleColumns+" FROM public.discovery_schedules WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("discovery schedule %s %w", id, ErrNotFound)
 	}
 	return sched, err
@@ -2445,7 +2450,7 @@ func (s *PostgresStore) ListCTMonitors(ctx context.Context) ([]*CTMonitor, error
 func (s *PostgresStore) GetCTMonitor(ctx context.Context, id string) (*CTMonitor, error) {
 	m, err := scanCTMonitor(s.pool.QueryRow(ctx,
 		"SELECT "+ctMonitorColumns+" FROM public.ct_monitors WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("certificate transparency monitor %s %w", id, ErrNotFound)
 	}
 	return m, err
@@ -2726,7 +2731,7 @@ func (s *PostgresStore) ListCloudConnections(ctx context.Context) ([]*CloudConne
 func (s *PostgresStore) GetCloudConnection(ctx context.Context, id string) (*CloudConnection, error) {
 	c, err := scanCloudConnection(s.pool.QueryRow(ctx,
 		"SELECT "+cloudConnectionColumns+" FROM public.cloud_connections WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("cloud connection %s %w", id, ErrNotFound)
 	}
 	return c, err
@@ -3062,7 +3067,7 @@ func (s *PostgresStore) ListCloudCertificates(ctx context.Context, filter CloudC
 func (s *PostgresStore) GetCloudCertificate(ctx context.Context, id string) (*CloudCertificate, error) {
 	c, err := scanCloudCertificate(s.pool.QueryRow(ctx,
 		"SELECT "+cloudCertificateColumns+" FROM public.cloud_certificates WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("cloud certificate %s %w", id, ErrNotFound)
 	}
 	return c, err
@@ -3263,7 +3268,7 @@ func (s *PostgresStore) CompleteRenewalJob(ctx context.Context, id, status strin
 func (s *PostgresStore) GetRenewalJob(ctx context.Context, id string) (*RenewalJob, error) {
 	job, err := scanRenewalJob(s.pool.QueryRow(ctx,
 		"SELECT "+renewalJobColumns+" FROM public.renewal_jobs WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("renewal job %s %w", id, ErrNotFound)
 	}
 	return job, err
@@ -3812,7 +3817,7 @@ func (s *PostgresStore) CompleteDeploymentJob(ctx context.Context, id, status st
 func (s *PostgresStore) GetDeploymentJob(ctx context.Context, id string) (*DeploymentJob, error) {
 	job, err := scanDeploymentJob(s.pool.QueryRow(ctx,
 		"SELECT "+deploymentJobColumns+" FROM public.deployment_jobs WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("deployment job %s %w", id, ErrNotFound)
 	}
 	return job, err
@@ -3995,7 +4000,7 @@ func agentStalePredicate(now string) string {
 func (s *PostgresStore) GetAgent(ctx context.Context, id string) (*Agent, error) {
 	a, err := scanAgent(s.pool.QueryRow(ctx,
 		"SELECT "+agentColumns+" FROM public.agents WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("agent %s %w", id, ErrNotFound)
 	}
 	return a, err
@@ -4525,7 +4530,7 @@ func (s *PostgresStore) ListTemplateGrants(ctx context.Context) ([]*TemplateGran
 func (s *PostgresStore) GetTemplateGrant(ctx context.Context, id string) (*TemplateGrant, error) {
 	g, err := scanTemplateGrant(s.pool.QueryRow(ctx,
 		"SELECT "+templateGrantColumns+" FROM public.template_grants WHERE id = $1", id))
-	if errors.Is(err, pgx.ErrNoRows) {
+	if noSuchRow(err) {
 		return nil, fmt.Errorf("grant %s %w", id, ErrNotFound)
 	}
 	return g, err
@@ -4602,7 +4607,12 @@ func (s *PostgresStore) GetGrantsForAgent(ctx context.Context, agentID string) (
 		}
 		out = append(out, g)
 	}
-	return out, rows.Err()
+	// An id that is not a uuid is no agent and holds no grants. PostgreSQL says
+	// so here, after the rows are read, not when the query is sent.
+	if err := rows.Err(); err != nil && !noSuchRow(err) {
+		return nil, err
+	}
+	return out, nil
 }
 
 func orEmptyMap(m map[string]string) map[string]string {
