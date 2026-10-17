@@ -17,6 +17,7 @@ import (
 type accountJSON struct {
 	Status  string   `json:"status"`
 	Contact []string `json:"contact,omitempty"`
+	Orders  string   `json:"orders"`
 }
 
 type newAccountPayload struct {
@@ -32,7 +33,8 @@ func (s *Server) accountURL(c *gin.Context, tpl *store.CertificateTemplate, id s
 
 func (s *Server) writeAccount(c *gin.Context, status int, tpl *store.CertificateTemplate, a *store.ACMEAccount) {
 	c.Header("Location", s.accountURL(c, tpl, a.ID))
-	c.JSON(status, accountJSON{Status: a.Status, Contact: a.Contacts})
+	c.JSON(status, accountJSON{Status: a.Status, Contact: a.Contacts,
+		Orders: s.accountURL(c, tpl, a.ID) + "/orders"})
 }
 
 // newAccount handles POST /acme/<template>/new-account.

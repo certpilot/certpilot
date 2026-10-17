@@ -174,3 +174,72 @@ func (m *MemoryStore) SweepACMENonces(ctx context.Context, now time.Time) (int64
 	}
 	return n, nil
 }
+
+func cloneACMEOrder(o *ACMEOrder) *ACMEOrder {
+	c := *o
+	c.Identifiers = append([]ACMEIdentifier(nil), o.Identifiers...)
+	return &c
+}
+
+func (m *MemoryStore) CreateACMEOrder(ctx context.Context, o *ACMEOrder) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.acmeAccounts[o.AccountID]; !ok {
+		return fmt.Errorf("ACME account %s %w", o.AccountID, ErrNotFound)
+	}
+	stored := cloneACMEOrder(o)
+	stored.ID = uuid.New().String()
+	stored.CreatedAt = time.Now()
+	stored.UpdatedAt = stored.CreatedAt
+	m.acmeOrders[stored.ID] = stored
+	o.ID, o.CreatedAt, o.UpdatedAt = stored.ID, stored.CreatedAt, stored.UpdatedAt
+	return nil
+}
+
+func (m *MemoryStore) GetACMEOrder(ctx context.Context, id string) (*ACMEOrder, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	o, ok := m.acmeOrders[id]
+	if !ok {
+		return nil, fmt.Errorf("ACME order %s %w", id, ErrNotFound)
+	}
+	return cloneACMEOrder(o), nil
+}
+
+func (m *MemoryStore) ListACMEOrdersByAccount(ctx context.Context, accountID string) ([]*ACMEOrder, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := []*ACMEOrder{}
+	for _, o := range m.acmeOrders {
+		if o.AccountID == accountID {
+			out = append(out, cloneACMEOrder(o))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
+func (m *MemoryStore) ClaimACMEOrderForFinalize(ctx context.Context, id string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	o, ok := m.acmeOrders[id]
+	if !ok || o.Status != ACMEOrderReady || !o.ExpiresAt.After(time.Now()) {
+		return false, nil
+	}
+	o.Status = ACMEOrderProcessing
+	o.UpdatedAt = time.Now()
+	return true, nil
+}
+
+func (m *MemoryStore) UpdateACMEOrder(ctx context.Context, o *ACMEOrder) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	stored, ok := m.acmeOrders[o.ID]
+	if !ok {
+		return fmt.Errorf("ACME order %s %w", o.ID, ErrNotFound)
+	}
+	stored.Status, stored.CertificateID, stored.Error = o.Status, o.CertificateID, o.Error
+	stored.UpdatedAt = time.Now()
+	o.UpdatedAt = stored.UpdatedAt
+	return nil
+}

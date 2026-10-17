@@ -164,3 +164,85 @@ func (s *PostgresStore) SweepACMENonces(ctx context.Context, now time.Time) (int
 	}
 	return tag.RowsAffected(), nil
 }
+
+const acmeOrderColumns = `id, account_id, status, identifiers, expires_at, certificate_id, coalesce(error, ''), created_at, updated_at`
+
+func scanACMEOrder(row pgx.Row) (*ACMEOrder, error) {
+	o := &ACMEOrder{}
+	var identifiers []byte
+	if err := row.Scan(&o.ID, &o.AccountID, &o.Status, &identifiers, &o.ExpiresAt, &o.CertificateID,
+		&o.Error, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(identifiers, &o.Identifiers); err != nil {
+		return nil, fmt.Errorf("store: could not read an ACME order's identifiers: %w", err)
+	}
+	return o, nil
+}
+
+func (s *PostgresStore) CreateACMEOrder(ctx context.Context, o *ACMEOrder) error {
+	identifiers, err := json.Marshal(o.Identifiers)
+	if err != nil {
+		return err
+	}
+	return s.pool.QueryRow(ctx, `
+		INSERT INTO public.acme_orders (account_id, status, identifiers, expires_at)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at, updated_at`,
+		o.AccountID, o.Status, identifiers, o.ExpiresAt,
+	).Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt)
+}
+
+func (s *PostgresStore) GetACMEOrder(ctx context.Context, id string) (*ACMEOrder, error) {
+	o, err := scanACMEOrder(s.pool.QueryRow(ctx,
+		"SELECT "+acmeOrderColumns+" FROM public.acme_orders WHERE id = $1", id))
+	if noSuchRow(err) {
+		return nil, fmt.Errorf("ACME order %s %w", id, ErrNotFound)
+	}
+	return o, err
+}
+
+func (s *PostgresStore) ListACMEOrdersByAccount(ctx context.Context, accountID string) ([]*ACMEOrder, error) {
+	rows, err := s.pool.Query(ctx,
+		"SELECT "+acmeOrderColumns+" FROM public.acme_orders WHERE account_id = $1 ORDER BY created_at DESC LIMIT 1000",
+		accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*ACMEOrder{}
+	for rows.Next() {
+		o, err := scanACMEOrder(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+func (s *PostgresStore) ClaimACMEOrderForFinalize(ctx context.Context, id string) (bool, error) {
+	// The state check is in the WHERE clause, so two replicas finalising the
+	// same order cannot both see it ready.
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE public.acme_orders SET status = 'processing', updated_at = now()
+		WHERE id = $1 AND status = 'ready' AND expires_at > now()`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+func (s *PostgresStore) UpdateACMEOrder(ctx context.Context, o *ACMEOrder) error {
+	var problem *string
+	if o.Error != "" {
+		problem = &o.Error
+	}
+	err := s.pool.QueryRow(ctx, `
+		UPDATE public.acme_orders SET status = $2, certificate_id = $3, error = $4, updated_at = now()
+		WHERE id = $1 RETURNING updated_at`, o.ID, o.Status, o.CertificateID, problem).Scan(&o.UpdatedAt)
+	if noSuchRow(err) {
+		return fmt.Errorf("ACME order %s %w", o.ID, ErrNotFound)
+	}
+	return err
+}

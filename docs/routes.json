@@ -3862,7 +3862,7 @@
         }
       ],
       "section": "ACME credentials",
-      "source_line": 405
+      "source_line": 409
     },
     {
       "auth": "bearer",
@@ -3939,7 +3939,7 @@
         }
       ],
       "section": "ACME credentials",
-      "source_line": 406
+      "source_line": 410
     },
     {
       "auth": "bearer",
@@ -3976,7 +3976,7 @@
         }
       ],
       "section": "ACME credentials",
-      "source_line": 407
+      "source_line": 411
     },
     {
       "auth": "bearer",
@@ -4044,7 +4044,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 377
+      "source_line": 381
     },
     {
       "auth": "bearer",
@@ -4081,7 +4081,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 395
+      "source_line": 399
     },
     {
       "auth": "bearer",
@@ -4156,7 +4156,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 396
+      "source_line": 400
     },
     {
       "auth": "bearer",
@@ -4187,7 +4187,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 397
+      "source_line": 401
     },
     {
       "auth": "bearer",
@@ -4225,7 +4225,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 388
+      "source_line": 392
     },
     {
       "auth": "bearer",
@@ -4327,7 +4327,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 389
+      "source_line": 393
     },
     {
       "auth": "bearer",
@@ -4358,7 +4358,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 390
+      "source_line": 394
     },
     {
       "auth": "bearer",
@@ -4417,7 +4417,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 382
+      "source_line": 386
     },
     {
       "auth": "agent-signature",
@@ -4492,7 +4492,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 159
+      "source_line": 163
     },
     {
       "auth": "agent-signature",
@@ -4525,7 +4525,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 168
+      "source_line": 172
     },
     {
       "auth": "agent-signature",
@@ -4616,7 +4616,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 169
+      "source_line": 173
     },
     {
       "auth": "agent-enrolment-token",
@@ -4726,7 +4726,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 148
+      "source_line": 152
     },
     {
       "auth": "agent-signature",
@@ -4790,7 +4790,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 151
+      "source_line": 155
     },
     {
       "auth": "agent-signature",
@@ -4868,7 +4868,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 163
+      "source_line": 167
     },
     {
       "auth": "agent-signature",
@@ -4953,7 +4953,7 @@
         }
       ],
       "section": "The agent API",
-      "source_line": 155
+      "source_line": 159
     },
     {
       "auth": "bearer",
@@ -5012,7 +5012,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 367
+      "source_line": 371
     },
     {
       "auth": "bearer",
@@ -5054,7 +5054,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 371
+      "source_line": 375
     },
     {
       "auth": "bearer",
@@ -5096,7 +5096,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 368
+      "source_line": 372
     },
     {
       "auth": "bearer",
@@ -5135,7 +5135,7 @@
         }
       ],
       "section": "Agents",
-      "source_line": 370
+      "source_line": 374
     },
     {
       "auth": "bearer",
@@ -5170,7 +5170,7 @@
         }
       ],
       "section": "Audit record integrity",
-      "source_line": 212
+      "source_line": 216
     },
     {
       "auth": "none",
@@ -5256,7 +5256,7 @@
         }
       ],
       "section": "Sign-in discovery",
-      "source_line": 119
+      "source_line": 120
     },
     {
       "auth": "none",
@@ -5274,7 +5274,7 @@
         }
       ],
       "section": "Sign-in discovery",
-      "source_line": 105
+      "source_line": 106
     },
     {
       "auth": "none",
@@ -5325,7 +5325,7 @@
         }
       ],
       "section": "Sign-in discovery",
-      "source_line": 111
+      "source_line": 112
     },
     {
       "auth": "bearer",
@@ -5350,7 +5350,7 @@
         }
       ],
       "section": "The caller's own identity",
-      "source_line": 196
+      "source_line": 200
     },
     {
       "auth": "bearer",
@@ -5414,7 +5414,7 @@
         }
       ],
       "section": "The caller's own identity",
-      "source_line": 200
+      "source_line": 204
     },
     {
       "auth": "bearer",
@@ -5447,7 +5447,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 253
+      "source_line": 257
     },
     {
       "auth": "bearer",
@@ -5566,7 +5566,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 254
+      "source_line": 258
     },
     {
       "auth": "bearer",
@@ -5597,7 +5597,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 256
+      "source_line": 260
     },
     {
       "auth": "bearer",
@@ -5646,7 +5646,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 255
+      "source_line": 259
     },
     {
       "auth": "bearer",
@@ -5715,7 +5715,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 259
+      "source_line": 263
     },
     {
       "auth": "bearer",
@@ -5748,7 +5748,7 @@
         }
       ],
       "section": "Certificate templates",
-      "source_line": 466
+      "source_line": 470
     },
     {
       "auth": "bearer",
@@ -5969,7 +5969,7 @@
         }
       ],
       "section": "Certificate templates",
-      "source_line": 468
+      "source_line": 472
     },
     {
       "auth": "bearer",
@@ -6009,7 +6009,7 @@
         }
       ],
       "section": "Certificate templates",
-      "source_line": 470
+      "source_line": 474
     },
     {
       "auth": "bearer",
@@ -6037,7 +6037,7 @@
         }
       ],
       "section": "Certificate templates",
-      "source_line": 467
+      "source_line": 471
     },
     {
       "auth": "bearer",
@@ -6267,7 +6267,7 @@
         }
       ],
       "section": "Certificate templates",
-      "source_line": 469
+      "source_line": 473
     },
     {
       "auth": "bearer",
@@ -6324,7 +6324,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 215
+      "source_line": 219
     },
     {
       "auth": "bearer",
@@ -6469,7 +6469,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 216
+      "source_line": 220
     },
     {
       "auth": "bearer",
@@ -6525,7 +6525,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 230
+      "source_line": 234
     },
     {
       "auth": "bearer",
@@ -6555,7 +6555,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 217
+      "source_line": 221
     },
     {
       "auth": "bearer",
@@ -6618,7 +6618,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 220
+      "source_line": 224
     },
     {
       "auth": "bearer",
@@ -6670,7 +6670,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 349
+      "source_line": 353
     },
     {
       "auth": "bearer",
@@ -6714,7 +6714,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 229
+      "source_line": 233
     },
     {
       "auth": "bearer",
@@ -6760,7 +6760,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 221
+      "source_line": 225
     },
     {
       "auth": "bearer",
@@ -6808,7 +6808,7 @@
         }
       ],
       "section": "Renewal queue",
-      "source_line": 320
+      "source_line": 324
     },
     {
       "auth": "bearer",
@@ -6888,7 +6888,7 @@
         }
       ],
       "section": "Certificates",
-      "source_line": 228
+      "source_line": 232
     },
     {
       "auth": "bearer",
@@ -6935,7 +6935,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 342
+      "source_line": 346
     },
     {
       "auth": "bearer",
@@ -7010,7 +7010,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 343
+      "source_line": 347
     },
     {
       "auth": "bearer",
@@ -7050,7 +7050,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 344
+      "source_line": 348
     },
     {
       "auth": "bearer",
@@ -7119,7 +7119,7 @@
         }
       ],
       "section": "Renewal queue",
-      "source_line": 322
+      "source_line": 326
     },
     {
       "auth": "bearer",
@@ -7184,7 +7184,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 306
+      "source_line": 310
     },
     {
       "auth": "bearer",
@@ -7237,7 +7237,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 299
+      "source_line": 303
     },
     {
       "auth": "bearer",
@@ -7310,7 +7310,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 300
+      "source_line": 304
     },
     {
       "auth": "bearer",
@@ -7346,7 +7346,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 302
+      "source_line": 306
     },
     {
       "auth": "bearer",
@@ -7422,7 +7422,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 301
+      "source_line": 305
     },
     {
       "auth": "bearer",
@@ -7498,7 +7498,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 305
+      "source_line": 309
     },
     {
       "auth": "bearer",
@@ -7589,7 +7589,7 @@
         }
       ],
       "section": "Cloud inventory",
-      "source_line": 307
+      "source_line": 311
     },
     {
       "auth": "bearer",
@@ -7643,7 +7643,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 293
+      "source_line": 297
     },
     {
       "auth": "bearer",
@@ -7691,7 +7691,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 288
+      "source_line": 292
     },
     {
       "auth": "bearer",
@@ -7757,7 +7757,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 289
+      "source_line": 293
     },
     {
       "auth": "bearer",
@@ -7793,7 +7793,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 291
+      "source_line": 295
     },
     {
       "auth": "bearer",
@@ -7863,7 +7863,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 290
+      "source_line": 294
     },
     {
       "auth": "bearer",
@@ -7934,7 +7934,7 @@
         }
       ],
       "section": "Certificate Transparency",
-      "source_line": 292
+      "source_line": 296
     },
     {
       "auth": "bearer",
@@ -7993,7 +7993,7 @@
         }
       ],
       "section": "Dashboard",
-      "source_line": 205
+      "source_line": 209
     },
     {
       "auth": "bearer",
@@ -8026,7 +8026,7 @@
         }
       ],
       "section": "Dashboard",
-      "source_line": 204
+      "source_line": 208
     },
     {
       "auth": "bearer",
@@ -8047,7 +8047,7 @@
         }
       ],
       "section": "Dashboard",
-      "source_line": 203
+      "source_line": 207
     },
     {
       "auth": "bearer",
@@ -8090,7 +8090,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 332
+      "source_line": 336
     },
     {
       "auth": "bearer",
@@ -8163,7 +8163,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 333
+      "source_line": 337
     },
     {
       "auth": "bearer",
@@ -8199,7 +8199,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 338
+      "source_line": 342
     },
     {
       "auth": "bearer",
@@ -8284,7 +8284,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 334
+      "source_line": 338
     },
     {
       "auth": "bearer",
@@ -8358,7 +8358,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 359
+      "source_line": 363
     },
     {
       "auth": "bearer",
@@ -8398,7 +8398,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 361
+      "source_line": 365
     },
     {
       "auth": "bearer",
@@ -8435,7 +8435,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 360
+      "source_line": 364
     },
     {
       "auth": "bearer",
@@ -8548,7 +8548,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 267
+      "source_line": 271
     },
     {
       "auth": "bearer",
@@ -8617,7 +8617,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 275
+      "source_line": 279
     },
     {
       "auth": "bearer",
@@ -8740,7 +8740,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 266
+      "source_line": 270
     },
     {
       "auth": "bearer",
@@ -8784,7 +8784,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 270
+      "source_line": 274
     },
     {
       "auth": "bearer",
@@ -8851,7 +8851,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 271
+      "source_line": 275
     },
     {
       "auth": "bearer",
@@ -8893,7 +8893,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 274
+      "source_line": 278
     },
     {
       "auth": "bearer",
@@ -8931,7 +8931,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 279
+      "source_line": 283
     },
     {
       "auth": "bearer",
@@ -9004,7 +9004,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 280
+      "source_line": 284
     },
     {
       "auth": "bearer",
@@ -9040,7 +9040,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 282
+      "source_line": 286
     },
     {
       "auth": "bearer",
@@ -9117,7 +9117,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 281
+      "source_line": 285
     },
     {
       "auth": "bearer",
@@ -9171,7 +9171,7 @@
         }
       ],
       "section": "Discovery",
-      "source_line": 283
+      "source_line": 287
     },
     {
       "auth": "bearer",
@@ -9203,7 +9203,7 @@
         }
       ],
       "section": "Display Tokens",
-      "source_line": 425
+      "source_line": 429
     },
     {
       "auth": "bearer",
@@ -9265,7 +9265,7 @@
         }
       ],
       "section": "Display Tokens",
-      "source_line": 426
+      "source_line": 430
     },
     {
       "auth": "bearer",
@@ -9302,7 +9302,7 @@
         }
       ],
       "section": "Display Tokens",
-      "source_line": 427
+      "source_line": 431
     },
     {
       "auth": "bearer",
@@ -9321,7 +9321,7 @@
         }
       ],
       "section": "Live event stream",
-      "source_line": 189
+      "source_line": 193
     },
     {
       "auth": "bearer",
@@ -9350,7 +9350,7 @@
         }
       ],
       "section": "CA Accounts \u0026 Gateways",
-      "source_line": 260
+      "source_line": 264
     },
     {
       "auth": "bearer",
@@ -9368,7 +9368,7 @@
         }
       ],
       "section": "The caller's own identity",
-      "source_line": 195
+      "source_line": 199
     },
     {
       "auth": "bearer",
@@ -9406,7 +9406,7 @@
         }
       ],
       "section": "Custom metadata fields",
-      "source_line": 447
+      "source_line": 451
     },
     {
       "auth": "bearer",
@@ -9485,7 +9485,7 @@
         }
       ],
       "section": "Custom metadata fields",
-      "source_line": 448
+      "source_line": 452
     },
     {
       "auth": "bearer",
@@ -9527,7 +9527,7 @@
         }
       ],
       "section": "Custom metadata fields",
-      "source_line": 450
+      "source_line": 454
     },
     {
       "auth": "bearer",
@@ -9612,7 +9612,7 @@
         }
       ],
       "section": "Custom metadata fields",
-      "source_line": 449
+      "source_line": 453
     },
     {
       "auth": "bearer",
@@ -9655,7 +9655,7 @@
         }
       ],
       "section": "Notification channels",
-      "source_line": 434
+      "source_line": 438
     },
     {
       "auth": "bearer",
@@ -9735,7 +9735,7 @@
         }
       ],
       "section": "Notification channels",
-      "source_line": 435
+      "source_line": 439
     },
     {
       "auth": "bearer",
@@ -9772,7 +9772,7 @@
         }
       ],
       "section": "Notification channels",
-      "source_line": 437
+      "source_line": 441
     },
     {
       "auth": "bearer",
@@ -9855,7 +9855,7 @@
         }
       ],
       "section": "Notification channels",
-      "source_line": 436
+      "source_line": 440
     },
     {
       "auth": "bearer",
@@ -9907,7 +9907,7 @@
         }
       ],
       "section": "Notification channels",
-      "source_line": 440
+      "source_line": 444
     },
     {
       "auth": "bearer",
@@ -9957,7 +9957,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 233
+      "source_line": 237
     },
     {
       "auth": "bearer",
@@ -10029,7 +10029,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 234
+      "source_line": 238
     },
     {
       "auth": "bearer",
@@ -10060,7 +10060,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 243
+      "source_line": 247
     },
     {
       "auth": "bearer",
@@ -10090,7 +10090,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 240
+      "source_line": 244
     },
     {
       "auth": "bearer",
@@ -10127,7 +10127,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 248
+      "source_line": 252
     },
     {
       "auth": "bearer",
@@ -10198,7 +10198,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 247
+      "source_line": 251
     },
     {
       "auth": "bearer",
@@ -10234,7 +10234,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 249
+      "source_line": 253
     },
     {
       "auth": "bearer",
@@ -10265,7 +10265,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 241
+      "source_line": 245
     },
     {
       "auth": "bearer",
@@ -10295,7 +10295,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 242
+      "source_line": 246
     },
     {
       "auth": "bearer",
@@ -10353,7 +10353,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 250
+      "source_line": 254
     },
     {
       "auth": "bearer",
@@ -10403,7 +10403,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 239
+      "source_line": 243
     },
     {
       "auth": "bearer",
@@ -10430,7 +10430,7 @@
         }
       ],
       "section": "PKI / CA Management",
-      "source_line": 244
+      "source_line": 248
     },
     {
       "auth": "bearer",
@@ -10463,7 +10463,7 @@
         }
       ],
       "section": "Policies",
-      "source_line": 453
+      "source_line": 457
     },
     {
       "auth": "bearer",
@@ -10536,7 +10536,7 @@
         }
       ],
       "section": "Policies",
-      "source_line": 455
+      "source_line": 459
     },
     {
       "auth": "bearer",
@@ -10567,7 +10567,7 @@
         }
       ],
       "section": "Policies",
-      "source_line": 457
+      "source_line": 461
     },
     {
       "auth": "bearer",
@@ -10597,7 +10597,7 @@
         }
       ],
       "section": "Policies",
-      "source_line": 454
+      "source_line": 458
     },
     {
       "auth": "bearer",
@@ -10673,7 +10673,7 @@
         }
       ],
       "section": "Policies",
-      "source_line": 456
+      "source_line": 460
     },
     {
       "auth": "bearer",
@@ -10705,7 +10705,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 353
+      "source_line": 357
     },
     {
       "auth": "bearer",
@@ -10724,7 +10724,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 357
+      "source_line": 361
     },
     {
       "auth": "bearer",
@@ -10775,7 +10775,7 @@
         }
       ],
       "section": "Deployment",
-      "source_line": 354
+      "source_line": 358
     },
     {
       "auth": "bearer",
@@ -10842,7 +10842,7 @@
         }
       ],
       "section": "Renewal queue",
-      "source_line": 312
+      "source_line": 316
     },
     {
       "auth": "bearer",
@@ -10882,7 +10882,7 @@
         }
       ],
       "section": "Renewal queue",
-      "source_line": 317
+      "source_line": 321
     },
     {
       "auth": "bearer",
@@ -10924,7 +10924,7 @@
         }
       ],
       "section": "Renewal queue",
-      "source_line": 313
+      "source_line": 317
     },
     {
       "auth": "bearer",
@@ -10957,7 +10957,7 @@
         }
       ],
       "section": "Accounts",
-      "source_line": 414
+      "source_line": 418
     },
     {
       "auth": "bearer",
@@ -11040,7 +11040,7 @@
         }
       ],
       "section": "Accounts",
-      "source_line": 415
+      "source_line": 419
     },
     {
       "auth": "bearer",
@@ -11105,7 +11105,7 @@
         }
       ],
       "section": "Accounts",
-      "source_line": 416
+      "source_line": 420
     },
     {
       "auth": "bearer",
@@ -11150,7 +11150,7 @@
         }
       ],
       "section": "Accounts",
-      "source_line": 419
+      "source_line": 423
     },
     {
       "auth": "none",
@@ -11161,7 +11161,7 @@
       "note": "Public, and deliberately says nothing about internals.",
       "path": "/healthz",
       "section": "Health",
-      "source_line": 74
+      "source_line": 75
     }
   ],
   "source": "core/api/router.go"

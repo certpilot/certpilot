@@ -589,6 +589,16 @@ type Store interface {
 	GetACMEAccountByEAB(ctx context.Context, eabID string) (*ACMEAccount, error)
 	UpdateACMEAccount(ctx context.Context, a *ACMEAccount) error
 
+	CreateACMEOrder(ctx context.Context, o *ACMEOrder) error
+	GetACMEOrder(ctx context.Context, id string) (*ACMEOrder, error)
+	ListACMEOrdersByAccount(ctx context.Context, accountID string) ([]*ACMEOrder, error)
+	// ClaimACMEOrderForFinalize moves a ready order to processing and reports
+	// whether this call did. Two replicas can receive the same finalize, and
+	// only one may go on to ask the CA.
+	ClaimACMEOrderForFinalize(ctx context.Context, id string) (bool, error)
+	// UpdateACMEOrder writes the status, certificate and error.
+	UpdateACMEOrder(ctx context.Context, o *ACMEOrder) error
+
 	// ClaimACMENonce records a nonce as spent and reports whether this is the
 	// first time. False is a replay. Atomic for the same reason
 	// ClaimAgentRequestSignature is.

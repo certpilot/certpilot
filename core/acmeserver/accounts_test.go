@@ -16,7 +16,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/certpilot/certpilot-gateway-sdk/grpckit"
 	"github.com/certpilot/certpilot/core/acmeserver"
+	"github.com/certpilot/certpilot/core/engine/issuance"
+	"github.com/certpilot/certpilot/core/engine/policy"
+	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/store"
 	"github.com/certpilot/certpilot/pkg/secrets"
 	"github.com/gin-gonic/gin"
@@ -36,6 +40,7 @@ type fixture struct {
 	kr       *secrets.Keyring
 	srv      *httptest.Server
 	template *store.CertificateTemplate
+	gw       *fakeGateway
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -43,16 +48,24 @@ func newFixture(t *testing.T) *fixture {
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
 
+	gw := startGateway(t)
+	pm := pluginmgr.NewManager(grpckit.TLSConfig{Insecure: true})
+	t.Cleanup(pm.Close)
+
 	st := store.NewMemoryStore()
-	ca := &store.CAAccount{Name: "Test CA", ProviderType: "selfsigned", GatewayAddr: "127.0.0.1:1",
-		ConfigEncrypted: "x", Status: "CONNECTED"}
+	ca := &store.CAAccount{Name: "acme-test-ca", ProviderType: "selfsigned", GatewayAddr: gw.addr,
+		ConfigEncrypted: "", Status: "CONNECTED"}
 	if err := st.CreateCAAccount(ctx, ca); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pm.RegisterGateway(ctx, ca.Name, gw.addr, "selfsigned", ""); err != nil {
 		t.Fatal(err)
 	}
 	tpl := &store.CertificateTemplate{
 		Slug: "web", Name: "Web", Version: 1, IsEnabled: true, CAAccountID: ca.ID,
 		SubjectMode: store.SubjectModeSupplied, AllowedKeyTypes: []string{"RSA", "ECDSA"},
 		KeyCustodyRequired: store.KeyCustodyAny, RenewBeforeDays: 30,
+		SANRules: store.SANRules{Suffixes: []string{".example.com"}},
 	}
 	if err := st.CreateCertificateTemplate(ctx, tpl); err != nil {
 		t.Fatal(err)
@@ -63,10 +76,14 @@ func newFixture(t *testing.T) *fixture {
 	}
 
 	engine := gin.New()
-	acmeserver.New(acmeserver.Config{Store: st, Keyring: kr}).Register(engine)
+	acmeserver.New(acmeserver.Config{
+		Store: st, Keyring: kr,
+		Resolver: issuance.NewResolver(st, policy.NewEngine(st)),
+		Signer:   issuance.NewSigner(pm, kr),
+	}).Register(engine)
 	srv := httptest.NewServer(engine)
 	t.Cleanup(srv.Close)
-	return &fixture{t: t, st: st, kr: kr, srv: srv, template: tpl}
+	return &fixture{t: t, st: st, kr: kr, srv: srv, template: tpl, gw: gw}
 }
 
 func (f *fixture) directoryURL() string { return f.srv.URL + "/acme/web/directory" }

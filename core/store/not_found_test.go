@@ -20,7 +20,7 @@ import (
 // exist.
 var byIDMethods = []string{
 	"GetAgent", "GetCAAccount", "GetCAAuthority", "GetCTMonitor", "GetCertificate",
-	"GetACMEAccount", "GetCertificateDeployment", "GetCertificatePrivateKey", "GetCertificateTemplate",
+	"GetACMEAccount", "GetACMEOrder", "GetCertificateDeployment", "GetCertificatePrivateKey", "GetCertificateTemplate",
 	"GetCertificateTemplateBySlug", "GetCloudCertificate", "GetCloudConnection",
 	"GetDeploymentJob", "GetDeploymentTarget", "GetDiscoveryResult", "GetDiscoveryScan",
 	"GetDiscoverySchedule", "GetDisplayTokenByHash", "GetMetadataField",

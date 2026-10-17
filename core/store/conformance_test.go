@@ -152,7 +152,7 @@ func TestEveryValueThisCodebaseCanProduceIsAccepted(t *testing.T) {
 		t.Run("discovered via", func(t *testing.T) {
 			// Migration 012 widened this for CLOUD. Migration 021 widened it
 			// again for AGENT. Both were found by a live run.
-			for _, via := range []string{"MANUAL", "SCAN", "CT_LOG", "IMPORT", "REQUESTED", "CLOUD", "AGENT"} {
+			for _, via := range []string{"MANUAL", "SCAN", "CT_LOG", "IMPORT", "REQUESTED", "CLOUD", "AGENT", "ACME"} {
 				cert := sampleCertificate("via-" + via)
 				cert.DiscoveredVia = via
 				if err := s.CreateCertificate(ctx, cert); err != nil {
