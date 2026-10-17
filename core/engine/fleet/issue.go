@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/engine/deploy"
 	"github.com/certpilot/certpilot/core/engine/issuance"
@@ -50,7 +49,10 @@ type Issuer struct {
 	// narrower one — which is how a host could obtain a certificate the policy
 	// engine would have refused a person.
 	resolver *issuance.Resolver
-	now      func() time.Time
+	// signer has the CA sign the request and checks what comes back. Shared
+	// with the ACME server, so a check added for one is a check the other has.
+	signer *issuance.Signer
+	now    func() time.Time
 }
 
 // NewIssuer creates the issuer.
@@ -58,6 +60,7 @@ func NewIssuer(s store.Store, pm *pluginmgr.Manager, kr *secrets.Keyring, broker
 	return &Issuer{
 		store: s, pluginMgr: pm, keyring: kr, broker: broker,
 		resolver: issuance.NewResolver(s, pe),
+		signer:   issuance.NewSigner(pm, kr),
 		now:      time.Now,
 	}
 }
@@ -137,88 +140,20 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 		return nil, err
 	}
 
-	account := decision.Account
-	gateway, err := i.gateway(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-	config, err := decryptCAConfig(i.keyring, account)
-	if err != nil {
-		return nil, err
-	}
-
 	slog.Info("signing a request from a host",
 		"agent", agent.Name, "names", decision.Domains, "grant", grant.Name,
 		"template", decision.Template.Slug,
-		"ca_account", account.Name,
+		"ca_account", decision.Account.Name,
 		"key", fmt.Sprintf("%s/%d", decision.KeyType, decision.KeySize),
 		"private_key", "never sent, never held")
 
-	resp, err := gateway.Client.IssueCertificate(ctx, &providerv1.IssueCertificateRequest{
-		CsrPem: []byte(req.CSRPem),
-		// The names CertPilot validated, not the ones the request asked for.
-		// The two are the same here — that is what the grant and the template
-		// between them checked — but passing the validated set means a gateway
-		// that trusts its caller is trusting a decision that was actually made.
-		Domains:          decision.Domains,
-		KeyType:          decision.KeyType,
-		KeySize:          int32(decision.KeySize),
-		ValidityDays:     int32(decision.ValidityDays),
-		ProviderConfig:   config,
-		CaProfile:        decision.CAProfile,
-		KeyUsage:         decision.KeyUsage,
-		ExtendedKeyUsage: decision.ExtendedKeyUsage,
-	})
+	signed, err := i.signer.SignCSR(ctx, decision, req.CSRPem)
 	if err != nil {
-		return nil, fmt.Errorf("the CA refused this request: %w", err)
+		return nil, err
 	}
-	if resp.Certificate == nil || len(resp.Certificate.CertificatePem) == 0 {
-		return nil, fmt.Errorf("the gateway reported success and returned no certificate")
-	}
+	info := signed.Info
 
-	// Parsed before it is stored, so a gateway that returns something that is
-	// not a certificate cannot put it in the inventory.
-	info, err := x509util.ParseCertificatePEM(resp.Certificate.CertificatePem)
-	if err != nil {
-		return nil, fmt.Errorf("the CA returned data that is not a valid X.509 certificate: %w", err)
-	}
-
-	// A gateway that returns a private key for a CSR-based request has
-	// generated its own keypair and ignored the request. Storing that would be
-	// worse than failing: the certificate on the host would not match the key
-	// in the database, and both would look fine.
-	if len(resp.Certificate.PrivateKeyPem) > 0 {
-		return nil, fmt.Errorf(
-			"the %s gateway returned a private key for a request that carried its own public key, which means it ignored the request. Refusing to store a certificate whose key CertPilot was not supposed to have",
-			account.ProviderType)
-	}
-
-	// Issue, then check — #30. Same reasoning as the human path: a gateway
-	// that cannot enforce a declared key usage or a validity ceiling must not
-	// have its answer trusted uninspected.
-	findings, err := issuance.VerifyConformance(decision, resp.Certificate.CertificatePem)
-	if err != nil {
-		return nil, fmt.Errorf("issued certificate could not be checked for conformance: %w", err)
-	}
-	if blocking := issuance.Enforced(decision.Template, findings); len(blocking) > 0 {
-		messages := make([]string, 0, len(blocking))
-		for _, f := range blocking {
-			messages = append(messages, f.Message)
-		}
-		if _, revokeErr := gateway.Client.RevokeCertificate(ctx, &providerv1.RevokeCertificateRequest{
-			CertificatePem:        resp.Certificate.CertificatePem,
-			ProviderCertificateId: resp.ProviderCertificateId,
-			ProviderConfig:        config,
-		}); revokeErr != nil {
-			slog.Warn("could not revoke a certificate that failed conformance under an ENFORCE template",
-				"template", decision.Template.Slug, "agent", agent.Name, "error", revokeErr)
-		}
-		return nil, fmt.Errorf(
-			"template %q requires ENFORCE conformance and the CA did not honour the request: %s",
-			decision.Template.Slug, strings.Join(messages, "; "))
-	}
-
-	cert, err := i.record(ctx, agent, grant, decision, req, info, resp, findings, prev)
+	cert, err := i.record(ctx, agent, grant, decision, req, signed, prev)
 	if err != nil {
 		return nil, err
 	}
@@ -227,8 +162,8 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 		CertificateID:  cert.ID,
 		CommonName:     cert.CommonName,
 		SANs:           cert.SANs,
-		CertificatePEM: string(resp.Certificate.CertificatePem),
-		ChainPEM:       string(resp.Certificate.ChainPem),
+		CertificatePEM: string(signed.CertificatePEM),
+		ChainPEM:       string(signed.ChainPEM),
 		NotAfter:       info.NotAfter,
 		// Bounded by the certificate's own lifetime. Unbounded, a certificate
 		// shorter than the lead time got a renew_after that had already passed,
@@ -244,11 +179,11 @@ func (i *Issuer) Issue(ctx context.Context, agent *store.Agent, req Request) (*I
 // KeyCustodyAgent is the difference between "we do not have this key" and "this
 // key is on a host and we could not produce it if we were ordered to".
 func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.TemplateGrant,
-	decision *issuance.Decision, req Request, info *x509util.CertInfo,
-	resp *providerv1.IssueCertificateResponse, findings []store.ConformanceFinding, prev *store.Certificate) (*store.Certificate, error) {
+	decision *issuance.Decision, req Request, signed *issuance.Signed, prev *store.Certificate) (*store.Certificate, error) {
 
+	info := signed.Info
 	notBefore, notAfter := info.NotBefore, info.NotAfter
-	certPEM := string(resp.Certificate.CertificatePem)
+	certPEM := string(signed.CertificatePEM)
 	holder := agent.ID
 	accountID := decision.Account.ID
 	templateID := decision.Template.ID
@@ -281,10 +216,10 @@ func (i *Issuer) record(ctx context.Context, agent *store.Agent, grant *store.Te
 		DiscoveredVia:       "AGENT",
 		KeyCustody:          store.KeyCustodyAgent,
 		KeyHolderAgentID:    &holder,
-		ConformanceFindings: findings,
+		ConformanceFindings: signed.Findings,
 	}
-	if len(resp.Certificate.ChainPem) > 0 {
-		chain := string(resp.Certificate.ChainPem)
+	if len(signed.ChainPEM) > 0 {
+		chain := string(signed.ChainPEM)
 		cert.ChainPEM = &chain
 	}
 
@@ -405,31 +340,6 @@ func requestedNames(csr *x509util.CSRInfo) ([]string, error) {
 		out = append(out, strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), ".")))
 	}
 	return out, nil
-}
-
-func (i *Issuer) gateway(ctx context.Context, account *store.CAAccount) (*pluginmgr.GatewayClient, error) {
-	gw, err := i.pluginMgr.GatewayFor(ctx, pluginmgr.Endpoint{
-		Name: account.Name, Addr: account.GatewayAddr, Type: account.ProviderType, ServerName: account.ServerName,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("the gateway for CA account %s is not connected: %w", account.Name, err)
-	}
-	return gw, nil
-}
-
-// decryptCAConfig opens a CA account's sealed configuration.
-func decryptCAConfig(keyring *secrets.Keyring, acc *store.CAAccount) (string, error) {
-	if acc.ConfigEncrypted == "" {
-		return "", nil
-	}
-	if !secrets.IsEnvelope(acc.ConfigEncrypted) {
-		return acc.ConfigEncrypted, nil
-	}
-	plaintext, err := keyring.DecryptString(acc.ConfigEncrypted, secrets.ContextCAAccountConfig)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt the configuration for CA account %q: %w", acc.Name, err)
-	}
-	return plaintext, nil
 }
 
 // announceRefusal publishes a request that was not permitted.

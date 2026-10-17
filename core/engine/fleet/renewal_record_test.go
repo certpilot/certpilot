@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	commonv1 "github.com/certpilot/certpilot-gateway-sdk/pb/common/v1"
-	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
 	"github.com/certpilot/certpilot-gateway-sdk/x509util"
 	"github.com/certpilot/certpilot/core/engine/issuance"
 	"github.com/certpilot/certpilot/core/store"
@@ -52,10 +50,11 @@ func (f recordFixture) issue(t *testing.T, agent *store.Agent, prev *store.Certi
 		CommonName: hostNames[0], SANs: hostNames, SerialNumber: serial, FingerprintSHA256: fingerprint,
 		NotBefore: now, NotAfter: now.Add(90 * 24 * time.Hour), DaysRemaining: 90, KeyType: "ECDSA", KeySize: 256,
 	}
-	resp := &providerv1.IssueCertificateResponse{Certificate: &commonv1.CertificateInfo{
-		CertificatePem: []byte("-----BEGIN CERTIFICATE-----\n" + serial + "\n-----END CERTIFICATE-----\n"),
-	}}
-	cert, err := f.issuer.record(context.Background(), agent, f.grant, f.decision, Request{}, info, resp, nil, prev)
+	signed := &issuance.Signed{
+		CertificatePEM: []byte("-----BEGIN CERTIFICATE-----\n" + serial + "\n-----END CERTIFICATE-----\n"),
+		Info:           info,
+	}
+	cert, err := f.issuer.record(context.Background(), agent, f.grant, f.decision, Request{}, signed, prev)
 	if err != nil {
 		t.Fatalf("recording: %v", err)
 	}
