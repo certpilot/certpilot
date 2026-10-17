@@ -20,7 +20,7 @@ import (
 // exist.
 var byIDMethods = []string{
 	"GetAgent", "GetCAAccount", "GetCAAuthority", "GetCTMonitor", "GetCertificate",
-	"GetCertificateDeployment", "GetCertificatePrivateKey", "GetCertificateTemplate",
+	"GetACMEAccount", "GetCertificateDeployment", "GetCertificatePrivateKey", "GetCertificateTemplate",
 	"GetCertificateTemplateBySlug", "GetCloudCertificate", "GetCloudConnection",
 	"GetDeploymentJob", "GetDeploymentTarget", "GetDiscoveryResult", "GetDiscoveryScan",
 	"GetDiscoverySchedule", "GetDisplayTokenByHash", "GetMetadataField",
@@ -30,7 +30,8 @@ var byIDMethods = []string{
 // lookupMethods answer a miss with a nil or empty result and a nil error. Their
 // callers ask "is there one?", and a miss is an ordinary answer to that.
 var lookupMethods = []string{
-	"GetAgentEnrolTokenByHash", "GetCAAuthorityByFingerprint", "GetCAChain",
+	"GetACMEAccountByEAB", "GetACMEEABCredentialByKID", "GetAgentEnrolTokenByHash",
+	"GetCAAuthorityByFingerprint", "GetCAChain",
 	"GetCertificateByFingerprint", "GetCertificateBySupersededFingerprint",
 	"GetGrantsForAgent", "GetUser",
 }

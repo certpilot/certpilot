@@ -54,6 +54,13 @@ func realRouterWithPlugins(t *testing.T) (*gin.Engine, store.Store, *pluginmgr.M
 // tests that need the store itself to misbehave.
 func realRouterOn(t *testing.T, st store.Store) (*gin.Engine, store.Store, *pluginmgr.Manager) {
 	t.Helper()
+	return realRouterConfigured(t, st, nil)
+}
+
+// realRouterConfigured is realRouterOn with a say in the configuration, for
+// the features that are off unless the operator turns them on.
+func realRouterConfigured(t *testing.T, st store.Store, tweak func(*config.CoreConfig)) (*gin.Engine, store.Store, *pluginmgr.Manager) {
+	t.Helper()
 
 	broker := events.NewBroker()
 
@@ -75,6 +82,10 @@ func realRouterOn(t *testing.T, st store.Store) (*gin.Engine, store.Store, *plug
 			Issuer:          apiTestIssuer,
 			BootstrapAdmins: []string{apiAdminEmail},
 		},
+	}
+
+	if tweak != nil {
+		tweak(cfg)
 	}
 
 	auth, err := middleware.NewAuthenticator(context.Background(), cfg.Auth)

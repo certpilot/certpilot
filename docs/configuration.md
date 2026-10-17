@@ -102,6 +102,23 @@ server:
 | `mode` | `development` | See [production mode](#production-mode) |
 | `allowed_origins` | — | Browser origins permitted to call the API. Must name the frontend explicitly — a wildcard is not accepted alongside credentials |
 
+### `acme`
+
+```yaml
+acme:
+  enabled: true
+  external_url: "https://certpilot.example.com"
+```
+
+| Key | Default | |
+|:---|:---|:---|
+| `enabled` | `false` | Serves ACME (RFC 8555) from the core, so certbot, acme.sh, win-acme and Caddy can get certificates from CertPilot. Off by default because it opens unauthenticated endpoints at `/acme/<template>/…` on the core's listener |
+| `external_url` | — | The address clients reach the core on. Every URL the server hands out is built from it, and a request is refused unless it was signed for one of them. Required, and must be `https`, in production mode. In development the address is taken from each request |
+
+Registration is closed. A client needs an external account binding credential,
+which an administrator creates for one template (`POST /api/v1/acme/credentials`),
+and the account it makes can only ask for what that template allows.
+
 ### `auth`
 
 ```yaml

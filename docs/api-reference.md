@@ -2388,6 +2388,50 @@ engine now reports them rather than passing them.
 
 > Policy is evaluated on issuance only, not on renewal.
 
+## ACME credentials
+
+Present only to let an ACME client register. The ACME server itself is enabled
+with [`acme.enabled`](configuration.md#acme) and lives at
+`/acme/<template-slug>/directory`, not under `/api/v1`. All three calls are
+admin-only, including the list: it is a map of who can obtain certificates under
+each template.
+
+### Creating one
+
+```bash
+curl -s -X POST "$CERTPILOT/api/v1/acme/credentials" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name": "web team", "template": "internal-web"}'
+```
+
+```json
+{
+  "data": {"id": "…", "kid": "q3J0…", "name": "web team", "template": "internal-web",
+           "created_at": "…"},
+  "hmac_key": "kP2…",
+  "directory_url": "https://certpilot.example.com/acme/internal-web/directory"
+}
+```
+
+`hmac_key` is shown once. It is sealed with the KEK and cannot be read back, so
+losing it means revoking the credential and making another. Give the client the
+`kid`, the key and the directory URL:
+
+```bash
+certbot register --server "$DIRECTORY_URL" \
+  --eab-kid "$KID" --eab-hmac-key "$HMAC_KEY" --email ops@example.com
+```
+
+One credential makes one account. Naming a template that does not exist is a
+404.
+
+### Listing and revoking
+
+`GET /api/v1/acme/credentials` lists them, with the account each one made, and
+never the key. `DELETE /api/v1/acme/credentials/:id` revokes one: no new account
+can be made with it. An account it already made keeps working until it is
+deactivated.
+
 ## Display tokens
 
 ```

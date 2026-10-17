@@ -573,6 +573,28 @@ type Store interface {
 	// is no longer protecting anything.
 	SweepAgentRequestSignatures(ctx context.Context, now time.Time) (int64, error)
 
+	// ── ACME server ─────────────────────────────────────────
+	CreateACMEEABCredential(ctx context.Context, c *ACMEEABCredential) error
+	ListACMEEABCredentials(ctx context.Context) ([]*ACMEEABCredential, error)
+	// GetACMEEABCredentialByKID resolves the key id a client presented. A revoked
+	// credential is returned, marked, so the caller can say why it was refused.
+	GetACMEEABCredentialByKID(ctx context.Context, kid string) (*ACMEEABCredential, error)
+	RevokeACMEEABCredential(ctx context.Context, id string, revokedBy *string) error
+
+	// CreateACMEAccount wraps ErrConflict when the credential has already made
+	// an account, or the key is already registered for that template.
+	CreateACMEAccount(ctx context.Context, a *ACMEAccount) error
+	GetACMEAccount(ctx context.Context, id string) (*ACMEAccount, error)
+	GetACMEAccountByThumbprint(ctx context.Context, templateID, thumbprint string) (*ACMEAccount, error)
+	GetACMEAccountByEAB(ctx context.Context, eabID string) (*ACMEAccount, error)
+	UpdateACMEAccount(ctx context.Context, a *ACMEAccount) error
+
+	// ClaimACMENonce records a nonce as spent and reports whether this is the
+	// first time. False is a replay. Atomic for the same reason
+	// ClaimAgentRequestSignature is.
+	ClaimACMENonce(ctx context.Context, hash []byte, expiresAt time.Time) (bool, error)
+	SweepACMENonces(ctx context.Context, now time.Time) (int64, error)
+
 	// ── Audit Logs ──────────────────────────────────────────
 	CreateAuditLog(ctx context.Context, log *AuditLog) error
 	ListAuditLogs(ctx context.Context, filter AuditLogFilter) ([]*AuditLog, int64, error)
