@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/certpilot/certpilot/core/engine/issuance"
+	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/store"
 	"github.com/certpilot/certpilot/pkg/secrets"
 	"github.com/gin-gonic/gin"
@@ -40,6 +42,13 @@ type Config struct {
 	// is right for a core reached directly and wrong behind a proxy that
 	// changes the scheme or host.
 	ExternalURL string
+	// Resolver decides what may be issued, through the same template and
+	// policy rungs as every other path.
+	Resolver *issuance.Resolver
+	// Signer has the CA sign the request and checks what comes back.
+	Signer *issuance.Signer
+	// Broker, when set, is told about every certificate issued.
+	Broker *events.Broker
 	// Now is replaceable so tests can move the clock.
 	Now func() time.Time
 }
@@ -72,8 +81,13 @@ func (s *Server) Register(engine *gin.Engine) {
 	g.GET("/new-nonce", s.newNonce)
 	g.HEAD("/new-nonce", s.newNonce)
 	g.POST("/new-account", s.newAccount)
-	g.POST("/new-order", s.newOrderNotYet)
+	g.POST("/new-order", s.newOrder)
 	g.POST("/account/:id", s.account)
+	g.POST("/account/:id/orders", s.accountOrders)
+	g.POST("/order/:id", s.order)
+	g.POST("/order/:id/finalize", s.finalize)
+	g.POST("/authz/:order/:index", s.authorization)
+	g.POST("/cert/:order", s.certificate)
 }
 
 // problem is an RFC 7807 document with the ACME error namespace.
@@ -154,10 +168,7 @@ func (s *Server) directory(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"newNonce":   base + "/new-nonce",
 		"newAccount": base + "/new-account",
-		// Clients take the presence of newOrder as the sign of an RFC 8555
-		// server and refuse a directory without it. Accounts land first, so
-		// for now it answers with a plain refusal.
-		"newOrder": base + "/new-order",
+		"newOrder":   base + "/new-order",
 		"meta": gin.H{
 			// Said up front so a client that would try to register without
 			// one is told to bring a credential, not left to find out.
@@ -189,9 +200,4 @@ func (s *Server) audit(c *gin.Context, action, accountID, kid string, details an
 		Details:    string(raw),
 		IPAddress:  &ip,
 	})
-}
-
-// newOrderNotYet is replaced by the real endpoint in the next change.
-func (s *Server) newOrderNotYet(c *gin.Context) {
-	s.fail(c, http.StatusNotImplemented, "serverInternal", "ordering certificates is not available on this endpoint yet")
 }

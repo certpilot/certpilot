@@ -56,3 +56,34 @@ type ACMEAccount struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// ACME order states (RFC 8555 §7.1.6). Authorisations are pre-authorised by
+// the account's credential, so an order is ready the moment it exists.
+const (
+	ACMEOrderPending    = "pending"
+	ACMEOrderReady      = "ready"
+	ACMEOrderProcessing = "processing"
+	ACMEOrderValid      = "valid"
+	ACMEOrderInvalid    = "invalid"
+)
+
+// ACMEIdentifier is one name an order asks for.
+type ACMEIdentifier struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+// ACMEOrder is one request for a certificate from an ACME account.
+type ACMEOrder struct {
+	ID          string           `json:"id"`
+	AccountID   string           `json:"account_id"`
+	Status      string           `json:"status"`
+	Identifiers []ACMEIdentifier `json:"identifiers"`
+	ExpiresAt   time.Time        `json:"expires_at"`
+	// CertificateID is the certificate the order produced, once valid.
+	CertificateID *string `json:"certificate_id,omitempty"`
+	// Error is the problem document that made the order invalid, as JSON.
+	Error     string    `json:"error,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}

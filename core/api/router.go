@@ -6,6 +6,7 @@ import (
 	"github.com/certpilot/certpilot/core/engine/ctlog"
 	"github.com/certpilot/certpilot/core/engine/deploy"
 	"github.com/certpilot/certpilot/core/engine/discovery"
+	"github.com/certpilot/certpilot/core/engine/issuance"
 	"github.com/certpilot/certpilot/core/engine/notifications"
 	"github.com/certpilot/certpilot/core/engine/pki"
 	"github.com/certpilot/certpilot/core/engine/policy"
@@ -129,6 +130,9 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 			Store:       deps.Store,
 			Keyring:     deps.Keyring,
 			ExternalURL: deps.Config.ACME.ExternalURL,
+			Resolver:    issuance.NewResolver(deps.Store, deps.PolicyEngine),
+			Signer:      issuance.NewSigner(deps.PluginMgr, deps.Keyring),
+			Broker:      deps.Broker,
 		}).Register(engine)
 	}
 

@@ -118,7 +118,7 @@ export interface Certificate {
   ca_authority_id?: string | null
   certificate_pem?: string
   chain_pem?: string
-  discovered_via: 'MANUAL' | 'SCAN' | 'CT_LOG' | 'IMPORT' | 'REQUESTED' | 'AGENT' | 'CLOUD'
+  discovered_via: 'MANUAL' | 'SCAN' | 'CT_LOG' | 'IMPORT' | 'REQUESTED' | 'AGENT' | 'CLOUD' | 'ACME'
   /**
    * Who holds the private key — core/store/models.go KeyCustody*.
    *

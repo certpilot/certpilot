@@ -2422,6 +2422,20 @@ certbot register --server "$DIRECTORY_URL" \
   --eab-kid "$KID" --eab-hmac-key "$HMAC_KEY" --email ops@example.com
 ```
 
+Then order as usual. No challenge is run: the credential is the authorisation,
+and the template's name and key rules are applied when the order is finalised,
+so a name the template does not allow is refused with the reason:
+
+```bash
+certbot certonly --server "$DIRECTORY_URL" --webroot -w /var/www/html \
+  -d web.example.com -d api.example.com
+```
+
+The certificate is recorded with `discovered_via: ACME` and `key_custody:
+EXTERNAL`. The client holds the key and renews by ordering again; the core never
+renews it. The lifetime is the template's, so an order naming `notBefore` or
+`notAfter` is refused.
+
 One credential makes one account. Naming a template that does not exist is a
 404.
 
