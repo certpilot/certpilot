@@ -110,3 +110,41 @@ func set(names []string) map[string]bool {
 	}
 	return m
 }
+
+// notAUUID is what an id from a URL path can be: anything. A request for
+// /certificate-templates/internal-web, a slug, reaches the store as an id.
+const notAUUID = "internal-web"
+
+// TestAnIdThatIsNotAUUIDIsJustMissing.
+//
+// A lookup by id has to answer a malformed id the way it answers an absent one.
+// PostgreSQL refuses a value that is not a uuid before it looks for a row, and
+// that refusal used to come back as a database error, which the API reports as
+// a 500. The template handlers try an id and then a slug on ErrNotFound alone
+// (#135), so every slug was a 500 (found live, by asking for a template by slug
+// against a real core). The check above only ever asked for a well-formed id
+// that nobody had.
+func TestAnIdThatIsNotAUUIDIsJustMissing(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s Store) {
+		v := reflect.ValueOf(s)
+		for _, name := range byIDMethods {
+			out := v.MethodByName(name).Call([]reflect.Value{
+				reflect.ValueOf(context.Background()), reflect.ValueOf(notAUUID),
+			})
+			err, _ := out[1].Interface().(error)
+			if !errors.Is(err, ErrNotFound) {
+				t.Errorf("%s(%q) returned %v, want an error wrapping ErrNotFound", name, notAUUID, err)
+			}
+		}
+		for _, name := range lookupMethods {
+			m := v.MethodByName(name)
+			if m.Type().NumIn() != 2 {
+				continue
+			}
+			out := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(notAUUID)})
+			if err, _ := out[1].Interface().(error); err != nil {
+				t.Errorf("%s(%q) returned %v, want a miss and no error", name, notAUUID, err)
+			}
+		}
+	})
+}
