@@ -92,6 +92,7 @@ func (s *Server) Register(engine *gin.Engine) {
 	g.POST("/cert/:order", s.certificate)
 	g.POST("/revoke-cert", s.revokeCert)
 	g.POST("/key-change", s.keyChange)
+	g.GET("/renewal-info/:certid", s.renewalInfo)
 }
 
 // problem is an RFC 7807 document with the ACME error namespace.
@@ -170,11 +171,12 @@ func templateOf(c *gin.Context) *store.CertificateTemplate {
 func (s *Server) directory(c *gin.Context) {
 	base := s.base(c, templateOf(c).Slug)
 	c.JSON(http.StatusOK, gin.H{
-		"newNonce":   base + "/new-nonce",
-		"newAccount": base + "/new-account",
-		"newOrder":   base + "/new-order",
-		"revokeCert": base + "/revoke-cert",
-		"keyChange":  base + "/key-change",
+		"newNonce":    base + "/new-nonce",
+		"newAccount":  base + "/new-account",
+		"newOrder":    base + "/new-order",
+		"revokeCert":  base + "/revoke-cert",
+		"keyChange":   base + "/key-change",
+		"renewalInfo": base + "/renewal-info",
 		"meta": gin.H{
 			// Said up front so a client that would try to register without
 			// one is told to bring a credential, not left to find out.

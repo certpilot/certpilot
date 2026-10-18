@@ -2443,6 +2443,16 @@ fingerprint is kept, and a check that the new certificate reached its servers
 is scheduled. Different names, another key type or another account make a
 second certificate.
 
+The server also offers ACME Renewal Information (RFC 9773). A client that asks
+`renewalInfo` is given the window in which the core would renew the
+certificate itself: the template's renewal lead before expiry. A revoked
+certificate gets a window already past, which tells the client to replace it
+now. certbot and lego both ask. A client that names the certificate it is
+replacing in `replaces` (lego does; certbot does not) renews that record even
+when the names change. An order naming a certificate another account was
+issued is refused, as is one sharing no name with it, and a certificate already
+replaced by another order is refused with 409 `alreadyReplaced`.
+
 One credential makes one account. Naming a template that does not exist is a
 404.
 

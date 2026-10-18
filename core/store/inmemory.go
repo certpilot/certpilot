@@ -369,6 +369,18 @@ func (m *MemoryStore) GetCertificateByFingerprint(ctx context.Context, fingerpri
 	return nil, nil
 }
 
+func (m *MemoryStore) GetCertificatesBySerial(ctx context.Context, serial string) ([]*Certificate, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := []*Certificate{}
+	for _, c := range m.certificates {
+		if c.SerialNumber == serial {
+			out = append(out, clone(c))
+		}
+	}
+	return out, nil
+}
+
 func (m *MemoryStore) CreateCertificate(ctx context.Context, cert *Certificate) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

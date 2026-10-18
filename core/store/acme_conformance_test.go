@@ -383,3 +383,73 @@ func TestAnACMEAccountKeyCanBeChangedButNotToAnotherAccountsKey(t *testing.T) {
 		}
 	})
 }
+
+// RFC 9773: an order may name the certificate it replaces, and a certificate
+// can be replaced by one order that went ahead.
+func TestAnACMEOrderKeepsWhatItReplaces(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		acct := acmeAccountFor(t, s)
+		ca := caAccountFor(t, s, "replaces CA")
+		cert := &Certificate{CommonName: "a.example.com", Status: "ISSUED", DiscoveredVia: "ACME",
+			CAAccountID: &ca, KeyCustody: KeyCustodyExternal, FingerprintSHA256: "aki.serial-1", KeyType: "ECDSA", KeySize: 256}
+		if err := s.CreateCertificate(ctx, cert); err != nil {
+			t.Fatal(err)
+		}
+		order := &ACMEOrder{AccountID: acct.ID, Status: ACMEOrderReady, ExpiresAt: time.Now().Add(time.Hour),
+			Identifiers:           []ACMEIdentifier{{Type: "dns", Value: "a.example.com"}},
+			ReplacesCertificateID: &cert.ID, Replaces: "aki.serial-1"}
+		if err := s.CreateACMEOrder(ctx, order); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.GetACMEOrder(ctx, order.ID)
+		if err != nil || got.ReplacesCertificateID == nil || *got.ReplacesCertificateID != cert.ID || got.Replaces != "aki.serial-1" {
+			t.Fatalf("read back %+v, %v; want what it replaces kept", got, err)
+		}
+
+		// Only an order that went ahead counts: one left ready may never be
+		// finalised, and must not stop the client trying again.
+		if o, err := s.GetACMEOrderReplacing(ctx, "aki.serial-1"); err != nil || o != nil {
+			t.Errorf("a ready order counted as having replaced it: %+v, %v", o, err)
+		}
+		order.Status = ACMEOrderValid
+		if err := s.UpdateACMEOrder(ctx, order); err != nil {
+			t.Fatal(err)
+		}
+		if o, err := s.GetACMEOrderReplacing(ctx, "aki.serial-1"); err != nil || o == nil || o.ID != order.ID {
+			t.Errorf("the valid order that replaced it: %+v, %v", o, err)
+		}
+		if o, err := s.GetACMEOrderReplacing(ctx, "aki.serial-2"); err != nil || o != nil {
+			t.Errorf("a certificate nothing replaced: %+v, %v", o, err)
+		}
+	})
+}
+
+// renewalInfo names a certificate by its issuer's key and its serial, so the
+// inventory has to be searchable by serial. Serials are unique per issuer, not
+// overall, so every match comes back.
+func TestCertificatesAreFoundBySerial(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		ca := caAccountFor(t, s, "serial CA")
+		for i, fp := range []string{"fp-serial-1", "fp-serial-2", "fp-serial-3"} {
+			serial := "0a1b2c"
+			if i == 2 {
+				serial = "ffff"
+			}
+			if err := s.CreateCertificate(ctx, &Certificate{CommonName: "s.example.com", Status: "ISSUED",
+				DiscoveredVia: "ACME", CAAccountID: &ca, KeyCustody: KeyCustodyExternal,
+				FingerprintSHA256: fp, SerialNumber: serial, KeyType: "ECDSA", KeySize: 256}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, err := s.GetCertificatesBySerial(ctx, "0a1b2c")
+		if err != nil || len(got) != 2 {
+			t.Fatalf("got %d, %v; want both certificates with that serial", len(got), err)
+		}
+		none, err := s.GetCertificatesBySerial(ctx, "0000")
+		if err != nil || len(none) != 0 {
+			t.Errorf("an unknown serial: %d, %v", len(none), err)
+		}
+	})
+}
