@@ -306,3 +306,64 @@ func (m *MemoryStore) UpdateACMEOrder(ctx context.Context, o *ACMEOrder) error {
 	o.UpdatedAt = stored.UpdatedAt
 	return nil
 }
+
+func (m *MemoryStore) GetACMEEABCredential(ctx context.Context, id string) (*ACMEEABCredential, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	c, ok := m.acmeCredentials[id]
+	if !ok {
+		return nil, fmt.Errorf("ACME credential %s %w", id, ErrNotFound)
+	}
+	out := clone(c)
+	for _, a := range m.acmeAccounts {
+		if a.EABID == c.ID {
+			accountID := a.ID
+			out.AccountID = &accountID
+		}
+	}
+	return out, nil
+}
+
+func (m *MemoryStore) CreateACMEAuthorization(ctx context.Context, a *ACMEAuthorization) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.acmeOrders[a.OrderID]; !ok {
+		return fmt.Errorf("ACME order %s %w", a.OrderID, ErrNotFound)
+	}
+	stored := *a
+	stored.ID = uuid.New().String()
+	m.acmeAuthzs[stored.ID] = &stored
+	a.ID = stored.ID
+	return nil
+}
+
+func (m *MemoryStore) ListACMEAuthorizations(ctx context.Context, orderID string) ([]*ACMEAuthorization, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := []*ACMEAuthorization{}
+	for _, a := range m.acmeAuthzs {
+		if a.OrderID == orderID {
+			c := *a
+			out = append(out, &c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Index < out[j].Index })
+	return out, nil
+}
+
+func (m *MemoryStore) UpdateACMEAuthorization(ctx context.Context, a *ACMEAuthorization) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	stored, ok := m.acmeAuthzs[a.ID]
+	if !ok {
+		return fmt.Errorf("ACME authorization %s %w", a.ID, ErrNotFound)
+	}
+	stored.Status, stored.Error, stored.ValidatedWith = a.Status, a.Error, a.ValidatedWith
+	if a.ValidatedAt != nil {
+		at := *a.ValidatedAt
+		stored.ValidatedAt = &at
+	} else {
+		stored.ValidatedAt = nil
+	}
+	return nil
+}

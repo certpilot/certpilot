@@ -728,6 +728,8 @@ export interface AcmeCredential {
   template: string
   /** The account the client registered with it, once it has. */
   account_id?: string
+  /** Whether the client must prove each name by HTTP-01 or DNS-01. */
+  require_challenge: boolean
   directory_url?: string
   created_at: string
   revoked_at?: string

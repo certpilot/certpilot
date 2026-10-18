@@ -30,6 +30,7 @@ const actionError = ref<string | null>(null)
 const creating = ref(false)
 const newName = ref('')
 const newTemplate = ref('')
+const newRequireChallenge = ref(false)
 
 // Shown once, kept until dismissed: a key that vanishes on a timer is a
 // credential somebody has to revoke and make again.
@@ -65,7 +66,7 @@ async function create() {
   try {
     const res = await api.post<{ data: AcmeCredential; hmac_key: string; directory_url: string }>(
       '/api/v1/acme/credentials',
-      { name: newName.value.trim(), template: newTemplate.value },
+      { name: newName.value.trim(), template: newTemplate.value, require_challenge: newRequireChallenge.value },
     )
     revealed.value = {
       name: res.data.name,
@@ -75,6 +76,7 @@ async function create() {
     }
     newName.value = ''
     newTemplate.value = ''
+    newRequireChallenge.value = false
     creating.value = false
     await load()
   } catch (err) {
@@ -137,7 +139,9 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
     <p class="field-help panel-intro">
       A credential lets one ACME client — certbot, acme.sh, lego, Caddy — register under one
       template. The template decides which names, keys and lifetimes it can be issued. The client
-      keeps its key; CertPilot records the certificate and alerts on it like any other.
+      keeps its key; CertPilot records the certificate and alerts on it like any other. A
+      credential that requires proof makes the client show it controls each name, by HTTP-01 or
+      DNS-01, before anything is issued.
     </p>
 
     <!-- Off is said, not hidden: a credential made now works for no client
@@ -206,6 +210,10 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
         <option value="" disabled>Template</option>
         <option v-for="t in enabledTemplates" :key="t.id" :value="t.slug">{{ t.name }} ({{ t.slug }})</option>
       </select>
+      <label class="proof" title="The client proves it controls each name before it is issued">
+        <input v-model="newRequireChallenge" type="checkbox" class="check-console" />
+        <span class="field-help">Require HTTP-01 or DNS-01</span>
+      </label>
       <button class="btn-console" type="submit" :disabled="busy === 'new'">
         {{ busy === 'new' ? 'Creating…' : 'Create' }}
       </button>
@@ -223,6 +231,7 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
           <tr>
             <th>Client</th>
             <th>Template</th>
+            <th>Proof</th>
             <th>Directory</th>
             <th>Created</th>
             <th>State</th>
@@ -243,6 +252,9 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
             <td>
               <code v-if="cred.template" class="exact slug">{{ cred.template }}</code>
               <span v-else class="label-micro sev-warning">template deleted</span>
+            </td>
+            <td>
+              <span class="field-help">{{ cred.require_challenge ? 'HTTP-01 or DNS-01' : 'Credential only' }}</span>
             </td>
             <td><code class="url">{{ cred.directory_url || 'set acme.external_url' }}</code></td>
             <td class="tabular">{{ formatDateTime(cred.created_at) }}</td>
@@ -319,6 +331,12 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
 }
 
 .command { white-space: pre-wrap; }
+
+.proof {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
 
 .notice-off,
 .action-error {

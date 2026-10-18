@@ -2422,9 +2422,10 @@ certbot register --server "$DIRECTORY_URL" \
   --eab-kid "$KID" --eab-hmac-key "$HMAC_KEY" --email ops@example.com
 ```
 
-Then order as usual. No challenge is run: the credential is the authorisation,
-and the template's name and key rules are applied when the order is finalised,
-so a name the template does not allow is refused with the reason:
+Then order as usual. Unless the credential was made with `"require_challenge":
+true`, no challenge is run: the credential is the authorisation, and the
+template's name and key rules are applied when the order is finalised, so a
+name the template does not allow is refused with the reason:
 
 ```bash
 certbot certonly --server "$DIRECTORY_URL" --webroot -w /var/www/html \
@@ -2455,6 +2456,14 @@ replaced by another order is refused with 409 `alreadyReplaced`.
 
 One credential makes one account. Naming a template that does not exist is a
 404.
+
+With `"require_challenge": true`, each name of an order has to be proved
+before the order is ready: by HTTP-01 (a file under
+`/.well-known/acme-challenge/` on port 80) or DNS-01 (a TXT record at
+`_acme-challenge.<name>`). A wildcard can only use DNS-01. A failed proof ends
+the order, and the client orders again. The template's rules still apply at
+finalize: proving a name does not let a template issue what it does not
+allow.
 
 A client can revoke what it was issued:
 

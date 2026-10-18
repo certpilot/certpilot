@@ -35,6 +35,28 @@ type ACMEConfig struct {
 	// so it has to be what a client types. Required in production, where the
 	// core is almost always behind something that changes the scheme or host.
 	ExternalURL string `yaml:"external_url"`
+	// Challenges is how HTTP-01 and DNS-01 are checked, for credentials that
+	// require them. The defaults are what RFC 8555 says.
+	Challenges ACMEChallengeConfig `yaml:"challenges"`
+}
+
+// ACMEChallengeConfig says where the core looks when it validates a challenge.
+type ACMEChallengeConfig struct {
+	// HTTPPort is the port HTTP-01 is fetched from. RFC 8555 says 80, and
+	// production refuses anything else; another port is for a test harness.
+	HTTPPort int `yaml:"http_port"`
+	// DNSResolver is the host:port of the resolver used to look a name up,
+	// for both challenges, or tcp://host:port to ask it over TCP only. Empty
+	// uses the system's.
+	DNSResolver string `yaml:"dns_resolver"`
+}
+
+// Port is the HTTP-01 port, 80 when unset.
+func (c ACMEChallengeConfig) Port() int {
+	if c.HTTPPort == 0 {
+		return 80
+	}
+	return c.HTTPPort
 }
 
 // SecretsConfig says where the key encryption key comes from.
@@ -313,6 +335,10 @@ func (c *CoreConfig) Validate() error {
 			return fmt.Errorf("config: acme.enabled needs acme.external_url set to the https address clients use; " +
 				"an ACME client signs every request for the URL it was given, and a core that guesses its own " +
 				"address behind a proxy will refuse them all")
+		}
+		if c.ACME.Challenges.Port() != 80 {
+			return fmt.Errorf("config: acme.challenges.http_port is %d; in production HTTP-01 is checked on port 80, "+
+				"as RFC 8555 says, and another port would accept proof no public CA would", c.ACME.Challenges.HTTPPort)
 		}
 	}
 

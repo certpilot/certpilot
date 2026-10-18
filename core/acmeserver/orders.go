@@ -121,9 +121,26 @@ func (s *Server) newOrder(c *gin.Context) {
 			order.ReplacesCertificateID, order.Replaces = &replaced.ID, id
 		}
 	}
+	proof, err := s.requiresProof(c, req.account)
+	if err != nil {
+		s.fail(c, http.StatusInternalServerError, "serverInternal", "could not read the account's credential")
+		return
+	}
+	if proof {
+		// Pending until the client proves each name.
+		order.Status = store.ACMEOrderPending
+	}
 	if err := s.cfg.Store.CreateACMEOrder(c.Request.Context(), order); err != nil {
 		s.fail(c, http.StatusInternalServerError, "serverInternal", "could not create the order")
 		return
+	}
+	if proof {
+		if err := s.createAuthorizations(c, order); err != nil {
+			order.Status, order.Error = store.ACMEOrderInvalid, ""
+			_ = s.cfg.Store.UpdateACMEOrder(c.Request.Context(), order)
+			s.fail(c, http.StatusInternalServerError, "serverInternal", "could not create the order's authorizations")
+			return
+		}
 	}
 	s.writeOrder(c, http.StatusCreated, tpl, order)
 }
@@ -213,8 +230,9 @@ func (s *Server) accountOrders(c *gin.Context) {
 
 // authorization handles POST-as-GET /acme/<template>/authz/<order>/<index>.
 //
-// Valid from the start, with no challenges: the credential that made this
-// account is the authorisation, and the template bounds what it covers.
+// For a credential that does not require proof, valid from the start, with no
+// challenges: the credential that made this account is the authorisation, and
+// the template bounds what it covers.
 func (s *Server) authorization(c *gin.Context) {
 	tpl := templateOf(c)
 	req := s.verify(c, tpl, byKID)
@@ -228,6 +246,17 @@ func (s *Server) authorization(c *gin.Context) {
 	i, err := strconv.Atoi(c.Param("index"))
 	if err != nil || i < 0 || i >= len(order.Identifiers) {
 		s.fail(c, http.StatusNotFound, "malformed", "there is no such authorization")
+		return
+	}
+	// An order whose credential requires proof has its authorizations stored,
+	// with their challenges.
+	stored, _, err := s.storedAuthorization(c, order, i)
+	if err != nil {
+		s.fail(c, http.StatusInternalServerError, "serverInternal", "could not read the authorization")
+		return
+	}
+	if stored != nil {
+		s.writeStoredAuthorization(c, tpl, stored)
 		return
 	}
 	id := order.Identifiers[i]

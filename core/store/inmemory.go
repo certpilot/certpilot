@@ -68,6 +68,7 @@ type MemoryStore struct {
 	acmeAccounts    map[string]*ACMEAccount
 	acmeNonces      map[string]time.Time
 	acmeOrders      map[string]*ACMEOrder
+	acmeAuthzs      map[string]*ACMEAuthorization
 
 	certificateTemplates map[string]*CertificateTemplate
 	agentInstalls        []*AgentInstallation
@@ -275,6 +276,7 @@ func NewMemoryStore() *MemoryStore {
 		acmeAccounts:    make(map[string]*ACMEAccount),
 		acmeNonces:      make(map[string]time.Time),
 		acmeOrders:      make(map[string]*ACMEOrder),
+		acmeAuthzs:      make(map[string]*ACMEAuthorization),
 
 		certificateTemplates: make(map[string]*CertificateTemplate),
 		tlsPosture:           make(map[string]*EndpointTLSPosture),

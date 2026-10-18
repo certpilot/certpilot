@@ -47,3 +47,18 @@ func TestDevelopmentACMEMayDeriveItsOwnAddress(t *testing.T) {
 		t.Errorf("development ACME with no external_url was refused: %v", err)
 	}
 }
+
+// RFC 8555 validates http-01 on port 80. Another port is for a test harness;
+// in production it would validate something no public CA would.
+func TestProductionChecksHTTP01OnPort80(t *testing.T) {
+	cfg := validDevelopmentConfig()
+	cfg.Server.Mode = "production"
+	cfg.ACME = ACMEConfig{Enabled: true, ExternalURL: "https://certpilot.example.com",
+		Challenges: ACMEChallengeConfig{HTTPPort: 5002}}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "acme.challenges.http_port") {
+		t.Errorf("got %v, want a refusal naming acme.challenges.http_port", err)
+	}
+	if got := (ACMEChallengeConfig{}).Port(); got != 80 {
+		t.Errorf("default port %d, want 80", got)
+	}
+}
