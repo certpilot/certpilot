@@ -716,3 +716,25 @@ export function formatMetadataValue(field: MetadataField, value: unknown): strin
       return String(value)
   }
 }
+
+/** An External Account Binding credential for one ACME client (#140). */
+export interface AcmeCredential {
+  id: string
+  /** What the client sends as its EAB key ID. */
+  kid: string
+  name: string
+  template_id: string
+  /** The template's slug; empty when the template has been deleted. */
+  template: string
+  /** The account the client registered with it, once it has. */
+  account_id?: string
+  directory_url?: string
+  created_at: string
+  revoked_at?: string
+}
+
+export interface AcmeCredentialList {
+  data: AcmeCredential[]
+  /** Whether acme.enabled is on. Off, no client can use any of these. */
+  enabled: boolean
+}

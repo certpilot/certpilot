@@ -2476,10 +2476,14 @@ template already uses is refused with 409 and that account's URL.
 
 ### Listing and revoking
 
-`GET /api/v1/acme/credentials` lists them, with the account each one made, and
-never the key. `DELETE /api/v1/acme/credentials/:id` revokes one: no new account
-can be made with it. An account it already made keeps working until it is
-deactivated.
+`GET /api/v1/acme/credentials` lists them, with the account each one made and
+the directory URL to give a client, and never the key. Its `enabled` field says
+whether `acme.enabled` is on: a credential made while it is off works for no
+client until it is turned on. `DELETE /api/v1/acme/credentials/:id` revokes one,
+and deactivates the account it made, so that client can no longer order. No new
+account can be made with it either.
+
+Settings → ACME clients in the console does all three.
 
 ## Display tokens
 

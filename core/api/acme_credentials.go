@@ -44,6 +44,9 @@ type mintACMECredentialRequest struct {
 type acmeCredentialView struct {
 	*store.ACMEEABCredential
 	TemplateSlug string `json:"template"`
+	// DirectoryURL is what to hand the client, so the console can show it
+	// again for a credential made earlier. The key it cannot show again.
+	DirectoryURL string `json:"directory_url,omitempty"`
 }
 
 // Create handles POST /api/v1/acme/credentials.
@@ -104,7 +107,7 @@ func (h *ACMECredentialHandler) Create(c *gin.Context) {
 		fmt.Sprintf(`{"name":%q,"template":%q,"kid":%q}`, cred.Name, tpl.Slug, cred.KID))
 
 	c.JSON(http.StatusCreated, gin.H{
-		"data": acmeCredentialView{cred, tpl.Slug},
+		"data": acmeCredentialView{cred, tpl.Slug, ""},
 		// base64url, which is what certbot's --eab-hmac-key and acme.sh's
 		// --eab-hmac-key take. Shown here and nowhere else.
 		"hmac_key":      base64.RawURLEncoding.EncodeToString(key),
@@ -132,21 +135,54 @@ func (h *ACMECredentialHandler) List(c *gin.Context) {
 	}
 	out := make([]acmeCredentialView, 0, len(creds))
 	for _, cred := range creds {
-		out = append(out, acmeCredentialView{cred, slugs[cred.TemplateID]})
+		slug := slugs[cred.TemplateID]
+		view := acmeCredentialView{cred, slug, ""}
+		if slug != "" {
+			view.DirectoryURL = acmeserver.DirectoryURL(h.cfg.ACME.ExternalURL, c.Request, slug)
+		}
+		out = append(out, view)
 	}
-	c.JSON(http.StatusOK, gin.H{"data": out})
+	// Said, because a credential minted while ACME is switched off is one no
+	// client can use, and the screen should say why rather than let somebody
+	// find out from certbot.
+	c.JSON(http.StatusOK, gin.H{"data": out, "enabled": h.cfg.ACME.Enabled})
 }
 
 // Revoke handles DELETE /api/v1/acme/credentials/:id.
 func (h *ACMECredentialHandler) Revoke(c *gin.Context) {
+	ctx := c.Request.Context()
 	actor, _ := actorOf(c)
-	if err := h.store.RevokeACMEEABCredential(c.Request.Context(), c.Param("id"), actor); err != nil {
+	id := c.Param("id")
+	if err := h.store.RevokeACMEEABCredential(ctx, id, actor); err != nil {
 		respondLookup(c, err, "ACME credential")
 		return
 	}
-	h.audit(c, "acme_credential.revoked", c.Param("id"), `{}`)
+
+	// The account it made goes with it. Revoking is how a client is cut off,
+	// and one that had already registered is the only kind worth cutting off.
+	account, err := h.store.GetACMEAccountByEAB(ctx, id)
+	if err != nil {
+		slog.Error("an ACME credential was revoked and its account could not be read", "credential", id, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "the credential is revoked, but the account it made could not be read, so it may still be able to order",
+		})
+		return
+	}
+	accountID := ""
+	if account != nil && account.Status == store.ACMEAccountValid {
+		account.Status = store.ACMEAccountDeactivated
+		if err := h.store.UpdateACMEAccount(ctx, account); err != nil {
+			slog.Error("an ACME credential was revoked and its account could not be deactivated", "credential", id, "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "the credential is revoked, but the account it made could not be deactivated and can still order",
+			})
+			return
+		}
+		accountID = account.ID
+	}
+	h.audit(c, "acme_credential.revoked", id, fmt.Sprintf(`{"account_deactivated":%q}`, accountID))
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Revoked. No new account can be made with it. An account it already made keeps working until it is deactivated.",
+		"message": "Revoked. The account it made can no longer order, and no new one can be made with it.",
 	})
 }
 

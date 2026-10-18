@@ -11,6 +11,7 @@ import PanelBox from '@/components/ui/PanelBox.vue'
 import NotificationChannels from '@/components/settings/NotificationChannels.vue'
 import MetadataFields from '@/components/settings/MetadataFields.vue'
 import UsersPanel from '@/components/settings/UsersPanel.vue'
+import AcmeCredentials from '@/components/settings/AcmeCredentials.vue'
 import AuditIntegrity from '@/components/settings/AuditIntegrity.vue'
 import {
   Server, Cpu, ShieldCheck, CircleCheck, CircleX, RotateCw, Palette, UserCog,
@@ -157,6 +158,10 @@ function refreshAll() {
 
       <!-- Alert delivery -->
       <UsersPanel v-if="auth.isAdmin" />
+
+      <!-- Admin only, like the endpoint: the list is a map of who can obtain
+           certificates under each template. -->
+      <AcmeCredentials v-if="auth.isAdmin" />
 
       <!-- Admin only, like the endpoint behind it: the people who could alter
            the audit log are the ones this answer would implicate. -->
