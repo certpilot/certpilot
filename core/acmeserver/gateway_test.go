@@ -30,6 +30,9 @@ type fakeGateway struct {
 	caKey   *ecdsa.PrivateKey
 	caCert  *x509.Certificate
 	lastDNS atomic.Value
+	// revoked counts the revocations the CA was asked for.
+	revoked    atomic.Int32
+	lastReason atomic.Int32
 }
 
 func startGateway(t *testing.T) *fakeGateway {
@@ -97,4 +100,10 @@ func (g *fakeGateway) IssueCertificate(_ context.Context, req *providerv1.IssueC
 		CertificatePem: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
 		ChainPem:       pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: g.caCert.Raw}),
 	}}, nil
+}
+
+func (g *fakeGateway) RevokeCertificate(_ context.Context, req *providerv1.RevokeCertificateRequest) (*providerv1.RevokeCertificateResponse, error) {
+	g.revoked.Add(1)
+	g.lastReason.Store(req.Reason)
+	return &providerv1.RevokeCertificateResponse{Success: true}, nil
 }

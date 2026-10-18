@@ -80,6 +80,7 @@ func newFixture(t *testing.T) *fixture {
 		Store: st, Keyring: kr,
 		Resolver: issuance.NewResolver(st, policy.NewEngine(st)),
 		Signer:   issuance.NewSigner(pm, kr),
+		Revoker:  issuance.NewRevoker(st, pm, kr),
 	}).Register(engine)
 	srv := httptest.NewServer(engine)
 	t.Cleanup(srv.Close)

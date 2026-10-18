@@ -36,9 +36,23 @@ type signed struct {
 	key jwk.Key
 	// account is set when the request used a kid.
 	account *store.ACMEAccount
-	// usedJWK is true for the requests allowed to introduce a key.
+	// usedJWK is true when the request carried its key rather than naming an
+	// account.
 	usedJWK bool
 }
+
+// keyFrom says how a request may say which key signed it.
+type keyFrom int
+
+const (
+	// byKID: an account names itself with its URL, and its stored key is used.
+	byKID keyFrom = iota
+	// byJWK: the request carries the key, because it is introducing it.
+	byJWK
+	// byEither: revokeCert, which an account may send, or anyone holding the
+	// certificate's own private key.
+	byEither
+)
 
 // requestURL is what a signature has to have been made for: the URL the server
 // would have handed out for this request.
@@ -49,7 +63,7 @@ func (s *Server) requestURL(c *gin.Context) string {
 // verify checks a request's JWS: the media type, the algorithm, the nonce, the
 // URL it was signed for, and the signature itself. It writes the refusal and
 // returns nil when any of that fails.
-func (s *Server) verify(c *gin.Context, tpl *store.CertificateTemplate, wantJWK bool) *signed {
+func (s *Server) verify(c *gin.Context, tpl *store.CertificateTemplate, from keyFrom) *signed {
 	if ct := c.GetHeader("Content-Type"); !strings.HasPrefix(ct, "application/jose+json") {
 		s.fail(c, http.StatusUnsupportedMediaType, "malformed", `the body must be application/jose+json`)
 		return nil
@@ -110,8 +124,8 @@ func (s *Server) verify(c *gin.Context, tpl *store.CertificateTemplate, wantJWK 
 		s.fail(c, http.StatusBadRequest, "malformed", `the protected header must have exactly one of "jwk" and "kid"`)
 		return nil
 	}
-	if hasJWK != wantJWK {
-		if wantJWK {
+	if from != byEither && hasJWK != (from == byJWK) {
+		if from == byJWK {
 			s.fail(c, http.StatusBadRequest, "malformed", `this request must carry the account key as "jwk"`)
 		} else {
 			s.fail(c, http.StatusBadRequest, "malformed", `this request must name its account with "kid"`)

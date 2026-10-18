@@ -30,7 +30,7 @@ var byIDMethods = []string{
 // lookupMethods answer a miss with a nil or empty result and a nil error. Their
 // callers ask "is there one?", and a miss is an ordinary answer to that.
 var lookupMethods = []string{
-	"GetACMEAccountByEAB", "GetACMEEABCredentialByKID", "GetAgentEnrolTokenByHash",
+	"GetACMEAccountByEAB", "GetACMEOrderByCertificate", "GetACMEEABCredentialByKID", "GetAgentEnrolTokenByHash",
 	"GetCAAuthorityByFingerprint", "GetCAChain",
 	"GetCertificateByFingerprint", "GetCertificateBySupersededFingerprint",
 	"GetGrantsForAgent", "GetUser",

@@ -206,6 +206,17 @@ func (m *MemoryStore) GetACMEOrder(ctx context.Context, id string) (*ACMEOrder, 
 	return cloneACMEOrder(o), nil
 }
 
+func (m *MemoryStore) GetACMEOrderByCertificate(ctx context.Context, certificateID string) (*ACMEOrder, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, o := range m.acmeOrders {
+		if o.CertificateID != nil && *o.CertificateID == certificateID {
+			return cloneACMEOrder(o), nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *MemoryStore) ListACMEOrdersByAccount(ctx context.Context, accountID string) ([]*ACMEOrder, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

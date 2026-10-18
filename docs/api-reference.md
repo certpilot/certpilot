@@ -2439,6 +2439,18 @@ renews it. The lifetime is the template's, so an order naming `notBefore` or
 One credential makes one account. Naming a template that does not exist is a
 404.
 
+A client can revoke what it was issued:
+
+```bash
+certbot revoke --server "$DIRECTORY_URL" --cert-name web.example.com --reason keycompromise
+```
+
+The account that ordered the certificate may revoke it, and so may anyone
+signing with the certificate's own private key. Other accounts on the same
+template may not. The CA is told first and the inventory changes only if it
+agrees, as with a revocation made in the console, and it is audited under the
+same `certificate.revoked` action.
+
 ### Listing and revoking
 
 `GET /api/v1/acme/credentials` lists them, with the account each one made, and
