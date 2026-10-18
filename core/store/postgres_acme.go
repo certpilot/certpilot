@@ -144,6 +144,19 @@ func (s *PostgresStore) UpdateACMEAccount(ctx context.Context, a *ACMEAccount) e
 	return err
 }
 
+func (s *PostgresStore) UpdateACMEAccountKey(ctx context.Context, id, jwk, thumbprint string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE public.acme_accounts SET jwk = $2, jwk_thumbprint = $3, updated_at = now()
+		WHERE id = $1`, id, jwk, thumbprint)
+	if isUniqueViolation(err) {
+		return fmt.Errorf("another ACME account on this template already has that key: %w", ErrConflict)
+	}
+	if noSuchRow(err) || (err == nil && tag.RowsAffected() == 0) {
+		return fmt.Errorf("ACME account %s %w", id, ErrNotFound)
+	}
+	return err
+}
+
 func (s *PostgresStore) ClaimACMENonce(ctx context.Context, hash []byte, expiresAt time.Time) (bool, error) {
 	// ON CONFLICT DO NOTHING rather than a SELECT then an INSERT: the same nonce
 	// can arrive at two replicas in the same millisecond, and only the primary

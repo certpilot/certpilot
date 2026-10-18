@@ -592,6 +592,9 @@ type Store interface {
 	CreateACMEOrder(ctx context.Context, o *ACMEOrder) error
 	GetACMEOrder(ctx context.Context, id string) (*ACMEOrder, error)
 	ListACMEOrdersByAccount(ctx context.Context, accountID string) ([]*ACMEOrder, error)
+	// UpdateACMEAccountKey replaces an account's key. ErrConflict when another
+	// account on the template already has it.
+	UpdateACMEAccountKey(ctx context.Context, id, jwk, thumbprint string) error
 	// GetACMEOrderByCertificate returns the order that produced a certificate,
 	// or nil, nil when none did.
 	GetACMEOrderByCertificate(ctx context.Context, certificateID string) (*ACMEOrder, error)

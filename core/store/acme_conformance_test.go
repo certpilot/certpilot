@@ -347,3 +347,39 @@ func TestAnACMEOrderIsFoundByTheCertificateItProduced(t *testing.T) {
 		}
 	})
 }
+
+// A key rollover replaces the key an account is found by. Two accounts on one
+// template may not end up with the same key, or a request signed with it would
+// name either.
+func TestAnACMEAccountKeyCanBeChangedButNotToAnotherAccountsKey(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		a := acmeAccountFor(t, s)
+		credB := &ACMEEABCredential{KID: "kid-b", Name: "b", TemplateID: a.TemplateID, HMACKeySealed: "x"}
+		if err := s.CreateACMEEABCredential(ctx, credB); err != nil {
+			t.Fatal(err)
+		}
+		b := &ACMEAccount{TemplateID: a.TemplateID, EABID: credB.ID, JWKThumbprint: "thumb-b", JWK: `{"b":1}`}
+		if err := s.CreateACMEAccount(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := s.UpdateACMEAccountKey(ctx, a.ID, `{"new":1}`, "thumb-new"); err != nil {
+			t.Fatalf("change key: %v", err)
+		}
+		got, err := s.GetACMEAccountByThumbprint(ctx, a.TemplateID, "thumb-new")
+		if err != nil || got == nil || got.ID != a.ID || got.JWK != `{"new":1}` {
+			t.Fatalf("by the new key: %+v, %v", got, err)
+		}
+		if old, _ := s.GetACMEAccountByThumbprint(ctx, a.TemplateID, a.JWKThumbprint); old != nil {
+			t.Error("the account is still found by its old key")
+		}
+
+		if err := s.UpdateACMEAccountKey(ctx, a.ID, `{"b":1}`, "thumb-b"); !errors.Is(err, ErrConflict) {
+			t.Errorf("taking another account's key: %v, want ErrConflict", err)
+		}
+		if err := s.UpdateACMEAccountKey(ctx, missingID, `{}`, "thumb-x"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("a missing account: %v, want ErrNotFound", err)
+		}
+	})
+}

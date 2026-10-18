@@ -2451,6 +2451,10 @@ template may not. The CA is told first and the inventory changes only if it
 agrees, as with a revocation made in the console, and it is audited under the
 same `certificate.revoked` action.
 
+An account can roll its key over (RFC 8555 key change). The request has to be
+signed by both the old key and the new one. A key another account on the
+template already uses is refused with 409 and that account's URL.
+
 ### Listing and revoking
 
 `GET /api/v1/acme/credentials` lists them, with the account each one made, and
