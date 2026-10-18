@@ -91,6 +91,7 @@ func (s *Server) Register(engine *gin.Engine) {
 	g.POST("/authz/:order/:index", s.authorization)
 	g.POST("/cert/:order", s.certificate)
 	g.POST("/revoke-cert", s.revokeCert)
+	g.POST("/key-change", s.keyChange)
 }
 
 // problem is an RFC 7807 document with the ACME error namespace.
@@ -173,6 +174,7 @@ func (s *Server) directory(c *gin.Context) {
 		"newAccount": base + "/new-account",
 		"newOrder":   base + "/new-order",
 		"revokeCert": base + "/revoke-cert",
+		"keyChange":  base + "/key-change",
 		"meta": gin.H{
 			// Said up front so a client that would try to register without
 			// one is told to bring a credential, not left to find out.

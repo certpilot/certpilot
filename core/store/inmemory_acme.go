@@ -151,6 +151,22 @@ func (m *MemoryStore) UpdateACMEAccount(ctx context.Context, a *ACMEAccount) err
 	return nil
 }
 
+func (m *MemoryStore) UpdateACMEAccountKey(ctx context.Context, id, jwk, thumbprint string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	stored, ok := m.acmeAccounts[id]
+	if !ok {
+		return fmt.Errorf("ACME account %s %w", id, ErrNotFound)
+	}
+	for _, other := range m.acmeAccounts {
+		if other.ID != id && other.TemplateID == stored.TemplateID && other.JWKThumbprint == thumbprint {
+			return fmt.Errorf("another ACME account on this template already has that key: %w", ErrConflict)
+		}
+	}
+	stored.JWK, stored.JWKThumbprint, stored.UpdatedAt = jwk, thumbprint, time.Now()
+	return nil
+}
+
 func (m *MemoryStore) ClaimACMENonce(ctx context.Context, hash []byte, expiresAt time.Time) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
