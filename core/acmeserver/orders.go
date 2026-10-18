@@ -161,7 +161,7 @@ func cleanIdentifiers(in []store.ACMEIdentifier) ([]store.ACMEIdentifier, string
 			return nil, fmt.Sprintf("only dns identifiers can be ordered here, not %q", id.Type)
 		}
 		value := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(id.Value), "."))
-		if value == "" || strings.ContainsAny(value, " /\\@") {
+		if !isDNSName(value) {
 			return nil, fmt.Sprintf("%q is not a DNS name", id.Value)
 		}
 		if !seen[value] {
@@ -540,4 +540,29 @@ func (s *Server) certificate(c *gin.Context) {
 		chain = strings.TrimRight(chain, "\n") + "\n" + *cert.ChainPEM
 	}
 	c.Data(http.StatusOK, "application/pem-certificate-chain", []byte(chain))
+}
+
+// isDNSName reports whether a dns identifier is a host name (RFC 1123), with
+// an optional leading "*." for a wildcard. Strict because a name is what the
+// core connects to when it validates a challenge, and an address in disguise,
+// such as 2130706433 or 127.1, is one a resolver may turn into 127.0.0.1. A
+// last label that is all digits is never a host name.
+func isDNSName(name string) bool {
+	name = strings.TrimPrefix(name, "*.")
+	if name == "" || len(name) > 253 {
+		return false
+	}
+	labels := strings.Split(name, ".")
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+				return false
+			}
+		}
+	}
+	last := labels[len(labels)-1]
+	return strings.IndexFunc(last, func(r rune) bool { return r < '0' || r > '9' }) >= 0
 }

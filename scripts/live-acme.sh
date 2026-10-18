@@ -12,8 +12,9 @@
 #   acme.sh   registers, is issued, renews in place
 #
 # and, with a credential that requires proof of control, certbot proving a
-# name by HTTP-01 from its webroot and another by DNS-01 through a manual
-# hook, and a DNS-01 answer that is wrong being refused. Names are looked up
+# name by HTTP-01 from its webroot (once through a redirect) and another by
+# DNS-01 through a manual hook, lego proving one by TLS-ALPN-01, and a DNS-01
+# answer that is wrong being refused. Names are looked up
 # in pebble-challtestsrv, which answers every name with this machine and serves
 # whatever TXT record the hook sets.
 #
@@ -36,6 +37,7 @@ LEGO_IMAGE="${LEGO_IMAGE:-goacme/lego:v4.28.1}"
 ACMESH_IMAGE="${ACMESH_IMAGE:-neilpang/acme.sh:3.1.1}"
 CHALLTESTSRV_IMAGE="${CHALLTESTSRV_IMAGE:-ghcr.io/letsencrypt/pebble-challtestsrv:2.10.1}"
 WEB_PORT=18497
+ALPN_PORT=18498
 DNS_PORT=18053
 MGMT_PORT=18055
 GW_VERSION="${GW_VERSION:-$(awk '/^GW_VERSION/ {print $3; exit}' Makefile)}"
@@ -48,12 +50,16 @@ if [[ "$(uname -s)" == Linux ]]; then
   HOST=localhost
   DOCKER_NET=(--network host)
   CHALLTEST_NET=(--network host)
+  # Already on the host's network through DOCKER_NET; never empty, for bash 3.2.
+  ALPN_NET=(--label certpilot-live-acme)
   RESOLVER="127.0.0.1:$DNS_PORT"
 else
   HOST=host.docker.internal
   # Never empty: macOS's bash 3.2 calls an empty array unbound under set -u.
   DOCKER_NET=(--add-host host.docker.internal:host-gateway)
   CHALLTEST_NET=(-p "$DNS_PORT:$DNS_PORT/tcp" -p "$MGMT_PORT:$MGMT_PORT")
+  # lego answers TLS-ALPN-01 inside its container; the core connects to it here.
+  ALPN_NET=(-p "$ALPN_PORT:$ALPN_PORT")
   # Docker Desktop does not carry this UDP mapping; the core asks over TCP.
   RESOLVER="tcp://127.0.0.1:$DNS_PORT"
 fi
@@ -80,8 +86,27 @@ LIVE_GATEWAYS="
 # and the web server that answers for those names: certbot's webroot.
 live_docker_run certpilot-live-challtestsrv "${CHALLTEST_NET[@]}" "$CHALLTESTSRV_IMAGE" \
   -dnsserver ":$DNS_PORT" -management ":$MGMT_PORT" -http01 "" -https01 "" -tlsalpn01 "" -doh "" -defaultIPv6 ""
+# A web server answering for every name from the webroot, except that for a
+# name starting "redirect." it sends the challenge path elsewhere first, which
+# is what a site that has moved its files looks like to HTTP-01.
 mkdir -p "$WORK/www"
-python3 -m http.server "$WEB_PORT" --bind 127.0.0.1 --directory "$WORK/www" >"$WORK/web.log" 2>&1 &
+cat >"$WORK/web.py" <<'PY'
+import functools, http.server, sys
+port, root = int(sys.argv[1]), sys.argv[2]
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        host = self.headers.get("Host", "").split(":")[0]
+        if host.startswith("redirect.") and self.path.startswith("/.well-known/acme-challenge/"):
+            self.send_response(302)
+            self.send_header("Location", f"http://{host}:{port}/moved{self.path}")
+            self.end_headers()
+            return
+        if self.path.startswith("/moved/"):
+            self.path = self.path[len("/moved"):]
+        super().do_GET()
+http.server.ThreadingHTTPServer(("127.0.0.1", port), functools.partial(Handler, directory=root)).serve_forever()
+PY
+python3 "$WORK/web.py" "$WEB_PORT" "$WORK/www" >"$WORK/web.log" 2>&1 &
 live_on_exit "kill $!"
 
 live_start_core "acme:
@@ -89,6 +114,7 @@ live_start_core "acme:
   external_url: $ORIGIN
   challenges:
     http_port: $WEB_PORT
+    tls_port: $ALPN_PORT
     dns_resolver: $RESOLVER"
 tries=600
 until grep -q "gateway registered successfully" "$WORK/core.log"; do
@@ -300,6 +326,22 @@ out="$(proof certonly --manual --preferred-challenges dns --manual-auth-hook /ho
 r="$(record dns01.example.com)"
 expect "one held by the client" "$r" || die "the DNS-01 certificate was not recorded: $r"
 pass "proof: certbot proved a name by DNS-01 through its hook, and was issued"
+
+out="$(proof certonly --webroot -w /www -d redirect.example.com --key-type ecdsa)" \
+  || die "certbot could not prove a name whose web server redirects: $out"
+grep -q '"GET /moved/.well-known/acme-challenge/' "$WORK/web.log" || die "HTTP-01 was proved without following the redirect"
+pass "proof: HTTP-01 followed a redirect to where the file is, and was issued"
+
+mkdir -p "$WORK/lego-proof"
+read -r kid hmac < <(credential "lego with proof" true)
+out="$(docker run --rm "${DOCKER_NET[@]}" "${ALPN_NET[@]}" -e LEGO_CA_CERTIFICATES=/ca/ca.pem \
+  -v "$WORK/tls:/ca:ro" -v "$WORK/lego-proof:/data" "$LEGO_IMAGE" \
+  --server "$DIRECTORY" --accept-tos --email ops@example.com --eab --kid "$kid" --hmac "$hmac" \
+  --path /data --domains alpn.example.com --tls --tls.port ":$ALPN_PORT" run 2>&1)" \
+  || die "lego could not prove a name by TLS-ALPN-01: $out"
+r="$(record alpn.example.com)"
+expect "one held by the client" "$r" || die "the TLS-ALPN-01 certificate was not recorded: $r"
+pass "proof: lego proved a name by TLS-ALPN-01, and was issued"
 
 out="$(WRONG=1 proof certonly --manual --preferred-challenges dns --manual-auth-hook /hooks/dns.py -d wrong.example.com --key-type ecdsa)" \
   && die "certbot was issued with a wrong DNS-01 answer: $out"

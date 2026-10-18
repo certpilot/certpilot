@@ -2459,8 +2459,9 @@ One credential makes one account. Naming a template that does not exist is a
 
 With `"require_challenge": true`, each name of an order has to be proved
 before the order is ready: by HTTP-01 (a file under
-`/.well-known/acme-challenge/` on port 80) or DNS-01 (a TXT record at
-`_acme-challenge.<name>`). A wildcard can only use DNS-01. A failed proof ends
+`/.well-known/acme-challenge/` on port 80), DNS-01 (a TXT record at
+`_acme-challenge.<name>`) or TLS-ALPN-01 (RFC 8737, on port 443). A wildcard
+can only use DNS-01. A failed proof ends
 the order, and the client orders again. The template's rules still apply at
 finalize: proving a name does not let a template issue what it does not
 allow.

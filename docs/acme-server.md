@@ -89,22 +89,28 @@ and CertPilot holds no key to renew it with.
 By default the credential is the authorisation. The template's name rules
 bound what it covers, and the client is not asked to prove anything further.
 
-A credential made with **Require HTTP-01 or DNS-01** (`"require_challenge":
-true`) also makes the client prove each name before anything is issued:
+A credential made with **Require proof of control** (`"require_challenge":
+true`) also makes the client prove each name before anything is issued, by any
+one of:
 
-- **HTTP-01**: a file at `http://<name>/.well-known/acme-challenge/<token>`.
-  Fetched on port 80. Redirects are not followed, so a name whose web server
-  redirects port 80 to https needs DNS-01.
+- **HTTP-01**: a file at `http://<name>/.well-known/acme-challenge/<token>`,
+  fetched on port 80. Up to ten redirects are followed, only to the same name,
+  over http on port 80 or https on 443 (whose certificate is not checked, as
+  RFC 8555 says): a redirect is a web server telling the core where to
+  connect, and it cannot send it anywhere a challenge could not go. A redirect
+  to another name, such as a CDN's, is refused, where Let's Encrypt would
+  follow it.
 - **DNS-01**: a TXT record at `_acme-challenge.<name>`. The only one a wildcard
   can use.
+- **TLS-ALPN-01** (RFC 8737): a self-signed certificate for the name, carrying
+  the key authorization, served on port 443 to a connection asking for
+  `acme-tls/1`.
 
 The core looks the name up with `acme.challenges.dns_resolver`, or the system's
 resolver when that is not set, so point it at the resolver that sees your
 internal zones. A failed proof ends the order, and the client orders again.
 Proving a name does not let a template issue what it does not allow: the
 template's rules still apply when the order is finalised.
-
-TLS-ALPN-01 is not offered.
 
 ## Renewal
 
@@ -150,7 +156,8 @@ be signed by both the old key and the new one.
 ## Limitations
 
 - No open registration. Every client needs a credential.
-- No TLS-ALPN-01, and HTTP-01 does not follow redirects.
+- Names only: a `dns` identifier has to be a host name, and IP address
+  identifiers (RFC 8738) are not accepted.
 - Caddy and win-acme speak the same protocol and should work; neither has been
   run against it.
 - A client renews its own certificates. CertPilot cannot renew one early for

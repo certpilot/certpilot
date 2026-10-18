@@ -62,3 +62,16 @@ func TestProductionChecksHTTP01OnPort80(t *testing.T) {
 		t.Errorf("default port %d, want 80", got)
 	}
 }
+
+func TestProductionChecksTLSALPN01OnPort443(t *testing.T) {
+	cfg := validDevelopmentConfig()
+	cfg.Server.Mode = "production"
+	cfg.ACME = ACMEConfig{Enabled: true, ExternalURL: "https://certpilot.example.com",
+		Challenges: ACMEChallengeConfig{TLSPort: 5001}}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "acme.challenges.tls_port") {
+		t.Errorf("got %v, want a refusal naming acme.challenges.tls_port", err)
+	}
+	if got := (ACMEChallengeConfig{}).TLSALPNPort(); got != 443 {
+		t.Errorf("default port %d, want 443", got)
+	}
+}
