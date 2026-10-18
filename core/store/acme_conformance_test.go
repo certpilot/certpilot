@@ -77,14 +77,14 @@ func TestARevokedACMECredentialIsStillFoundAndSaysSo(t *testing.T) {
 			t.Fatal(err)
 		}
 		by := "admin"
-		if err := s.RevokeACMEEABCredential(ctx, cred.ID, &by); err != nil {
+		if _, err := s.RevokeACMEEABCredential(ctx, cred.ID, &by); err != nil {
 			t.Fatalf("revoke: %v", err)
 		}
 		got, _ := s.GetACMEEABCredentialByKID(ctx, "k")
 		if got == nil || got.RevokedAt == nil {
 			t.Fatalf("a revoked credential must be found and marked, got %+v", got)
 		}
-		if err := s.RevokeACMEEABCredential(ctx, missingID, &by); !errors.Is(err, ErrNotFound) {
+		if _, err := s.RevokeACMEEABCredential(ctx, missingID, &by); !errors.Is(err, ErrNotFound) {
 			t.Errorf("revoking a missing credential returned %v, want ErrNotFound", err)
 		}
 	})
@@ -450,6 +450,48 @@ func TestCertificatesAreFoundBySerial(t *testing.T) {
 		none, err := s.GetCertificatesBySerial(ctx, "0000")
 		if err != nil || len(none) != 0 {
 			t.Errorf("an unknown serial: %d, %v", len(none), err)
+		}
+	})
+}
+
+// Revoking a credential is how a client is cut off, so the account it made is
+// deactivated in the same write: done as two, a failure between them left an
+// account ordering on a revoked credential.
+func TestRevokingAnACMECredentialDeactivatesItsAccount(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		acct := acmeAccountFor(t, s)
+		deactivated, err := s.RevokeACMEEABCredential(ctx, acct.EABID, nil)
+		if err != nil || deactivated != acct.ID {
+			t.Fatalf("revoke: deactivated %q, %v; want the account %s", deactivated, err, acct.ID)
+		}
+		got, _ := s.GetACMEAccount(ctx, acct.ID)
+		if got.Status != ACMEAccountDeactivated {
+			t.Errorf("the account is %s after its credential was revoked", got.Status)
+		}
+		// Revoking again changes nothing and is not an error.
+		if again, err := s.RevokeACMEEABCredential(ctx, acct.EABID, nil); err != nil || again != "" {
+			t.Errorf("a second revoke: %q, %v", again, err)
+		}
+	})
+}
+
+// A registration that checked the credential before it was revoked must not
+// then create an account with it.
+func TestAnACMEAccountCannotBeMadeWithARevokedCredential(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		tpl := acmeTemplate(t, s)
+		cred := &ACMEEABCredential{KID: "revoked-kid", Name: "n", TemplateID: tpl, HMACKeySealed: "x"}
+		if err := s.CreateACMEEABCredential(ctx, cred); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.RevokeACMEEABCredential(ctx, cred.ID, nil); err != nil {
+			t.Fatal(err)
+		}
+		err := s.CreateACMEAccount(ctx, &ACMEAccount{TemplateID: tpl, EABID: cred.ID, JWKThumbprint: "t2", JWK: "{}"})
+		if !errors.Is(err, ErrRevoked) {
+			t.Fatalf("got %v, want ErrRevoked", err)
 		}
 	})
 }

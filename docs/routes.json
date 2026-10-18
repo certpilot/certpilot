@@ -3847,6 +3847,11 @@
               "name": "data",
               "type": "any",
               "required": false
+            },
+            {
+              "name": "enabled",
+              "type": "any",
+              "required": false
             }
           ]
         },
@@ -3961,7 +3966,7 @@
               "name": "message",
               "type": "string",
               "required": false,
-              "value": "Revoked. No new account can be made with it. An account it already made keeps working until it is deactivated."
+              "value": "Revoked. The account it made can no longer order, and no new one can be made with it."
             }
           ]
         },

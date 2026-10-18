@@ -44,6 +44,9 @@ type mintACMECredentialRequest struct {
 type acmeCredentialView struct {
 	*store.ACMEEABCredential
 	TemplateSlug string `json:"template"`
+	// DirectoryURL is what to hand the client, so the console can show it
+	// again for a credential made earlier. The key it cannot show again.
+	DirectoryURL string `json:"directory_url,omitempty"`
 }
 
 // Create handles POST /api/v1/acme/credentials.
@@ -104,11 +107,11 @@ func (h *ACMECredentialHandler) Create(c *gin.Context) {
 		fmt.Sprintf(`{"name":%q,"template":%q,"kid":%q}`, cred.Name, tpl.Slug, cred.KID))
 
 	c.JSON(http.StatusCreated, gin.H{
-		"data": acmeCredentialView{cred, tpl.Slug},
+		"data": acmeCredentialView{cred, tpl.Slug, ""},
 		// base64url, which is what certbot's --eab-hmac-key and acme.sh's
 		// --eab-hmac-key take. Shown here and nowhere else.
 		"hmac_key":      base64.RawURLEncoding.EncodeToString(key),
-		"directory_url": acmeserver.DirectoryURL(h.cfg.ACME.ExternalURL, c.Request, tpl.Slug),
+		"directory_url": h.directoryURL(c, tpl.Slug),
 		"message":       "Copy the hmac_key now. It is not kept in a form that can be shown again.",
 	})
 }
@@ -132,22 +135,49 @@ func (h *ACMECredentialHandler) List(c *gin.Context) {
 	}
 	out := make([]acmeCredentialView, 0, len(creds))
 	for _, cred := range creds {
-		out = append(out, acmeCredentialView{cred, slugs[cred.TemplateID]})
+		slug := slugs[cred.TemplateID]
+		view := acmeCredentialView{cred, slug, ""}
+		if slug != "" {
+			view.DirectoryURL = h.directoryURL(c, slug)
+		}
+		out = append(out, view)
 	}
-	c.JSON(http.StatusOK, gin.H{"data": out})
+	// Said, because a credential minted while ACME is switched off is one no
+	// client can use, and the screen should say why rather than let somebody
+	// find out from certbot.
+	c.JSON(http.StatusOK, gin.H{"data": out, "enabled": h.cfg.ACME.Enabled})
 }
 
 // Revoke handles DELETE /api/v1/acme/credentials/:id.
 func (h *ACMECredentialHandler) Revoke(c *gin.Context) {
 	actor, _ := actorOf(c)
-	if err := h.store.RevokeACMEEABCredential(c.Request.Context(), c.Param("id"), actor); err != nil {
+	id := c.Param("id")
+	// One write: the credential, and the account it made, which is the one a
+	// client cut off would otherwise go on ordering with.
+	deactivated, err := h.store.RevokeACMEEABCredential(c.Request.Context(), id, actor)
+	if err != nil {
 		respondLookup(c, err, "ACME credential")
 		return
 	}
-	h.audit(c, "acme_credential.revoked", c.Param("id"), `{}`)
+	h.audit(c, "acme_credential.revoked", id, fmt.Sprintf(`{"account_deactivated":%q}`, deactivated))
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Revoked. No new account can be made with it. An account it already made keeps working until it is deactivated.",
+		"message": "Revoked. The account it made can no longer order, and no new one can be made with it.",
 	})
+}
+
+// directoryURL is the address to give a client for a template's directory.
+//
+// From acme.external_url when it is set. Without it, the only other source is
+// the request, whose Host and X-Forwarded-Proto are whatever the sender chose:
+// trusted on a developer's machine, and in production left empty rather than
+// show an administrator an address somebody else picked, to paste into a
+// client. Production with ACME switched on cannot get here, because
+// configuration refuses to start without an external_url.
+func (h *ACMECredentialHandler) directoryURL(c *gin.Context, slug string) string {
+	if h.cfg.ACME.ExternalURL == "" && h.cfg.Server.IsProduction() {
+		return ""
+	}
+	return acmeserver.DirectoryURL(h.cfg.ACME.ExternalURL, c.Request, slug)
 }
 
 func (h *ACMECredentialHandler) audit(c *gin.Context, action, entityID, details string) {

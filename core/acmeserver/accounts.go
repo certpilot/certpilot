@@ -102,6 +102,11 @@ func (s *Server) newAccount(c *gin.Context) {
 		JWK: mustJSON(req.key), Contacts: contacts,
 	}
 	if err := s.cfg.Store.CreateACMEAccount(ctx, acct); err != nil {
+		if errors.Is(err, store.ErrRevoked) {
+			// Revoked between the binding check and the insert.
+			s.fail(c, http.StatusUnauthorized, "unauthorized", "this credential has been revoked")
+			return
+		}
 		if errors.Is(err, store.ErrConflict) {
 			// Lost a race with another request using the same credential.
 			s.fail(c, http.StatusUnauthorized, "unauthorized", "this credential has already been used to register an account")

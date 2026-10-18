@@ -178,3 +178,77 @@ func TestACMEIsNotServedUnlessTheOperatorTurnedItOn(t *testing.T) {
 		}
 	}
 }
+
+// Revoking is how an administrator cuts a client off. Leaving the account it
+// already made able to order would make revoking stop only a client that had
+// not registered yet, which is nobody worth revoking.
+func TestRevokingACredentialEndsTheAccountItMade(t *testing.T) {
+	r, st, _ := realRouterConfigured(t, store.NewMemoryStore(), acmeEnabled)
+	acmeTemplate(t, st)
+	got := mintACMECredential(t, r, "web")
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	hmac, _ := base64.RawURLEncoding.DecodeString(got.HMACKey)
+	client := &acme.Client{Key: key, DirectoryURL: srv.URL + "/acme/web/directory"}
+	if _, err := client.Register(context.Background(), &acme.Account{
+		ExternalAccountBinding: &acme.ExternalAccountBinding{KID: got.Data.KID, Key: hmac},
+	}, acme.AcceptTOS); err != nil {
+		t.Fatal(err)
+	}
+
+	if w := do(r, http.MethodDelete, "/api/v1/acme/credentials/"+got.Data.ID, nil, nil); w.Code != http.StatusOK {
+		t.Fatalf("revoke: %d %s", w.Code, w.Body.String())
+	}
+	if _, err := client.AuthorizeOrder(context.Background(), acme.DomainIDs("web.example.com")); err == nil {
+		t.Fatal("the account made with a revoked credential can still order")
+	}
+}
+
+// The console screen needs to know whether the endpoint is on at all, and the
+// directory address to hand a client for each credential.
+func TestTheCredentialListSaysWhetherACMEIsOnAndWhereToPointAClient(t *testing.T) {
+	for _, on := range []bool{true, false} {
+		tweak := func(c *config.CoreConfig) { c.ACME.Enabled = on }
+		r, st, _ := realRouterConfigured(t, store.NewMemoryStore(), tweak)
+		acmeTemplate(t, st)
+		mintACMECredential(t, r, "web")
+
+		w := do(r, http.MethodGet, "/api/v1/acme/credentials", nil, nil)
+		var list struct {
+			Enabled bool `json:"enabled"`
+			Data    []struct {
+				DirectoryURL string `json:"directory_url"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+			t.Fatal(err)
+		}
+		if list.Enabled != on {
+			t.Errorf("enabled %v with acme.enabled %v", list.Enabled, on)
+		}
+		if len(list.Data) != 1 || !strings.HasSuffix(list.Data[0].DirectoryURL, "/acme/web/directory") {
+			t.Errorf("list %s", w.Body.String())
+		}
+	}
+}
+
+// With no external_url, the only address to hand a client is the one the
+// request arrived on, which whoever sent the request chose. Fine on a
+// developer's machine; in production the console would show an administrator
+// a directory URL an attacker picked, to paste into a client.
+func TestADirectoryURLIsNeverTakenFromTheRequestInProduction(t *testing.T) {
+	production := func(c *config.CoreConfig) { c.Server.Mode = "production"; c.ACME.ExternalURL = "" }
+	r, st, _ := realRouterConfigured(t, store.NewMemoryStore(), production)
+	acmeTemplate(t, st)
+
+	got := mintACMECredential(t, r, "web")
+	if got.DirectoryURL != "" {
+		t.Errorf("minting answered directory_url %q, taken from the request", got.DirectoryURL)
+	}
+	w := do(r, http.MethodGet, "/api/v1/acme/credentials", nil, map[string]string{"X-Forwarded-Proto": "https"})
+	if strings.Contains(w.Body.String(), "example.com/acme") {
+		t.Errorf("the list carries a directory URL taken from the request: %s", w.Body.String())
+	}
+}
