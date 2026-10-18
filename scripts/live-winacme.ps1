@@ -225,7 +225,7 @@ func main() {
   if (-not (Get-ChildItem "$Work/pem" -Filter '*.pem')) { Die "win-acme wrote no PEM files:`n$out" }
   Pass 'win-acme: registered with a credential and issued, recorded as the client''s key'
 
-  $out = & $wacs @common --renew --force 2>&1 | Out-String
+  $out = & $wacs @common --renew --force --nocache 2>&1 | Out-String
   if ($LASTEXITCODE -ne 0) { Die "win-acme could not renew:`n$out" }
   $r = Record 'winacme.example.com'
   if ($r.Count -ne 1 -or $r[0].renewal_count -ne 1) {
