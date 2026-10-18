@@ -544,6 +544,13 @@ func TestACMEAuthorizationsKeepTheirChallengeState(t *testing.T) {
 
 		authz := list[0]
 		now := time.Now().Truncate(time.Second)
+		// Each way a name can be proved has to be one the schema accepts.
+		for _, how := range []string{"dns-01", "tls-alpn-01"} {
+			authz.Status, authz.ValidatedWith = ACMEAuthzPending, how
+			if err := s.UpdateACMEAuthorization(ctx, authz); err != nil {
+				t.Fatalf("validated with %s: %v", how, err)
+			}
+		}
 		authz.Status, authz.ValidatedWith, authz.ValidatedAt = ACMEAuthzValid, "http-01", &now
 		if err := s.UpdateACMEAuthorization(ctx, authz); err != nil {
 			t.Fatal(err)

@@ -1,9 +1,12 @@
 package acmeserver
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -35,8 +38,18 @@ type NameResolver interface {
 // HTTP-01 on port 80, the system resolver, and ten seconds per attempt.
 type Validation struct {
 	HTTPPort int
+	// TLSPort is where TLS-ALPN-01 connects, and the only https port an
+	// HTTP-01 redirect may go to. 443 when unset.
+	TLSPort  int
 	Resolver NameResolver
 	Timeout  time.Duration
+}
+
+func (v Validation) tlsPort() int {
+	if v.TLSPort == 0 {
+		return 443
+	}
+	return v.TLSPort
 }
 
 func (v Validation) port() int {
@@ -82,36 +95,93 @@ func keyAuthorization(token string, account *store.ACMEAccount) string {
 	return token + "." + account.JWKThumbprint
 }
 
+// maxRedirects is how many redirects an HTTP-01 fetch follows, as many as
+// Let's Encrypt does.
+const maxRedirects = 10
+
+// redirectRefused is a redirect HTTP-01 would not follow.
+type redirectRefused struct{ to, why string }
+
+func (e *redirectRefused) Error() string {
+	return "a redirect to " + e.to + " was not followed: " + e.why
+}
+
+// dial connects to host:port, with host looked up through the validation
+// resolver, trying each address in turn.
+func (v Validation) dial(ctx context.Context, network, host, port string) (net.Conn, error) {
+	addrs, err := v.resolver().LookupHost(ctx, host)
+	if err != nil || len(addrs) == 0 {
+		return nil, failed("dns", "%s does not resolve", host)
+	}
+	var d net.Dialer
+	var last error
+	for _, addr := range addrs {
+		conn, err := d.DialContext(ctx, network, net.JoinHostPort(addr, port))
+		if err == nil {
+			return conn, nil
+		}
+		last = err
+	}
+	return nil, last
+}
+
 // checkHTTP01 fetches http://<name>/.well-known/acme-challenge/<token>.
 //
-// Redirects are not followed. Following them is what lets HTTP-01 work through
-// an http-to-https redirect, and also what turns the core into something that
-// will fetch any address a client's web server names; for a core inside an
-// organisation's network, the second outweighs the first.
+// Redirects are followed, as RFC 8555 §8.3 says, which is what lets HTTP-01
+// work through an http-to-https redirect. Only to http or https, only on the
+// two ports a challenge may use anyway, and only to a name: a redirect is a
+// web server telling the core where to connect, and a core inside an
+// organisation's network must not become a way to reach whatever address that
+// server names.
 func (v Validation) checkHTTP01(ctx context.Context, name, token, want string) error {
-	addrs, err := v.resolver().LookupHost(ctx, name)
-	if err != nil || len(addrs) == 0 {
+	if _, err := v.resolver().LookupHost(ctx, name); err != nil {
 		return failed("dns", "%s does not resolve", name)
 	}
-	port := strconv.Itoa(v.port())
-	dialer := &net.Dialer{}
+	httpPort, tlsPort := strconv.Itoa(v.port()), strconv.Itoa(v.tlsPort())
 	client := &http.Client{
 		Timeout: v.timeout(),
 		Transport: &http.Transport{
 			Proxy: nil,
-			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
-				var last error
-				for _, addr := range addrs {
-					conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(addr, port))
-					if err == nil {
-						return conn, nil
-					}
-					last = err
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				host, port, err := net.SplitHostPort(addr)
+				if err != nil {
+					return nil, err
 				}
-				return nil, last
+				// The URL's default ports stand for the challenge ports.
+				switch port {
+				case "80":
+					port = httpPort
+				case "443":
+					port = tlsPort
+				}
+				return v.dial(ctx, network, host, port)
 			},
+			// RFC 8555 §8.3: a redirect to https is followed without checking
+			// the certificate, which is what HTTP-01 proves and TLS does not.
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // see above
 		},
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			to := req.URL.String()
+			if len(via) > maxRedirects {
+				return &redirectRefused{to, fmt.Sprintf("more than %d redirects", maxRedirects)}
+			}
+			if net.ParseIP(req.URL.Hostname()) != nil {
+				return &redirectRefused{to, "it names an address, not a name"}
+			}
+			switch req.URL.Scheme {
+			case "http":
+				if p := req.URL.Port(); p != "" && p != httpPort {
+					return &redirectRefused{to, "http redirects may only go to port " + httpPort}
+				}
+			case "https":
+				if p := req.URL.Port(); p != "" && p != tlsPort {
+					return &redirectRefused{to, "https redirects may only go to port " + tlsPort}
+				}
+			default:
+				return &redirectRefused{to, "only http and https are followed"}
+			}
+			return nil
+		},
 	}
 
 	url := "http://" + name + "/.well-known/acme-challenge/" + token
@@ -121,7 +191,11 @@ func (v Validation) checkHTTP01(ctx context.Context, name, token, want string) e
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return failed("connection", "could not fetch %s on port %s", url, port)
+		var refused *redirectRefused
+		if errors.As(err, &refused) {
+			return failed("incorrectResponse", "%s", refused.Error())
+		}
+		return failed("connection", "could not fetch %s on port %s", url, httpPort)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -134,6 +208,60 @@ func (v Validation) checkHTTP01(ctx context.Context, name, token, want string) e
 		return failed("incorrectResponse", "%s did not answer with this account's key authorization", url)
 	}
 	return nil
+}
+
+// idPeACMEIdentifier is RFC 8737's id-pe-acmeIdentifier.
+var idPeACMEIdentifier = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 1, 31}
+
+// checkTLSALPN01 connects to <name> on the TLS port asking for acme-tls/1, and
+// checks the certificate it is shown (RFC 8737 §3): for exactly that name, and
+// carrying the key authorization's digest in a critical acmeIdentifier
+// extension.
+func (v Validation) checkTLSALPN01(ctx context.Context, name, want string) error {
+	raw, err := v.dial(ctx, "tcp", name, strconv.Itoa(v.tlsPort()))
+	if err != nil {
+		var cf *challengeFailure
+		if errors.As(err, &cf) {
+			return err
+		}
+		return failed("connection", "could not connect to %s on port %d", name, v.tlsPort())
+	}
+	defer raw.Close()
+	// Not verified against any root: the certificate is a self-signed one made
+	// for the challenge, and what is checked is its extension.
+	conn := tls.Client(raw, &tls.Config{ //nolint:gosec // see above
+		ServerName: name, NextProtos: []string{"acme-tls/1"}, InsecureSkipVerify: true, MinVersion: tls.VersionTLS12,
+	})
+	if err := conn.HandshakeContext(ctx); err != nil {
+		return failed("tls", "the TLS handshake with %s failed", name)
+	}
+	state := conn.ConnectionState()
+	if state.NegotiatedProtocol != "acme-tls/1" {
+		return failed("incorrectResponse", "%s did not negotiate acme-tls/1", name)
+	}
+	if len(state.PeerCertificates) == 0 {
+		return failed("incorrectResponse", "%s presented no certificate", name)
+	}
+	leaf := state.PeerCertificates[0]
+	if len(leaf.DNSNames) != 1 || !strings.EqualFold(leaf.DNSNames[0], name) ||
+		len(leaf.IPAddresses) > 0 || len(leaf.EmailAddresses) > 0 || len(leaf.URIs) > 0 {
+		return failed("incorrectResponse", "the certificate %s presented is not for exactly %s", name, name)
+	}
+	sum := sha256.Sum256([]byte(want))
+	for _, ext := range leaf.Extensions {
+		if !ext.Id.Equal(idPeACMEIdentifier) {
+			continue
+		}
+		var digest []byte
+		if rest, err := asn1.Unmarshal(ext.Value, &digest); err != nil || len(rest) > 0 || !ext.Critical {
+			return failed("incorrectResponse", "the certificate %s presented has a malformed acmeIdentifier", name)
+		}
+		if !bytes.Equal(digest, sum[:]) {
+			return failed("incorrectResponse", "the certificate %s presented is not for this account's key authorization", name)
+		}
+		return nil
+	}
+	return failed("incorrectResponse", "the certificate %s presented has no acmeIdentifier extension", name)
 }
 
 // checkDNS01 looks for the key authorization's digest in
@@ -193,14 +321,14 @@ func (s *Server) createAuthorizations(c *gin.Context, order *store.ACMEOrder) er
 	return nil
 }
 
-// challengeTypes are those an authorization offers. RFC 8555 §8.3: a wildcard
-// cannot be proved by HTTP, because one web server answering says nothing
+// challengeTypes are those an authorization offers. A wildcard can only use
+// DNS-01 (RFC 8555 §8.3, RFC 8737 §3): one server answering says nothing
 // about every name under it.
 func challengeTypes(a *store.ACMEAuthorization) []string {
 	if a.Wildcard {
 		return []string{"dns-01"}
 	}
-	return []string{"http-01", "dns-01"}
+	return []string{"http-01", "dns-01", "tls-alpn-01"}
 }
 
 func (s *Server) challengeURL(c *gin.Context, tpl *store.CertificateTemplate, a *store.ACMEAuthorization, kind string) string {
@@ -312,9 +440,12 @@ func (s *Server) respondToChallenge(c *gin.Context) {
 	} else {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), s.cfg.Validation.timeout())
 		want := keyAuthorization(authz.Token, req.account)
-		if kind == "http-01" {
+		switch kind {
+		case "http-01":
 			proof = s.cfg.Validation.checkHTTP01(ctx, authz.Value, authz.Token, want)
-		} else {
+		case "tls-alpn-01":
+			proof = s.cfg.Validation.checkTLSALPN01(ctx, authz.Value, want)
+		default:
 			proof = s.cfg.Validation.checkDNS01(ctx, authz.Value, want)
 		}
 		cancel()

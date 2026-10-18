@@ -12,7 +12,7 @@ import (
 // RequiredSchemaVersion is the newest migration this core's code depends on.
 // TestTheRequiredSchemaIsTheNewestMigration fails when a migration is added
 // without raising it.
-const RequiredSchemaVersion = "048"
+const RequiredSchemaVersion = "049"
 
 // CheckSchema refuses a database whose schema is older than this core needs.
 //

@@ -140,8 +140,8 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
       A credential lets one ACME client — certbot, acme.sh, lego, Caddy — register under one
       template. The template decides which names, keys and lifetimes it can be issued. The client
       keeps its key; CertPilot records the certificate and alerts on it like any other. A
-      credential that requires proof makes the client show it controls each name, by HTTP-01 or
-      DNS-01, before anything is issued.
+      credential that requires proof makes the client show it controls each name, by HTTP-01,
+      DNS-01 or TLS-ALPN-01, before anything is issued.
     </p>
 
     <!-- Off is said, not hidden: a credential made now works for no client
@@ -212,7 +212,7 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
       </select>
       <label class="proof" title="The client proves it controls each name before it is issued">
         <input v-model="newRequireChallenge" type="checkbox" class="check-console" />
-        <span class="field-help">Require HTTP-01 or DNS-01</span>
+        <span class="field-help">Require proof of control</span>
       </label>
       <button class="btn-console" type="submit" :disabled="busy === 'new'">
         {{ busy === 'new' ? 'Creating…' : 'Create' }}
@@ -254,7 +254,7 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
               <span v-else class="label-micro sev-warning">template deleted</span>
             </td>
             <td>
-              <span class="field-help">{{ cred.require_challenge ? 'HTTP-01 or DNS-01' : 'Credential only' }}</span>
+              <span class="field-help">{{ cred.require_challenge ? 'HTTP-01, DNS-01 or TLS-ALPN-01' : 'Credential only' }}</span>
             </td>
             <td><code class="url">{{ cred.directory_url || 'set acme.external_url' }}</code></td>
             <td class="tabular">{{ formatDateTime(cred.created_at) }}</td>

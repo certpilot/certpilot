@@ -200,7 +200,7 @@ func (h *ACMECredentialHandler) audit(c *gin.Context, action, entityID, details 
 
 // acmeValidation is how the ACME server checks challenges, from configuration.
 func acmeValidation(c config.ACMEChallengeConfig) acmeserver.Validation {
-	v := acmeserver.Validation{HTTPPort: c.Port()}
+	v := acmeserver.Validation{HTTPPort: c.Port(), TLSPort: c.TLSALPNPort()}
 	if c.DNSResolver != "" {
 		// Every lookup, both challenges', goes to the configured resolver.
 		// "tcp://" forces TCP, for a resolver UDP cannot reach; Go's resolver

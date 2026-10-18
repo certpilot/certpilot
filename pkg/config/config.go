@@ -45,10 +45,22 @@ type ACMEChallengeConfig struct {
 	// HTTPPort is the port HTTP-01 is fetched from. RFC 8555 says 80, and
 	// production refuses anything else; another port is for a test harness.
 	HTTPPort int `yaml:"http_port"`
+	// TLSPort is the port TLS-ALPN-01 connects to, and the only https port an
+	// HTTP-01 redirect may go to. RFC 8737 says 443, and production refuses
+	// anything else.
+	TLSPort int `yaml:"tls_port"`
 	// DNSResolver is the host:port of the resolver used to look a name up,
 	// for both challenges, or tcp://host:port to ask it over TCP only. Empty
 	// uses the system's.
 	DNSResolver string `yaml:"dns_resolver"`
+}
+
+// TLSALPNPort is the TLS-ALPN-01 port, 443 when unset.
+func (c ACMEChallengeConfig) TLSALPNPort() int {
+	if c.TLSPort == 0 {
+		return 443
+	}
+	return c.TLSPort
 }
 
 // Port is the HTTP-01 port, 80 when unset.
@@ -339,6 +351,10 @@ func (c *CoreConfig) Validate() error {
 		if c.ACME.Challenges.Port() != 80 {
 			return fmt.Errorf("config: acme.challenges.http_port is %d; in production HTTP-01 is checked on port 80, "+
 				"as RFC 8555 says, and another port would accept proof no public CA would", c.ACME.Challenges.HTTPPort)
+		}
+		if c.ACME.Challenges.TLSALPNPort() != 443 {
+			return fmt.Errorf("config: acme.challenges.tls_port is %d; in production TLS-ALPN-01 is checked on port 443, "+
+				"as RFC 8737 says", c.ACME.Challenges.TLSPort)
 		}
 	}
 
