@@ -94,10 +94,12 @@ true`) also makes the client prove each name before anything is issued, by any
 one of:
 
 - **HTTP-01**: a file at `http://<name>/.well-known/acme-challenge/<token>`,
-  fetched on port 80. Up to ten redirects are followed, to http on port 80 or
-  https on 443 (whose certificate is not checked, as RFC 8555 says), and never
-  to an IP address: a redirect is a web server telling the core where to
-  connect, and it can only send it where a challenge could go anyway.
+  fetched on port 80. Up to ten redirects are followed, only to the same name,
+  over http on port 80 or https on 443 (whose certificate is not checked, as
+  RFC 8555 says): a redirect is a web server telling the core where to
+  connect, and it cannot send it anywhere a challenge could not go. A redirect
+  to another name, such as a CDN's, is refused, where Let's Encrypt would
+  follow it.
 - **DNS-01**: a TXT record at `_acme-challenge.<name>`. The only one a wildcard
   can use.
 - **TLS-ALPN-01** (RFC 8737): a self-signed certificate for the name, carrying
@@ -154,6 +156,8 @@ be signed by both the old key and the new one.
 ## Limitations
 
 - No open registration. Every client needs a credential.
+- Names only: a `dns` identifier has to be a host name, and IP address
+  identifiers (RFC 8738) are not accepted.
 - Caddy and win-acme speak the same protocol and should work; neither has been
   run against it.
 - A client renews its own certificates. CertPilot cannot renew one early for

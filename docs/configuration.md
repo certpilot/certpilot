@@ -123,8 +123,8 @@ which an administrator creates for one template (Settings → ACME clients, or
 `POST /api/v1/acme/credentials`), and the account it makes can only ask for
 what that template allows. A credential can also require proof of control: its
 client then proves each name by HTTP-01, DNS-01 or TLS-ALPN-01 before anything
-is issued. HTTP-01 follows up to ten redirects, to http on `http_port` or https
-on `tls_port`, and never to an IP address.
+is issued. HTTP-01 follows up to ten redirects, only to the name being proved,
+over http on `http_port` or https on `tls_port`.
 
 ### `auth`
 

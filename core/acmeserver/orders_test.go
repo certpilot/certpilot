@@ -232,3 +232,23 @@ func TestTheCertificateIsServedAsAPEMChain(t *testing.T) {
 }
 
 func timeIn(days int) time.Time { return time.Now().Add(time.Duration(days) * 24 * time.Hour) }
+
+// A dns identifier is a DNS name. An address in disguise is refused at the
+// order, because validating one would have the core connect wherever a
+// resolver takes 2130706433 or 127.1 to be.
+func TestAnIdentifierMustBeADNSName(t *testing.T) {
+	f := newFixture(t)
+	c := f.registered()
+	for _, name := range []string{"2130706433", "127.1", "10.0.0.1", "a..example.com", "-web.example.com",
+		"web-.example.com", "web_site.example.com", strings.Repeat("a", 64) + ".example.com"} {
+		_, err := c.AuthorizeOrder(context.Background(), acme.DomainIDs(name))
+		if problemType(err) != "urn:ietf:params:acme:error:rejectedIdentifier" && problemType(err) != "urn:ietf:params:acme:error:malformed" {
+			t.Errorf("%q: got %v, want it refused", name, err)
+		}
+	}
+	for _, name := range []string{"web.example.com", "*.example.com", "intranet", "x1.example.com"} {
+		if _, err := c.AuthorizeOrder(context.Background(), acme.DomainIDs(name)); err != nil {
+			t.Errorf("%q was refused: %v", name, err)
+		}
+	}
+}

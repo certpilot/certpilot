@@ -537,7 +537,15 @@ func TestHTTP01FollowsRedirectsWithinTheChallengePorts(t *testing.T) {
 		}, true, ""},
 		{"to an address", func(f *fixture, tw *tlsWorld, token string) string {
 			return fmt.Sprintf("http://127.0.0.1:%d/moved/%s", tw.port, token)
-		}, false, "names an address"},
+		}, false, "only to the name being proved"},
+		// An address spelled as a number, which net.ParseIP does not read as
+		// one and a resolver may: why the rule is the name, not "not an IP".
+		{"to an address spelled as a number", func(f *fixture, tw *tlsWorld, token string) string {
+			return fmt.Sprintf("http://2130706433:%d/moved/%s", tw.port, token)
+		}, false, "only to the name being proved"},
+		{"to another name", func(f *fixture, tw *tlsWorld, token string) string {
+			return fmt.Sprintf("http://cdn.example.com:%d/moved/%s", tw.port, token)
+		}, false, "only to the name being proved"},
 		{"to another port", func(f *fixture, tw *tlsWorld, token string) string {
 			return fmt.Sprintf("http://web.example.com:%d/moved/%s", tw.port+1, token)
 		}, false, "may only go to port"},
@@ -556,7 +564,9 @@ func TestHTTP01FollowsRedirectsWithinTheChallengePorts(t *testing.T) {
 			ch := challenge(t, authz, "http-01")
 			body, _ := c.HTTP01ChallengeResponse(ch.Token)
 			tw.redirect("web.example.com", ch.Token, tc.to(f, tw, ch.Token))
-			tw.serveAt("web.example.com", "/moved/"+ch.Token, body)
+			for _, host := range []string{"web.example.com", "127.0.0.1", "2130706433", "cdn.example.com"} {
+				tw.serveAt(host, "/moved/"+ch.Token, body)
+			}
 
 			_, _ = c.Accept(ctx(t), ch)
 			got, _ := c.GetAuthorization(ctx(t), authz.URI)

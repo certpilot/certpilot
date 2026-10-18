@@ -128,11 +128,12 @@ func (v Validation) dial(ctx context.Context, network, host, port string) (net.C
 // checkHTTP01 fetches http://<name>/.well-known/acme-challenge/<token>.
 //
 // Redirects are followed, as RFC 8555 §8.3 says, which is what lets HTTP-01
-// work through an http-to-https redirect. Only to http or https, only on the
-// two ports a challenge may use anyway, and only to a name: a redirect is a
-// web server telling the core where to connect, and a core inside an
-// organisation's network must not become a way to reach whatever address that
-// server names.
+// work through an http-to-https redirect or a moved path. Only to the name
+// being proved, only to http or https, and only on the two ports a challenge
+// may use anyway: a redirect is a web server telling the core where to
+// connect, and a core inside an organisation's network must not become a way
+// to reach whatever host that server names. Let's Encrypt follows redirects
+// to other names; a redirect to a CDN's name is refused here.
 func (v Validation) checkHTTP01(ctx context.Context, name, token, want string) error {
 	if _, err := v.resolver().LookupHost(ctx, name); err != nil {
 		return failed("dns", "%s does not resolve", name)
@@ -165,8 +166,11 @@ func (v Validation) checkHTTP01(ctx context.Context, name, token, want string) e
 			if len(via) > maxRedirects {
 				return &redirectRefused{to, fmt.Sprintf("more than %d redirects", maxRedirects)}
 			}
-			if net.ParseIP(req.URL.Hostname()) != nil {
-				return &redirectRefused{to, "it names an address, not a name"}
+			// The name itself, compared as a string. "Not an IP address" is
+			// not a rule that holds: 2130706433 and 127.1 are not addresses
+			// to net.ParseIP and are to a resolver.
+			if !strings.EqualFold(strings.TrimSuffix(req.URL.Hostname(), "."), name) {
+				return &redirectRefused{to, "redirects are followed only to the name being proved, " + name}
 			}
 			switch req.URL.Scheme {
 			case "http":

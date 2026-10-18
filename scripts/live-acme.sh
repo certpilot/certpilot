@@ -50,7 +50,8 @@ if [[ "$(uname -s)" == Linux ]]; then
   HOST=localhost
   DOCKER_NET=(--network host)
   CHALLTEST_NET=(--network host)
-  ALPN_NET=(--network host)
+  # Already on the host's network through DOCKER_NET; never empty, for bash 3.2.
+  ALPN_NET=(--label certpilot-live-acme)
   RESOLVER="127.0.0.1:$DNS_PORT"
 else
   HOST=host.docker.internal
