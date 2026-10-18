@@ -83,7 +83,14 @@ type ACMEOrder struct {
 	// CertificateID is the certificate the order produced, once valid.
 	CertificateID *string `json:"certificate_id,omitempty"`
 	// Error is the problem document that made the order invalid, as JSON.
-	Error     string    `json:"error,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Error string `json:"error,omitempty"`
+	// Replaces is the RFC 9773 certificate identifier the client said this
+	// order replaces (the issuer's key identifier and the serial), and
+	// ReplacesCertificateID the record that certificate was in. The record is
+	// written over by each renewal; the identifier says which of its
+	// certificates this order replaced.
+	ReplacesCertificateID *string   `json:"replaces_certificate_id,omitempty"`
+	Replaces              string    `json:"replaces,omitempty"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }

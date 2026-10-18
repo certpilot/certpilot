@@ -194,6 +194,10 @@ func (m *MemoryStore) SweepACMENonces(ctx context.Context, now time.Time) (int64
 func cloneACMEOrder(o *ACMEOrder) *ACMEOrder {
 	c := *o
 	c.Identifiers = append([]ACMEIdentifier(nil), o.Identifiers...)
+	if o.ReplacesCertificateID != nil {
+		id := *o.ReplacesCertificateID
+		c.ReplacesCertificateID = &id
+	}
 	return &c
 }
 
@@ -231,6 +235,25 @@ func (m *MemoryStore) GetACMEOrderByCertificate(ctx context.Context, certificate
 		}
 	}
 	return nil, nil
+}
+
+func (m *MemoryStore) GetACMEOrderReplacing(ctx context.Context, certID string) (*ACMEOrder, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var newest *ACMEOrder
+	for _, o := range m.acmeOrders {
+		if o.Replaces != certID || certID == "" ||
+			(o.Status != ACMEOrderValid && o.Status != ACMEOrderProcessing) {
+			continue
+		}
+		if newest == nil || o.CreatedAt.After(newest.CreatedAt) {
+			newest = o
+		}
+	}
+	if newest == nil {
+		return nil, nil
+	}
+	return cloneACMEOrder(newest), nil
 }
 
 func (m *MemoryStore) ListACMEOrdersByAccount(ctx context.Context, accountID string) ([]*ACMEOrder, error) {

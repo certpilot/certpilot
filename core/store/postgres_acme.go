@@ -178,13 +178,13 @@ func (s *PostgresStore) SweepACMENonces(ctx context.Context, now time.Time) (int
 	return tag.RowsAffected(), nil
 }
 
-const acmeOrderColumns = `id, account_id, status, identifiers, expires_at, certificate_id, coalesce(error, ''), created_at, updated_at`
+const acmeOrderColumns = `id, account_id, status, identifiers, expires_at, certificate_id, coalesce(error, ''), replaces_certificate_id, coalesce(replaces, ''), created_at, updated_at`
 
 func scanACMEOrder(row pgx.Row) (*ACMEOrder, error) {
 	o := &ACMEOrder{}
 	var identifiers []byte
 	if err := row.Scan(&o.ID, &o.AccountID, &o.Status, &identifiers, &o.ExpiresAt, &o.CertificateID,
-		&o.Error, &o.CreatedAt, &o.UpdatedAt); err != nil {
+		&o.Error, &o.ReplacesCertificateID, &o.Replaces, &o.CreatedAt, &o.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal(identifiers, &o.Identifiers); err != nil {
@@ -199,10 +199,11 @@ func (s *PostgresStore) CreateACMEOrder(ctx context.Context, o *ACMEOrder) error
 		return err
 	}
 	return s.pool.QueryRow(ctx, `
-		INSERT INTO public.acme_orders (account_id, status, identifiers, expires_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO public.acme_orders (account_id, status, identifiers, expires_at,
+		                                replaces_certificate_id, replaces)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''))
 		RETURNING id, created_at, updated_at`,
-		o.AccountID, o.Status, identifiers, o.ExpiresAt,
+		o.AccountID, o.Status, identifiers, o.ExpiresAt, o.ReplacesCertificateID, o.Replaces,
 	).Scan(&o.ID, &o.CreatedAt, &o.UpdatedAt)
 }
 
@@ -218,6 +219,17 @@ func (s *PostgresStore) GetACMEOrder(ctx context.Context, id string) (*ACMEOrder
 func (s *PostgresStore) GetACMEOrderByCertificate(ctx context.Context, certificateID string) (*ACMEOrder, error) {
 	o, err := scanACMEOrder(s.pool.QueryRow(ctx,
 		"SELECT "+acmeOrderColumns+" FROM public.acme_orders WHERE certificate_id = $1 LIMIT 1", certificateID))
+	if noSuchRow(err) {
+		return nil, nil
+	}
+	return o, err
+}
+
+func (s *PostgresStore) GetACMEOrderReplacing(ctx context.Context, certID string) (*ACMEOrder, error) {
+	o, err := scanACMEOrder(s.pool.QueryRow(ctx,
+		"SELECT "+acmeOrderColumns+` FROM public.acme_orders
+		 WHERE replaces = $1 AND status IN ('valid', 'processing')
+		 ORDER BY created_at DESC LIMIT 1`, certID))
 	if noSuchRow(err) {
 		return nil, nil
 	}

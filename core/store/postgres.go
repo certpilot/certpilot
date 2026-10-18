@@ -286,6 +286,24 @@ func (s *PostgresStore) GetCertificateByFingerprint(ctx context.Context, fingerp
 	return cert, nil
 }
 
+func (s *PostgresStore) GetCertificatesBySerial(ctx context.Context, serial string) ([]*Certificate, error) {
+	rows, err := s.pool.Query(ctx,
+		"SELECT "+certificateColumns+" FROM public.certificates WHERE serial_number = $1 LIMIT 100", serial)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*Certificate{}
+	for rows.Next() {
+		cert, err := scanCertificate(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, cert)
+	}
+	return out, rows.Err()
+}
+
 func (s *PostgresStore) CreateCertificate(ctx context.Context, cert *Certificate) error {
 	sansJSON, _ := json.Marshal(cert.SANs)
 	tagsJSON, _ := json.Marshal(cert.Tags)

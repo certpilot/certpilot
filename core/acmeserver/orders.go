@@ -35,6 +35,7 @@ type orderJSON struct {
 	Authorizations []string               `json:"authorizations"`
 	Finalize       string                 `json:"finalize"`
 	Certificate    string                 `json:"certificate,omitempty"`
+	Replaces       string                 `json:"replaces,omitempty"`
 	Error          json.RawMessage        `json:"error,omitempty"`
 }
 
@@ -49,6 +50,7 @@ func (s *Server) writeOrder(c *gin.Context, status int, tpl *store.CertificateTe
 		Expires:     o.ExpiresAt.UTC().Format(time.RFC3339),
 		Identifiers: o.Identifiers,
 		Finalize:    base + "/order/" + o.ID + "/finalize",
+		Replaces:    o.Replaces,
 	}
 	for i := range o.Identifiers {
 		out.Authorizations = append(out.Authorizations, base+"/authz/"+o.ID+"/"+strconv.Itoa(i))
@@ -82,6 +84,7 @@ func (s *Server) newOrder(c *gin.Context) {
 		Identifiers []store.ACMEIdentifier `json:"identifiers"`
 		NotBefore   string                 `json:"notBefore"`
 		NotAfter    string                 `json:"notAfter"`
+		Replaces    string                 `json:"replaces"`
 	}
 	if err := json.Unmarshal(req.payload, &payload); err != nil {
 		s.fail(c, http.StatusBadRequest, "malformed", "the payload is not valid JSON")
@@ -108,6 +111,15 @@ func (s *Server) newOrder(c *gin.Context) {
 		Status:      store.ACMEOrderReady,
 		Identifiers: identifiers,
 		ExpiresAt:   s.cfg.Now().Add(orderLife),
+	}
+	if payload.Replaces != "" {
+		replaced, id, ok := s.replacing(c, tpl, req.account, payload.Replaces, identifiers)
+		if !ok {
+			return
+		}
+		if replaced != nil {
+			order.ReplacesCertificateID, order.Replaces = &replaced.ID, id
+		}
 	}
 	if err := s.cfg.Store.CreateACMEOrder(c.Request.Context(), order); err != nil {
 		s.fail(c, http.StatusInternalServerError, "serverInternal", "could not create the order")
@@ -315,7 +327,12 @@ func (s *Server) finalize(c *gin.Context) {
 		return
 	}
 
-	prev, err := s.renews(c, req.account, tpl, order.Identifiers, decision.KeyType)
+	// What the client said it replaces first; with nothing said, or nothing
+	// left to replace, the same names and key type.
+	prev, err := s.replacedRecord(c, order)
+	if err == nil && prev == nil {
+		prev, err = s.renews(c, req.account, tpl, order.Identifiers, decision.KeyType)
+	}
 	if err != nil {
 		s.invalidate(c, tpl, order, http.StatusInternalServerError, "serverInternal", err.Error())
 		return

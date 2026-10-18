@@ -11,6 +11,9 @@ type Store interface {
 	ListCertificates(ctx context.Context, filter CertificateFilter) ([]*Certificate, int64, error)
 	GetCertificate(ctx context.Context, id string) (*Certificate, error)
 	GetCertificateByFingerprint(ctx context.Context, fingerprint string) (*Certificate, error)
+	// GetCertificatesBySerial returns every certificate with this serial, in
+	// lower-case hex. Serials are unique per issuer, so there can be several.
+	GetCertificatesBySerial(ctx context.Context, serial string) ([]*Certificate, error)
 	CreateCertificate(ctx context.Context, cert *Certificate) error
 	UpdateCertificate(ctx context.Context, cert *Certificate) error
 	// UpdateCertificateMetadata writes the operator-owned fields and nothing
@@ -598,6 +601,9 @@ type Store interface {
 	// GetACMEOrderByCertificate returns the order that produced a certificate,
 	// or nil, nil when none did.
 	GetACMEOrderByCertificate(ctx context.Context, certificateID string) (*ACMEOrder, error)
+	// GetACMEOrderReplacing returns the valid or processing order that replaced
+	// the certificate with this RFC 9773 identifier, or nil, nil.
+	GetACMEOrderReplacing(ctx context.Context, certID string) (*ACMEOrder, error)
 	// ClaimACMEOrderForFinalize moves a ready order to processing and reports
 	// whether this call did. Two replicas can receive the same finalize, and
 	// only one may go on to ask the CA.
