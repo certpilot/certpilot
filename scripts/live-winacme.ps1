@@ -118,6 +118,22 @@ acme:
     Invoke-RestMethod @request
   }
 
+  # ── A template and a credential ─────────────────────────────────────────────
+
+  $ca = Api Post '/api/v1/ca-accounts' @{ name = 'selfsigned'; provider_type = 'selfsigned'; gateway_addr = "127.0.0.1:$GwPort" }
+  $caId = if ($ca.data) { $ca.data.id } else { $ca.id }
+  Api Post '/api/v1/certificate-templates' @{
+    slug = 'live-web'; name = 'Live web'; ca_account_id = $caId; subject_mode = 'SUPPLIED'
+    allowed_key_types = @('RSA', 'ECDSA'); key_custody_required = 'ANY'; renew_before_days = 30; is_enabled = $true
+    san_rules = @{ suffixes = @('.example.com') }
+  } | Out-Null
+  $cred = Api Post '/api/v1/acme/credentials' @{ name = 'win-acme'; template = 'live-web' }
+
+  function Record($name) {
+    @((Api Get '/api/v1/certificates?limit=500' $null).data | Where-Object {
+      $_.discovered_via -eq 'ACME' -and ($_.common_name -eq $name -or $_.sans -contains $name) })
+  }
+
   # ── TLS in front of it ──────────────────────────────────────────────────────
   #
   # The proxy makes its own CA and certificate as it starts and writes the CA
@@ -186,22 +202,6 @@ func main() {
       if ((Get-Date) -gt $deadline) { Die "the directory never answered through the TLS proxy: $_" }
       Start-Sleep -Milliseconds 300
     }
-  }
-
-  # ── A template and a credential ─────────────────────────────────────────────
-
-  $ca = Api Post '/api/v1/ca-accounts' @{ name = 'selfsigned'; provider_type = 'selfsigned'; gateway_addr = "127.0.0.1:$GwPort" }
-  $caId = if ($ca.data) { $ca.data.id } else { $ca.id }
-  Api Post '/api/v1/certificate-templates' @{
-    slug = 'live-web'; name = 'Live web'; ca_account_id = $caId; subject_mode = 'SUPPLIED'
-    allowed_key_types = @('RSA', 'ECDSA'); key_custody_required = 'ANY'; renew_before_days = 30; is_enabled = $true
-    san_rules = @{ suffixes = @('.example.com') }
-  } | Out-Null
-  $cred = Api Post '/api/v1/acme/credentials' @{ name = 'win-acme'; template = 'live-web' }
-
-  function Record($name) {
-    @((Api Get '/api/v1/certificates?limit=500' $null).data | Where-Object {
-      $_.discovered_via -eq 'ACME' -and ($_.common_name -eq $name -or $_.sans -contains $name) })
   }
 
   # ── win-acme ────────────────────────────────────────────────────────────────
