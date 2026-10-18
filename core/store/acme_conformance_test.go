@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -570,5 +571,61 @@ func TestACMEAuthorizationsKeepTheirChallengeState(t *testing.T) {
 		if none, err := s.ListACMEAuthorizations(ctx, missingID); err != nil || len(none) != 0 {
 			t.Errorf("an order with none: %v, %v", none, err)
 		}
+	})
+}
+
+// A registration and a revocation of its credential, at the same instant, end
+// one of two ways: no account, or a deactivated one. Never an active account
+// on a revoked credential, which is a client nobody can cut off. Run many
+// times, because the interleaving that breaks it is the rare one.
+func TestARegistrationRacingTheRevocationNeverLeavesALiveAccount(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		tpl := acmeTemplate(t, s)
+		const rounds = 150
+		var refused, deactivated int
+		for i := 0; i < rounds; i++ {
+			cred := &ACMEEABCredential{KID: fmt.Sprintf("race-%d", i), Name: "n", TemplateID: tpl, HMACKeySealed: "x"}
+			if err := s.CreateACMEEABCredential(ctx, cred); err != nil {
+				t.Fatal(err)
+			}
+			start := make(chan struct{})
+			var wg sync.WaitGroup
+			var createErr, revokeErr error
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				<-start
+				createErr = s.CreateACMEAccount(ctx, &ACMEAccount{TemplateID: tpl, EABID: cred.ID,
+					JWKThumbprint: fmt.Sprintf("thumb-%d", i), JWK: "{}"})
+			}()
+			go func() {
+				defer wg.Done()
+				<-start
+				_, revokeErr = s.RevokeACMEEABCredential(ctx, cred.ID, nil)
+			}()
+			close(start)
+			wg.Wait()
+
+			if revokeErr != nil {
+				t.Fatalf("round %d: revoke: %v", i, revokeErr)
+			}
+			if createErr != nil && !errors.Is(createErr, ErrRevoked) {
+				t.Fatalf("round %d: create: %v", i, createErr)
+			}
+			acct, err := s.GetACMEAccountByEAB(ctx, cred.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			switch {
+			case acct == nil:
+				refused++
+			case acct.Status == ACMEAccountValid:
+				t.Fatalf("round %d: an active account on a revoked credential", i)
+			default:
+				deactivated++
+			}
+		}
+		t.Logf("%d rounds: %d registrations refused, %d accounts deactivated", rounds, refused, deactivated)
 	})
 }
