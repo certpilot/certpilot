@@ -45,6 +45,10 @@ type fakeGateway struct {
 	caKey   *ecdsa.PrivateKey
 	caCert  *x509.Certificate
 	revoked atomic.Int32
+	// refuseRevocation makes the CA decline a revocation, as opposed to the
+	// call failing.
+	refuseRevocation atomic.Bool
+	lastReason       atomic.Int32
 }
 
 func startGateway(t *testing.T, mode gatewayMode) *fakeGateway {
@@ -83,9 +87,13 @@ func (g *fakeGateway) HealthCheck(context.Context, *providerv1.HealthCheckReques
 	return &providerv1.HealthCheckResponse{Status: commonv1.HealthStatus_HEALTH_STATUS_HEALTHY}, nil
 }
 
-func (g *fakeGateway) RevokeCertificate(context.Context, *providerv1.RevokeCertificateRequest) (*providerv1.RevokeCertificateResponse, error) {
+func (g *fakeGateway) RevokeCertificate(_ context.Context, req *providerv1.RevokeCertificateRequest) (*providerv1.RevokeCertificateResponse, error) {
 	g.revoked.Add(1)
-	return &providerv1.RevokeCertificateResponse{}, nil
+	g.lastReason.Store(req.Reason)
+	if g.refuseRevocation.Load() {
+		return &providerv1.RevokeCertificateResponse{Message: "this account may not revoke that"}, nil
+	}
+	return &providerv1.RevokeCertificateResponse{Success: true}, nil
 }
 
 func (g *fakeGateway) IssueCertificate(_ context.Context, req *providerv1.IssueCertificateRequest) (*providerv1.IssueCertificateResponse, error) {
