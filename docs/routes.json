@@ -6841,7 +6841,7 @@
             {
               "name": "certificate",
               "type": "Certificate",
-              "go_type": "*Certificate",
+              "go_type": "*store.Certificate",
               "required": false
             },
             {
@@ -6881,10 +6881,7 @@
           ]
         },
         {
-          "status": 502,
-          "errors": [
-            "the CA account this certificate was issued by could not be read"
-          ]
+          "status": 502
         }
       ],
       "section": "Certificates",

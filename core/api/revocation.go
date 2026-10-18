@@ -62,24 +62,27 @@ func (h *CertificateHandler) Revoke(c *gin.Context) {
 	}
 
 	actorID := c.GetString(middleware.ContextUserID)
-	revoked, err := h.revoker.Revoke(c.Request.Context(), cert, *input.Reason, actorID)
+	// Declared, so the route generator can see what the response carries.
+	var revoked *store.Certificate
+	revoked, err = h.revoker.Revoke(c.Request.Context(), cert, *input.Reason, actorID)
 	if err != nil {
-		status := http.StatusInternalServerError
-		body := gin.H{"error": err.Error()}
-		if re, ok := issuance.AsRevokeError(err); ok {
-			switch re.Kind {
-			case issuance.RevokeBadReason, issuance.RevokeNotPossible:
-				status = http.StatusBadRequest
-			case issuance.RevokeAlreadyRevoked:
-				status = http.StatusConflict
-				if cert.RevokedAt != nil {
-					body["revoked_at"] = cert.RevokedAt
-				}
-			case issuance.RevokeCANotTold:
-				status = http.StatusBadGateway
-			}
+		// One literal status per outcome, so the generated API reference can
+		// still list them.
+		re, _ := issuance.AsRevokeError(err)
+		kind := issuance.RevokeInternal
+		if re != nil {
+			kind = re.Kind
 		}
-		c.JSON(status, body)
+		switch kind {
+		case issuance.RevokeBadReason, issuance.RevokeNotPossible:
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		case issuance.RevokeAlreadyRevoked:
+			c.JSON(http.StatusConflict, gin.H{"error": "this certificate is already revoked", "revoked_at": cert.RevokedAt})
+		case issuance.RevokeCANotTold:
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 
