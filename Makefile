@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation test-recovery compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct live-kubernetes live-eab live-acme all build build-core test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation test-recovery compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct live-kubernetes live-eab live-acme live-winacme all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -222,6 +222,10 @@ live-eab:
 ## live-acme runs certbot, lego and acme.sh against the core's ACME server.
 live-acme:
 	./scripts/live-acme.sh
+
+## live-winacme runs win-acme against the core's ACME server. Windows only.
+live-winacme:
+	pwsh ./scripts/live-winacme.ps1
 
 run-core:
 	$(GO) run ./core/cmd/ --config=config.dev.yaml

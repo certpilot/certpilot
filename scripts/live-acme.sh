@@ -10,6 +10,7 @@
 #             place, is told by renewalInfo when to renew, and revokes
 #   lego      the same through renewalInfo and replaces, which it sends
 #   acme.sh   registers, is issued, renews in place
+#   Caddy     obtains a certificate for a site it serves, on its own, at start
 #
 # and, with a credential that requires proof of control, certbot proving a
 # name by HTTP-01 from its webroot (once through a redirect) and another by
@@ -36,6 +37,9 @@ CERTBOT_IMAGE="${CERTBOT_IMAGE:-certbot/certbot:v5.8.0}"
 LEGO_IMAGE="${LEGO_IMAGE:-goacme/lego:v4.28.1}"
 ACMESH_IMAGE="${ACMESH_IMAGE:-neilpang/acme.sh:3.1.1}"
 CHALLTESTSRV_IMAGE="${CHALLTESTSRV_IMAGE:-ghcr.io/letsencrypt/pebble-challtestsrv:2.10.1}"
+CADDY_IMAGE="${CADDY_IMAGE:-caddy:2.10.2}"
+CADDY_HTTP_PORT=18501
+CADDY_HTTPS_PORT=18502
 WEB_PORT=18497
 ALPN_PORT=18498
 DNS_PORT=18053
@@ -289,6 +293,44 @@ expect "renewed in place" "$r" \
   || die "acme.sh's renewal did not renew the record in place: $r"
 pass "acme.sh: registered, issued, and renewed in place"
 
+# ── Caddy ────────────────────────────────────────────────────────────────────
+#
+# Caddy has no command to run: it obtains a certificate for each site in its
+# configuration as it starts, which is the whole of what is checked here.
+
+read -r kid hmac < <(credential caddy)
+mkdir -p "$WORK/caddy"
+cat >"$WORK/caddy/Caddyfile" <<CADDY
+{
+	admin off
+	http_port $CADDY_HTTP_PORT
+	https_port $CADDY_HTTPS_PORT
+	email ops@example.com
+	acme_ca $DIRECTORY
+	acme_ca_root /ca/ca.pem
+	acme_eab {
+		key_id $kid
+		mac_key $hmac
+	}
+}
+
+caddy.example.com {
+	respond "served by caddy"
+}
+CADDY
+live_docker_run certpilot-live-caddy "${DOCKER_NET[@]}" -v "$WORK/tls:/ca:ro" \
+  -v "$WORK/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" "$CADDY_IMAGE"
+for _ in $(seq 1 120); do
+  r="$(record caddy.example.com)"
+  [[ "$r" != *'"count": 0'* ]] && break
+  sleep 0.5
+done
+expect "one held by the client" "$r" \
+  || die "Caddy was not issued a certificate: $r; $(docker logs certpilot-live-caddy 2>&1 | tail -5)"
+docker logs certpilot-live-caddy 2>&1 | grep -q "certificate obtained successfully" \
+  || die "the certificate was recorded but Caddy does not say it obtained it: $(docker logs certpilot-live-caddy 2>&1 | tail -5)"
+pass "Caddy: registered and obtained a certificate for its site at start"
+
 # ── Proof of control ─────────────────────────────────────────────────────────
 
 if [[ "$(uname -s)" == Linux ]]; then MGMT="http://localhost:$MGMT_PORT"; else MGMT="http://host.docker.internal:$MGMT_PORT"; fi
@@ -350,4 +392,4 @@ r="$(record wrong.example.com)"
 [[ "$r" == *'"count": 0'* ]] || die "a certificate was recorded for a name that was not proved: $r"
 pass "proof: a wrong DNS-01 answer is refused, and says why"
 
-say "acme: every check passed — $CERTBOT_IMAGE, $LEGO_IMAGE and $ACMESH_IMAGE against the core's ACME server, challenges through $CHALLTESTSRV_IMAGE"
+say "acme: every check passed — $CERTBOT_IMAGE, $LEGO_IMAGE, $ACMESH_IMAGE and $CADDY_IMAGE against the core's ACME server, challenges through $CHALLTESTSRV_IMAGE"

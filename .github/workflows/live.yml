@@ -91,7 +91,20 @@ jobs:
       - name: Register, issue, renew in place, revoke, and the refusals
         run: make live-acme
 
-  ct:
+  winacme:
+    name: ACME server, against win-acme on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Register, issue and renew in place
+        shell: pwsh
+        run: ./scripts/live-winacme.ps1
+
     name: CT, against crt.sh
     # crt.sh is a free community service and answers 502 often enough that a
     # pull request must not wait on it. The script retries; a run that still
