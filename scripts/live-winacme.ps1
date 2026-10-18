@@ -40,8 +40,13 @@ function Say($m) { Write-Host $m }
 function Pass($m) { Write-Host "  ok   $m" }
 function Die($m) {
   Write-Host "FAIL: $m"
+  # Without the bootstrap password the core prints at start: a CI log is
+  # public, and a throwaway password is still a password.
   foreach ($log in 'core.log', 'core.out') {
-    if (Test-Path "$Work/$log") { Write-Host "-- $log"; Get-Content "$Work/$log" -Tail 25 }
+    if (Test-Path "$Work/$log") {
+      Write-Host "-- $log"
+      Get-Content "$Work/$log" -Tail 25 | Where-Object { $_ -notmatch 'password' }
+    }
   }
   throw $m
 }
@@ -166,7 +171,8 @@ func main() {
   Remove-Item Env:GOWORK
   Pop-Location
   if ($built -ne 0) { Die 'could not build the TLS proxy' }
-  $started += Start-Process "$Work/bin/tlsproxy.exe" -ArgumentList $Api, ":$TlsPort", "$Work/ca.pem" -PassThru -NoNewWindow `
+  # Loopback only: nothing off this machine needs to reach it.
+  $started += Start-Process "$Work/bin/tlsproxy.exe" -ArgumentList $Api, "127.0.0.1:$TlsPort", "$Work/ca.pem" -PassThru -NoNewWindow `
     -RedirectStandardOutput "$Work/tlsproxy.out" -RedirectStandardError "$Work/tlsproxy.log"
   $deadline = (Get-Date).AddSeconds(30)
   while (-not (Test-Path "$Work/ca.pem")) {

@@ -105,6 +105,7 @@ jobs:
         shell: pwsh
         run: ./scripts/live-winacme.ps1
 
+  ct:
     name: CT, against crt.sh
     # crt.sh is a free community service and answers 502 often enough that a
     # pull request must not wait on it. The script retries; a run that still
