@@ -592,6 +592,9 @@ type Store interface {
 	CreateACMEOrder(ctx context.Context, o *ACMEOrder) error
 	GetACMEOrder(ctx context.Context, id string) (*ACMEOrder, error)
 	ListACMEOrdersByAccount(ctx context.Context, accountID string) ([]*ACMEOrder, error)
+	// GetACMEOrderByCertificate returns the order that produced a certificate,
+	// or nil, nil when none did.
+	GetACMEOrderByCertificate(ctx context.Context, certificateID string) (*ACMEOrder, error)
 	// ClaimACMEOrderForFinalize moves a ready order to processing and reports
 	// whether this call did. Two replicas can receive the same finalize, and
 	// only one may go on to ask the CA.

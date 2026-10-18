@@ -73,7 +73,7 @@ func (s *Server) writeOrder(c *gin.Context, status int, tpl *store.CertificateTe
 // person.
 func (s *Server) newOrder(c *gin.Context) {
 	tpl := templateOf(c)
-	req := s.verify(c, tpl, false)
+	req := s.verify(c, tpl, byKID)
 	if req == nil {
 		return
 	}
@@ -165,7 +165,7 @@ func (s *Server) ownedOrder(c *gin.Context, req *signed, id string) *store.ACMEO
 // order handles POST-as-GET /acme/<template>/order/<id>.
 func (s *Server) order(c *gin.Context) {
 	tpl := templateOf(c)
-	req := s.verify(c, tpl, false)
+	req := s.verify(c, tpl, byKID)
 	if req == nil {
 		return
 	}
@@ -179,7 +179,7 @@ func (s *Server) order(c *gin.Context) {
 // accountOrders handles POST-as-GET /acme/<template>/account/<id>/orders.
 func (s *Server) accountOrders(c *gin.Context) {
 	tpl := templateOf(c)
-	req := s.verify(c, tpl, false)
+	req := s.verify(c, tpl, byKID)
 	if req == nil {
 		return
 	}
@@ -205,7 +205,7 @@ func (s *Server) accountOrders(c *gin.Context) {
 // account is the authorisation, and the template bounds what it covers.
 func (s *Server) authorization(c *gin.Context) {
 	tpl := templateOf(c)
-	req := s.verify(c, tpl, false)
+	req := s.verify(c, tpl, byKID)
 	if req == nil {
 		return
 	}
@@ -242,7 +242,7 @@ func (s *Server) authorization(c *gin.Context) {
 // renews it by ordering again.
 func (s *Server) finalize(c *gin.Context) {
 	tpl := templateOf(c)
-	req := s.verify(c, tpl, false)
+	req := s.verify(c, tpl, byKID)
 	if req == nil {
 		return
 	}
@@ -463,7 +463,7 @@ func (s *Server) record(c *gin.Context, req *signed, tpl *store.CertificateTempl
 // certificate handles POST-as-GET /acme/<template>/cert/<order>.
 func (s *Server) certificate(c *gin.Context) {
 	tpl := templateOf(c)
-	req := s.verify(c, tpl, false)
+	req := s.verify(c, tpl, byKID)
 	if req == nil {
 		return
 	}

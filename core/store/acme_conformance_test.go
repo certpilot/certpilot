@@ -315,3 +315,35 @@ func TestAFinishedACMEOrderRecordsItsCertificateOrItsError(t *testing.T) {
 		}
 	})
 }
+
+// Revocation by account key is allowed for the account that ordered the
+// certificate, so the store has to answer which order produced one.
+func TestAnACMEOrderIsFoundByTheCertificateItProduced(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		acct := acmeAccountFor(t, s)
+		ca := caAccountFor(t, s, "lookup CA")
+		cert := &Certificate{CommonName: "a.example.com", Status: "ISSUED", DiscoveredVia: "ACME",
+			CAAccountID: &ca, KeyCustody: KeyCustodyExternal, FingerprintSHA256: "fp-acme-lookup", KeyType: "ECDSA", KeySize: 256}
+		if err := s.CreateCertificate(ctx, cert); err != nil {
+			t.Fatal(err)
+		}
+		order := &ACMEOrder{AccountID: acct.ID, Status: ACMEOrderValid, CertificateID: &cert.ID,
+			Identifiers: []ACMEIdentifier{{Type: "dns", Value: "a.example.com"}}, ExpiresAt: time.Now().Add(time.Hour)}
+		if err := s.CreateACMEOrder(ctx, order); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.UpdateACMEOrder(ctx, order); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := s.GetACMEOrderByCertificate(ctx, cert.ID)
+		if err != nil || got == nil || got.ID != order.ID || got.AccountID != acct.ID {
+			t.Fatalf("got %+v, %v; want order %s", got, err, order.ID)
+		}
+		none, err := s.GetACMEOrderByCertificate(ctx, missingID)
+		if err != nil || none != nil {
+			t.Errorf("a certificate no order produced returned %+v, %v; want nil, nil", none, err)
+		}
+	})
+}

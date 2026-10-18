@@ -40,7 +40,7 @@ func (s *Server) writeAccount(c *gin.Context, status int, tpl *store.Certificate
 // newAccount handles POST /acme/<template>/new-account.
 func (s *Server) newAccount(c *gin.Context) {
 	tpl := templateOf(c)
-	req := s.verify(c, tpl, true)
+	req := s.verify(c, tpl, byJWK)
 	if req == nil {
 		return
 	}
@@ -199,7 +199,7 @@ func (s *Server) checkBinding(c *gin.Context, tpl *store.CertificateTemplate, ac
 // account handles POST /acme/<template>/account/<id>: read, update, deactivate.
 func (s *Server) account(c *gin.Context) {
 	tpl := templateOf(c)
-	req := s.verify(c, tpl, false)
+	req := s.verify(c, tpl, byKID)
 	if req == nil {
 		return
 	}

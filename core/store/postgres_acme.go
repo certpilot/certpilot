@@ -202,6 +202,15 @@ func (s *PostgresStore) GetACMEOrder(ctx context.Context, id string) (*ACMEOrder
 	return o, err
 }
 
+func (s *PostgresStore) GetACMEOrderByCertificate(ctx context.Context, certificateID string) (*ACMEOrder, error) {
+	o, err := scanACMEOrder(s.pool.QueryRow(ctx,
+		"SELECT "+acmeOrderColumns+" FROM public.acme_orders WHERE certificate_id = $1 LIMIT 1", certificateID))
+	if noSuchRow(err) {
+		return nil, nil
+	}
+	return o, err
+}
+
 func (s *PostgresStore) ListACMEOrdersByAccount(ctx context.Context, accountID string) ([]*ACMEOrder, error) {
 	rows, err := s.pool.Query(ctx,
 		"SELECT "+acmeOrderColumns+" FROM public.acme_orders WHERE account_id = $1 ORDER BY created_at DESC LIMIT 1000",

@@ -47,6 +47,8 @@ type Config struct {
 	Resolver *issuance.Resolver
 	// Signer has the CA sign the request and checks what comes back.
 	Signer *issuance.Signer
+	// Revoker has the CA revoke a certificate and records it once it has.
+	Revoker *issuance.Revoker
 	// Broker, when set, is told about every certificate issued.
 	Broker *events.Broker
 	// Now is replaceable so tests can move the clock.
@@ -88,6 +90,7 @@ func (s *Server) Register(engine *gin.Engine) {
 	g.POST("/order/:id/finalize", s.finalize)
 	g.POST("/authz/:order/:index", s.authorization)
 	g.POST("/cert/:order", s.certificate)
+	g.POST("/revoke-cert", s.revokeCert)
 }
 
 // problem is an RFC 7807 document with the ACME error namespace.
@@ -169,6 +172,7 @@ func (s *Server) directory(c *gin.Context) {
 		"newNonce":   base + "/new-nonce",
 		"newAccount": base + "/new-account",
 		"newOrder":   base + "/new-order",
+		"revokeCert": base + "/revoke-cert",
 		"meta": gin.H{
 			// Said up front so a client that would try to register without
 			// one is told to bring a credential, not left to find out.
