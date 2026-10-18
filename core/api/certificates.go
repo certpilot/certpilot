@@ -31,8 +31,10 @@ type CertificateHandler struct {
 	// handlers on this type report policy findings against certificates that
 	// already exist, which is a different question from what may be issued.
 	resolver *issuance.Resolver
-	keyring  *secrets.Keyring
-	broker   *events.Broker
+	// revoker is the one path to a CA for revocations.
+	revoker *issuance.Revoker
+	keyring *secrets.Keyring
+	broker  *events.Broker
 }
 
 // NewCertificateHandler creates a new handler.
@@ -44,6 +46,7 @@ func NewCertificateHandler(s store.Store, pm *pluginmgr.Manager, exec *renewal.E
 		renewals:  sched,
 		policyEng: pe,
 		resolver:  issuance.NewResolver(s, pe),
+		revoker:   issuance.NewRevoker(s, pm, kr),
 		keyring:   kr,
 		broker:    broker,
 	}

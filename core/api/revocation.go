@@ -2,12 +2,11 @@ package api
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sort"
 	"time"
 
-	providerv1 "github.com/certpilot/certpilot-gateway-sdk/pb/provider/v1"
+	"github.com/certpilot/certpilot/core/engine/issuance"
 	"github.com/certpilot/certpilot/core/events"
 	"github.com/certpilot/certpilot/core/server/middleware"
 	"github.com/certpilot/certpilot/core/store"
@@ -61,94 +60,26 @@ func (h *CertificateHandler) Revoke(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "no such certificate"})
 		return
 	}
-	if cert.Status == "REVOKED" {
-		c.JSON(http.StatusConflict, gin.H{
-			"error":      "this certificate is already revoked",
-			"revoked_at": cert.RevokedAt,
-		})
-		return
-	}
-	if cert.CertificatePEM == nil || *cert.CertificatePEM == "" {
-		// Discovered certificates can reach here with no PEM stored. A CA
-		// cannot be asked to revoke a certificate that cannot be shown to it.
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "CertPilot holds no copy of this certificate, so it cannot ask a CA to revoke it. " +
-				"Revoke it directly at the issuing CA",
-		})
-		return
-	}
-	if cert.CAAccountID == nil || *cert.CAAccountID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "this certificate is not bound to a CA account, so there is nowhere to send a revocation. " +
-				"It was most likely discovered rather than issued here",
-		})
-		return
-	}
-
-	caAccount, err := h.store.GetCAAccount(c.Request.Context(), *cert.CAAccountID)
-	if err != nil || caAccount == nil {
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error": "the CA account this certificate was issued by could not be read",
-		})
-		return
-	}
-
-	gw, err := h.pluginMgr.GatewayFor(c.Request.Context(), gatewayEndpoint(caAccount))
-	if err != nil {
-		// Deliberately not recorded as revoked. An unreachable gateway
-		// means the CA has not been told, and marking it here would leave
-		// a certificate that reads REVOKED in the console and answers
-		// handshakes in production.
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error": fmt.Sprintf("gateway for CA %s is not connected, so the CA has not been told; "+
-				"nothing has been changed", caAccount.Name),
-		})
-		return
-	}
-
-	providerConfig, err := h.decryptCAConfig(caAccount)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	resp, err := gw.Client.RevokeCertificate(c.Request.Context(), &providerv1.RevokeCertificateRequest{
-		CertificatePem:        []byte(*cert.CertificatePEM),
-		ProviderCertificateId: cert.FingerprintSHA256,
-		Reason:                int32(*input.Reason),
-		ProviderConfig:        providerConfig,
-	})
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error": fmt.Sprintf("the CA refused the revocation, so nothing has been changed: %v", err),
-		})
-		return
-	}
-	if !resp.Success {
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error": fmt.Sprintf("the CA did not revoke this certificate, so nothing has been changed: %s",
-				resp.Message),
-		})
-		return
-	}
 
 	actorID := c.GetString(middleware.ContextUserID)
-	revoked, err := h.store.MarkCertificateRevoked(c.Request.Context(), id, *input.Reason, actorID)
+	revoked, err := h.revoker.Revoke(c.Request.Context(), cert, *input.Reason, actorID)
 	if err != nil {
-		// The CA has revoked it and CertPilot could not write that down. This
-		// is the one genuinely dangerous outcome here, so it is stated plainly
-		// rather than reported as a generic failure: the estate is now safe and
-		// the record is wrong, which is the opposite of the usual problem.
-		slog.Error("the CA revoked a certificate but the record could not be updated",
-			"error", err, "certificate_id", id, "common_name", cert.CommonName)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "the CA has revoked this certificate, but CertPilot could not record it. " +
-				"The certificate is no longer valid; this record will be wrong until the write succeeds",
-		})
-		return
-	}
-	if revoked == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "this certificate is already revoked"})
+		status := http.StatusInternalServerError
+		body := gin.H{"error": err.Error()}
+		if re, ok := issuance.AsRevokeError(err); ok {
+			switch re.Kind {
+			case issuance.RevokeBadReason, issuance.RevokeNotPossible:
+				status = http.StatusBadRequest
+			case issuance.RevokeAlreadyRevoked:
+				status = http.StatusConflict
+				if cert.RevokedAt != nil {
+					body["revoked_at"] = cert.RevokedAt
+				}
+			case issuance.RevokeCANotTold:
+				status = http.StatusBadGateway
+			}
+		}
+		c.JSON(status, body)
 		return
 	}
 
