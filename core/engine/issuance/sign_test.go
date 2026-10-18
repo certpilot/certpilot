@@ -49,6 +49,7 @@ type fakeGateway struct {
 	// call failing.
 	refuseRevocation atomic.Bool
 	lastReason       atomic.Int32
+	lastPEM          atomic.Value // string
 }
 
 func startGateway(t *testing.T, mode gatewayMode) *fakeGateway {
@@ -90,6 +91,7 @@ func (g *fakeGateway) HealthCheck(context.Context, *providerv1.HealthCheckReques
 func (g *fakeGateway) RevokeCertificate(_ context.Context, req *providerv1.RevokeCertificateRequest) (*providerv1.RevokeCertificateResponse, error) {
 	g.revoked.Add(1)
 	g.lastReason.Store(req.Reason)
+	g.lastPEM.Store(string(req.CertificatePem))
 	if g.refuseRevocation.Load() {
 		return &providerv1.RevokeCertificateResponse{Message: "this account may not revoke that"}, nil
 	}

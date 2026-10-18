@@ -105,40 +105,8 @@ func (r *Revoker) Revoke(ctx context.Context, cert *store.Certificate, reason in
 				"It was most likely discovered rather than issued here", nil)
 	}
 
-	account, err := r.store.GetCAAccount(ctx, *cert.CAAccountID)
-	if err != nil || account == nil {
-		return nil, revokeFailed(RevokeCANotTold, "the CA account this certificate was issued by could not be read", err)
-	}
-
-	gw, err := r.plugins.GatewayFor(ctx, pluginmgr.Endpoint{
-		Name: account.Name, Addr: account.GatewayAddr, Type: account.ProviderType, ServerName: account.ServerName,
-	})
-	if err != nil {
-		// Deliberately not recorded as revoked. An unreachable gateway means
-		// the CA has not been told, and marking it here would leave a
-		// certificate that reads REVOKED in the console and answers
-		// handshakes in production.
-		return nil, revokeFailed(RevokeCANotTold, fmt.Sprintf(
-			"gateway for CA %s is not connected, so the CA has not been told; nothing has been changed", account.Name), nil)
-	}
-
-	config, err := DecryptCAConfig(r.keyring, account)
-	if err != nil {
-		return nil, revokeFailed(RevokeInternal, "could not open the CA account's configuration", err)
-	}
-
-	resp, err := gw.Client.RevokeCertificate(ctx, &providerv1.RevokeCertificateRequest{
-		CertificatePem:        []byte(*cert.CertificatePEM),
-		ProviderCertificateId: cert.FingerprintSHA256,
-		Reason:                int32(reason),
-		ProviderConfig:        config,
-	})
-	if err != nil {
-		return nil, revokeFailed(RevokeCANotTold, "the CA refused the revocation, so nothing has been changed", err)
-	}
-	if !resp.Success {
-		return nil, revokeFailed(RevokeCANotTold,
-			"the CA did not revoke this certificate, so nothing has been changed: "+resp.Message, nil)
+	if err := r.tellCA(ctx, *cert.CAAccountID, *cert.CertificatePEM, cert.FingerprintSHA256, reason); err != nil {
+		return nil, err
 	}
 
 	revoked, err := r.store.MarkCertificateRevoked(ctx, cert.ID, reason, actor)
@@ -157,4 +125,63 @@ func (r *Revoker) Revoke(ctx context.Context, cert *store.Certificate, reason in
 		return nil, revokeFailed(RevokeAlreadyRevoked, "this certificate is already revoked", nil)
 	}
 	return revoked, nil
+}
+
+// RevokeReplaced asks the CA to revoke a certificate a renewal has replaced.
+//
+// A renewal writes its successor over the record, so the record no longer
+// holds the replaced certificate: the caller supplies it, having checked it is
+// the one the record says it replaced. The record is left as it is, because it
+// describes the successor, which nobody asked to revoke. The revocation is the
+// CA's to keep; it is the caller's to audit.
+func (r *Revoker) RevokeReplaced(ctx context.Context, successor *store.Certificate, replacedPEM, replacedFingerprint string, reason int) error {
+	if !store.ValidRevocationReason(reason) {
+		return revokeFailed(RevokeBadReason,
+			fmt.Sprintf("%d is not a revocation reason CertPilot accepts", reason), nil)
+	}
+	if successor.CAAccountID == nil || *successor.CAAccountID == "" {
+		return revokeFailed(RevokeNotPossible, "the certificate that replaced this one is not bound to a CA account", nil)
+	}
+	return r.tellCA(ctx, *successor.CAAccountID, replacedPEM, replacedFingerprint, reason)
+}
+
+// tellCA asks a CA account's gateway to revoke one certificate. It changes
+// nothing in CertPilot.
+func (r *Revoker) tellCA(ctx context.Context, accountID, certPEM, fingerprint string, reason int) error {
+	account, err := r.store.GetCAAccount(ctx, accountID)
+	if err != nil || account == nil {
+		return revokeFailed(RevokeCANotTold, "the CA account this certificate was issued by could not be read", err)
+	}
+
+	gw, err := r.plugins.GatewayFor(ctx, pluginmgr.Endpoint{
+		Name: account.Name, Addr: account.GatewayAddr, Type: account.ProviderType, ServerName: account.ServerName,
+	})
+	if err != nil {
+		// Deliberately not recorded as revoked. An unreachable gateway means
+		// the CA has not been told, and marking it here would leave a
+		// certificate that reads REVOKED in the console and answers
+		// handshakes in production.
+		return revokeFailed(RevokeCANotTold, fmt.Sprintf(
+			"gateway for CA %s is not connected, so the CA has not been told; nothing has been changed", account.Name), nil)
+	}
+
+	config, err := DecryptCAConfig(r.keyring, account)
+	if err != nil {
+		return revokeFailed(RevokeInternal, "could not open the CA account's configuration", err)
+	}
+
+	resp, err := gw.Client.RevokeCertificate(ctx, &providerv1.RevokeCertificateRequest{
+		CertificatePem:        []byte(certPEM),
+		ProviderCertificateId: fingerprint,
+		Reason:                int32(reason),
+		ProviderConfig:        config,
+	})
+	if err != nil {
+		return revokeFailed(RevokeCANotTold, "the CA refused the revocation, so nothing has been changed", err)
+	}
+	if !resp.Success {
+		return revokeFailed(RevokeCANotTold,
+			"the CA did not revoke this certificate, so nothing has been changed: "+resp.Message, nil)
+	}
+	return nil
 }

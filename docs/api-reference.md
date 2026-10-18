@@ -2436,6 +2436,13 @@ EXTERNAL`. The client holds the key and renews by ordering again; the core never
 renews it. The lifetime is the template's, so an order naming `notBefore` or
 `notAfter` is refused.
 
+An order from the same account for exactly the same names and key type as a
+live certificate is a renewal. It is written over that certificate's record,
+the way the core's own renewals are: `renewal_count` goes up, the old
+fingerprint is kept, and a check that the new certificate reached its servers
+is scheduled. Different names, another key type or another account make a
+second certificate.
+
 One credential makes one account. Naming a template that does not exist is a
 404.
 
@@ -2449,7 +2456,9 @@ The account that ordered the certificate may revoke it, and so may anyone
 signing with the certificate's own private key. Other accounts on the same
 template may not. The CA is told first and the inventory changes only if it
 agrees, as with a revocation made in the console, and it is audited under the
-same `certificate.revoked` action.
+same `certificate.revoked` action. The certificate a renewal replaced can still
+be revoked: the CA is sent it, and the record, which now describes its
+successor, is left as it is.
 
 An account can roll its key over (RFC 8555 key change). The request has to be
 signed by both the old key and the new one. A key another account on the

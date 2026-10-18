@@ -121,3 +121,33 @@ func TestWhatCannotBeRevokedIsRefusedWithoutAskingTheCA(t *testing.T) {
 		})
 	}
 }
+
+// A renewal overwrites the record with its successor, so revoking what it
+// replaced sends the replaced certificate to the CA and leaves the record,
+// which describes a certificate nobody asked to revoke, as it was.
+func TestRevokingAReplacedCertificateSendsItAndLeavesTheRecord(t *testing.T) {
+	r, st, successor, gw := revokeFixture(t)
+	replaced := "-----BEGIN CERTIFICATE-----\ncmVwbGFjZWQ=\n-----END CERTIFICATE-----\n"
+
+	if err := r.RevokeReplaced(context.Background(), successor, replaced, "cd34", 1); err != nil {
+		t.Fatalf("revoke replaced: %v", err)
+	}
+	if gw.revoked.Load() != 1 || gw.lastPEM.Load() != replaced {
+		t.Errorf("the CA was asked %d times, with %q; want the replaced certificate", gw.revoked.Load(), gw.lastPEM.Load())
+	}
+	if statusOf(t, st, successor.ID) != "ISSUED" {
+		t.Error("the successor was recorded as revoked")
+	}
+}
+
+func TestRevokingAReplacedCertificateSaysWhenTheCARefuses(t *testing.T) {
+	r, _, successor, gw := revokeFixture(t)
+	gw.refuseRevocation.Store(true)
+	err := r.RevokeReplaced(context.Background(), successor, "pem", "cd34", 1)
+	if revokeKind(t, err) != RevokeCANotTold {
+		t.Fatalf("got %v, want the CA's refusal", err)
+	}
+	if err := r.RevokeReplaced(context.Background(), successor, "pem", "cd34", 7); revokeKind(t, err) != RevokeBadReason {
+		t.Fatalf("got %v, want a bad reason", err)
+	}
+}
