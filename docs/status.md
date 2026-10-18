@@ -32,6 +32,9 @@ What CI does exercise, on every pull request:
   `make live-kubernetes`
 - External Account Binding, through the released ACME gateway, against Pebble
   requiring one — `make live-eab`
+- the core's own ACME server against certbot, lego and acme.sh as released:
+  registration with a credential, issuance, renewal in place, renewalInfo,
+  revocation, and the refusals — `make live-acme`
 
 Daily, and on demand: Certificate Transparency against crt.sh, for a public
 site's real certificates — `make live-ct`. It is kept off pull requests because
@@ -53,6 +56,7 @@ This is early development software. Do not run it in production yet.
 | Wildcard certificates | ✅ | Over `dns-01` |
 | External Account Binding | ✅ | Required by ZeroSSL, Google Trust Services, SSL.com. CI runs the published ACME gateway image against Pebble with a binding required; Pebble is set to treat every authorization as valid. With a correct binding, the account issues a certificate and then renews it. No binding, a wrong HMAC key and a key id the CA never issued are each refused with the CA's own reason. No account at ZeroSSL, Google Trust Services or SSL.com has been used, so their own rules — such as a key id that opens one account only — are untested |
 | ACME revocation | ✅ | Real revocation; already-revoked is treated as success |
+| ACME server (clients to CertPilot) | ✅ | certbot, acme.sh, lego and other RFC 8555 clients get certificates from the core with no agent, one directory per template, registration only with a credential from Settings → ACME clients. The client keeps its key; the certificate is recorded as held by it. Renewals update the record in place, renewalInfo (RFC 9773) tells clients when to renew, and revocation and key rollover work. CI runs certbot, lego and acme.sh against it. Authorisation is by the credential and the template's name rules: there are no HTTP-01 or DNS-01 challenges yet |
 | Renewal information (RFC 9773) | ✅ | Renews inside the CA's suggested window, at a random instant within it. A window pulled forward — what a CA does during a mass revocation — is a CRITICAL alert carrying the CA's own explanation |
 | Vault PKI issuance | ✅ | Issue, renew, revoke and status against a Vault PKI mount, with token, AppRole or Kubernetes auth. Signs CSRs by preference, so a key generated on the host stays there. Verified against a real Vault, not only a stub |
 | Vault issuer visibility | ✅ | The only gateway that returns **issuers** from `GetCAInfo` (ACME answers it too, with the CA's identity and advertised profiles, because ACME publishes no issuer listing): the mount's issuers, their expiry and their CRL. Vault **refuses** to sign a certificate that would outlive its issuer, so the day an issuing CA comes within one certificate lifetime of expiry, every renewal through it fails at once — this is said at configuration time instead |
