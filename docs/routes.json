@@ -3976,9 +3976,7 @@
         {
           "status": 500,
           "errors": [
-            "could not read the ACME credential",
-            "the credential is revoked, but the account it made could not be read, so it may still be able to order",
-            "the credential is revoked, but the account it made could not be deactivated and can still order"
+            "could not read the ACME credential"
           ]
         }
       ],

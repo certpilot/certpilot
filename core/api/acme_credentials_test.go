@@ -233,3 +233,22 @@ func TestTheCredentialListSaysWhetherACMEIsOnAndWhereToPointAClient(t *testing.T
 		}
 	}
 }
+
+// With no external_url, the only address to hand a client is the one the
+// request arrived on, which whoever sent the request chose. Fine on a
+// developer's machine; in production the console would show an administrator
+// a directory URL an attacker picked, to paste into a client.
+func TestADirectoryURLIsNeverTakenFromTheRequestInProduction(t *testing.T) {
+	production := func(c *config.CoreConfig) { c.Server.Mode = "production"; c.ACME.ExternalURL = "" }
+	r, st, _ := realRouterConfigured(t, store.NewMemoryStore(), production)
+	acmeTemplate(t, st)
+
+	got := mintACMECredential(t, r, "web")
+	if got.DirectoryURL != "" {
+		t.Errorf("minting answered directory_url %q, taken from the request", got.DirectoryURL)
+	}
+	w := do(r, http.MethodGet, "/api/v1/acme/credentials", nil, map[string]string{"X-Forwarded-Proto": "https"})
+	if strings.Contains(w.Body.String(), "example.com/acme") {
+		t.Errorf("the list carries a directory URL taken from the request: %s", w.Body.String())
+	}
+}

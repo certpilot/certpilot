@@ -74,15 +74,34 @@ func (s *PostgresStore) GetACMEEABCredentialByKID(ctx context.Context, kid strin
 	return c, err
 }
 
-func (s *PostgresStore) RevokeACMEEABCredential(ctx context.Context, id string, revokedBy *string) error {
-	tag, err := s.pool.Exec(ctx, `
+func (s *PostgresStore) RevokeACMEEABCredential(ctx context.Context, id string, revokedBy *string) (string, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// The credential row first. A registration holds a share lock on it from
+	// its check to its insert (CreateACMEAccount), so this waits for one in
+	// flight, and the account update below then sees the account it made.
+	tag, err := tx.Exec(ctx, `
 		UPDATE public.acme_eab_credentials
 		SET revoked_at = COALESCE(revoked_at, now()), revoked_by = COALESCE(revoked_by, $2)
 		WHERE id = $1`, id, revokedBy)
 	if noSuchRow(err) || (err == nil && tag.RowsAffected() == 0) {
-		return fmt.Errorf("ACME credential %s %w", id, ErrNotFound)
+		return "", fmt.Errorf("ACME credential %s %w", id, ErrNotFound)
 	}
-	return err
+	if err != nil {
+		return "", err
+	}
+	var deactivated string
+	err = tx.QueryRow(ctx, `
+		UPDATE public.acme_accounts SET status = 'deactivated', updated_at = now()
+		WHERE eab_id = $1 AND status = 'valid' RETURNING id`, id).Scan(&deactivated)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+	return deactivated, tx.Commit(ctx)
 }
 
 func (s *PostgresStore) CreateACMEAccount(ctx context.Context, a *ACMEAccount) error {
@@ -90,7 +109,28 @@ func (s *PostgresStore) CreateACMEAccount(ctx context.Context, a *ACMEAccount) e
 	if err != nil {
 		return err
 	}
-	err = s.pool.QueryRow(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Locked so that a revocation racing this registration waits for it, and
+	// then deactivates the account it made, or goes first and is seen here.
+	var revoked bool
+	err = tx.QueryRow(ctx,
+		"SELECT revoked_at IS NOT NULL FROM public.acme_eab_credentials WHERE id = $1 FOR SHARE", a.EABID).Scan(&revoked)
+	if noSuchRow(err) {
+		return fmt.Errorf("ACME credential %s %w", a.EABID, ErrNotFound)
+	}
+	if err != nil {
+		return err
+	}
+	if revoked {
+		return fmt.Errorf("the ACME credential has been revoked: %w", ErrRevoked)
+	}
+
+	err = tx.QueryRow(ctx, `
 		INSERT INTO public.acme_accounts (template_id, eab_id, jwk_thumbprint, jwk, contacts)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, status, created_at, updated_at`,
@@ -99,7 +139,10 @@ func (s *PostgresStore) CreateACMEAccount(ctx context.Context, a *ACMEAccount) e
 	if isUniqueViolation(err) {
 		return fmt.Errorf("an ACME account already exists for this credential or key: %w", ErrConflict)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *PostgresStore) GetACMEAccount(ctx context.Context, id string) (*ACMEAccount, error) {

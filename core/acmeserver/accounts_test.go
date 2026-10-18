@@ -264,7 +264,7 @@ func TestARevokedCredentialCannotRegister(t *testing.T) {
 	f := newFixture(t)
 	hmac := f.credential("kid-1")
 	stored, _ := f.st.GetACMEEABCredentialByKID(context.Background(), "kid-1")
-	if err := f.st.RevokeACMEEABCredential(context.Background(), stored.ID, nil); err != nil {
+	if _, err := f.st.RevokeACMEEABCredential(context.Background(), stored.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	_, err := register(f.client(), "kid-1", hmac)

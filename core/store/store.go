@@ -582,7 +582,10 @@ type Store interface {
 	// GetACMEEABCredentialByKID resolves the key id a client presented. A revoked
 	// credential is returned, marked, so the caller can say why it was refused.
 	GetACMEEABCredentialByKID(ctx context.Context, kid string) (*ACMEEABCredential, error)
-	RevokeACMEEABCredential(ctx context.Context, id string, revokedBy *string) error
+	// RevokeACMEEABCredential revokes a credential and deactivates the account
+	// made with it, in one write, and returns that account's id if it was
+	// active. CreateACMEAccount refuses a revoked credential with ErrRevoked.
+	RevokeACMEEABCredential(ctx context.Context, id string, revokedBy *string) (string, error)
 
 	// CreateACMEAccount wraps ErrConflict when the credential has already made
 	// an account, or the key is already registered for that template.

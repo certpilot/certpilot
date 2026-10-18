@@ -110,7 +110,7 @@ async function copy(what: string, value: string) {
 /** The certbot command for a credential just made, with its real values. */
 const certbotCommand = computed(() => {
   const r = revealed.value
-  if (!r) return ''
+  if (!r || !r.directoryURL) return ''
   return `certbot register --server ${r.directoryURL} --eab-kid ${r.kid} --eab-hmac-key ${r.hmacKey} --email you@example.com`
 })
 
@@ -156,7 +156,13 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
         <p class="label-rail sev-warning">Credential for {{ revealed.name }}</p>
         <div class="kv-row">
           <span class="label-micro">Directory</span>
-          <code class="reveal-value">{{ revealed.directoryURL }}</code>
+          <code v-if="revealed.directoryURL" class="reveal-value">{{ revealed.directoryURL }}</code>
+          <!-- Empty in production without acme.external_url: the core will
+               not guess its own address from the request. -->
+          <span v-else class="field-help sev-warning">
+            Set <code>acme.external_url</code> to the https address clients use; the core will not
+            guess it.
+          </span>
         </div>
         <div class="kv-row">
           <span class="label-micro">Key ID</span>
@@ -166,7 +172,7 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
           <span class="label-micro">HMAC key</span>
           <code class="reveal-value">{{ revealed.hmacKey }}</code>
         </div>
-        <div class="kv-row">
+        <div v-if="certbotCommand" class="kv-row">
           <span class="label-micro">certbot</span>
           <code class="reveal-value command">{{ certbotCommand }}</code>
         </div>
@@ -180,7 +186,7 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
           <component :is="copied === 'key' ? Check : Copy" class="w-3 h-3" />
           {{ copied === 'key' ? 'Copied' : 'Copy key' }}
         </button>
-        <button class="btn-console" @click="copy('cmd', certbotCommand)">
+        <button v-if="certbotCommand" class="btn-console" @click="copy('cmd', certbotCommand)">
           <component :is="copied === 'cmd' ? Check : Copy" class="w-3 h-3" />
           {{ copied === 'cmd' ? 'Copied' : 'Copy command' }}
         </button>
@@ -238,7 +244,7 @@ function state(cred: AcmeCredential): { label: string; cls: string } {
               <code v-if="cred.template" class="exact slug">{{ cred.template }}</code>
               <span v-else class="label-micro sev-warning">template deleted</span>
             </td>
-            <td><code class="url">{{ cred.directory_url }}</code></td>
+            <td><code class="url">{{ cred.directory_url || 'set acme.external_url' }}</code></td>
             <td class="tabular">{{ formatDateTime(cred.created_at) }}</td>
             <td><span :class="state(cred).cls">{{ state(cred).label }}</span></td>
             <td class="text-right">

@@ -63,23 +63,36 @@ func (m *MemoryStore) GetACMEEABCredentialByKID(ctx context.Context, kid string)
 	return nil, nil
 }
 
-func (m *MemoryStore) RevokeACMEEABCredential(ctx context.Context, id string, revokedBy *string) error {
+func (m *MemoryStore) RevokeACMEEABCredential(ctx context.Context, id string, revokedBy *string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	c, ok := m.acmeCredentials[id]
 	if !ok {
-		return fmt.Errorf("ACME credential %s %w", id, ErrNotFound)
+		return "", fmt.Errorf("ACME credential %s %w", id, ErrNotFound)
 	}
 	if c.RevokedAt == nil {
 		now := time.Now()
 		c.RevokedAt, c.RevokedBy = &now, revokedBy
 	}
-	return nil
+	for _, a := range m.acmeAccounts {
+		if a.EABID == id && a.Status == ACMEAccountValid {
+			a.Status, a.UpdatedAt = ACMEAccountDeactivated, time.Now()
+			return a.ID, nil
+		}
+	}
+	return "", nil
 }
 
 func (m *MemoryStore) CreateACMEAccount(ctx context.Context, a *ACMEAccount) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	cred, ok := m.acmeCredentials[a.EABID]
+	if !ok {
+		return fmt.Errorf("ACME credential %s %w", a.EABID, ErrNotFound)
+	}
+	if cred.RevokedAt != nil {
+		return fmt.Errorf("the ACME credential has been revoked: %w", ErrRevoked)
+	}
 	for _, existing := range m.acmeAccounts {
 		if existing.EABID == a.EABID ||
 			(existing.TemplateID == a.TemplateID && existing.JWKThumbprint == a.JWKThumbprint) {
