@@ -315,6 +315,12 @@ func (s *Server) finalize(c *gin.Context) {
 		return
 	}
 
+	prev, err := s.renews(c, req.account, tpl, order.Identifiers, decision.KeyType)
+	if err != nil {
+		s.invalidate(c, tpl, order, http.StatusInternalServerError, "serverInternal", err.Error())
+		return
+	}
+
 	// From here a failure is the order's, not the request's. It goes back as
 	// the order, invalid with its error, as RFC 8555 §7.4 describes. Answered
 	// as a 500 instead, clients retry it, and the retry is told the order is
@@ -325,7 +331,7 @@ func (s *Server) finalize(c *gin.Context) {
 		return
 	}
 
-	cert, err := s.record(c, req, tpl, decision, signed)
+	cert, err := s.record(c, req, tpl, decision, signed, prev)
 	if err != nil {
 		s.orderFailed(c, tpl, order, "the certificate was issued and could not be recorded")
 		return
@@ -397,9 +403,9 @@ func list(set map[string]bool) string {
 }
 
 // record writes the certificate to the inventory, with its provenance and its
-// custody stated.
+// custody stated: over prev when it renews one, as a new record otherwise.
 func (s *Server) record(c *gin.Context, req *signed, tpl *store.CertificateTemplate,
-	d *issuance.Decision, signed *issuance.Signed) (*store.Certificate, error) {
+	d *issuance.Decision, signed *issuance.Signed, prev *store.Certificate) (*store.Certificate, error) {
 
 	info := signed.Info
 	notBefore, notAfter := info.NotBefore, info.NotAfter
@@ -436,6 +442,9 @@ func (s *Server) record(c *gin.Context, req *signed, tpl *store.CertificateTempl
 	if len(signed.ChainPEM) > 0 {
 		chain := string(signed.ChainPEM)
 		cert.ChainPEM = &chain
+	}
+	if prev != nil {
+		return s.recordRenewal(c, req, tpl, prev, cert)
 	}
 	if err := s.cfg.Store.CreateCertificate(c.Request.Context(), cert); err != nil {
 		return nil, err

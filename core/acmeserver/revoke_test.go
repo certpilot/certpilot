@@ -21,12 +21,18 @@ import (
 // key it was issued for.
 func (f *fixture) issued(c *acme.Client, names ...string) ([]byte, crypto.Signer) {
 	f.t.Helper()
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	return f.issuedFor(c, key, names...)
+}
+
+// issuedFor is issued with the certificate key chosen by the caller.
+func (f *fixture) issuedFor(c *acme.Client, key crypto.Signer, names ...string) ([]byte, crypto.Signer) {
+	f.t.Helper()
 	ctx := context.Background()
 	order, err := c.AuthorizeOrder(ctx, acme.DomainIDs(names...))
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	csr, _ := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{DNSNames: names}, key)
 	chain, _, err := c.CreateOrderCert(ctx, order.FinalizeURL, csr, true)
 	if err != nil {

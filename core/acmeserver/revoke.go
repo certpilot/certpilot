@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net/http"
 	"sort"
@@ -66,7 +67,16 @@ func (s *Server) revokeCert(c *gin.Context) {
 	}
 
 	sum := sha256.Sum256(der)
-	cert, err := s.cfg.Store.GetCertificateByFingerprint(ctx, hex.EncodeToString(sum[:]))
+	fp := hex.EncodeToString(sum[:])
+	cert, err := s.cfg.Store.GetCertificateByFingerprint(ctx, fp)
+	// A renewal writes its successor over the record, so the certificate it
+	// replaced is found through the record that replaced it. Renew, then revoke
+	// the old one, is what a client does when a key leaks.
+	replaced := false
+	if err == nil && cert == nil {
+		cert, err = s.cfg.Store.GetCertificateBySupersededFingerprint(ctx, fp)
+		replaced = cert != nil
+	}
 	if err != nil {
 		s.fail(c, http.StatusInternalServerError, "serverInternal", "could not look the certificate up")
 		return
@@ -103,24 +113,26 @@ func (s *Server) revokeCert(c *gin.Context) {
 		actor = "acme:certificate-key"
 	}
 
-	revoked, err := s.cfg.Revoker.Revoke(ctx, cert, reason, actor)
-	if err != nil {
-		status, kind := http.StatusInternalServerError, "serverInternal"
-		if re, ok := issuance.AsRevokeError(err); ok {
-			switch re.Kind {
-			case issuance.RevokeAlreadyRevoked:
-				status, kind = http.StatusBadRequest, "alreadyRevoked"
-			case issuance.RevokeBadReason:
-				status, kind = http.StatusBadRequest, "badRevocationReason"
-			case issuance.RevokeNotPossible:
-				status, kind = http.StatusBadRequest, "malformed"
-			}
+	if replaced {
+		replacedPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+		if err := s.cfg.Revoker.RevokeReplaced(ctx, cert, replacedPEM, fp, reason); err != nil {
+			s.revokeFailed(c, err)
+			return
 		}
-		s.fail(c, status, kind, err.Error())
+		s.auditRevocation(c, tpl, cert, reason, actor, accountID, gin.H{
+			"fingerprint": fp, "serial": leaf.SerialNumber.String(), "replaced_by": cert.FingerprintSHA256,
+		})
+		c.Status(http.StatusOK)
 		return
 	}
 
-	s.auditRevocation(c, tpl, revoked, reason, actor, accountID)
+	revoked, err := s.cfg.Revoker.Revoke(ctx, cert, reason, actor)
+	if err != nil {
+		s.revokeFailed(c, err)
+		return
+	}
+
+	s.auditRevocation(c, tpl, revoked, reason, actor, accountID, nil)
 	if s.cfg.Broker != nil {
 		s.cfg.Broker.Publish(events.Event{
 			Topic:    "cert.revoked",
@@ -137,6 +149,21 @@ func (s *Server) revokeCert(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
+func (s *Server) revokeFailed(c *gin.Context, err error) {
+	status, kind := http.StatusInternalServerError, "serverInternal"
+	if re, ok := issuance.AsRevokeError(err); ok {
+		switch re.Kind {
+		case issuance.RevokeAlreadyRevoked:
+			status, kind = http.StatusBadRequest, "alreadyRevoked"
+		case issuance.RevokeBadReason:
+			status, kind = http.StatusBadRequest, "badRevocationReason"
+		case issuance.RevokeNotPossible:
+			status, kind = http.StatusBadRequest, "malformed"
+		}
+	}
+	s.fail(c, status, kind, err.Error())
+}
+
 // sameKey reports whether a JWK and a certificate's public key are one key.
 func sameKey(key jwk.Key, certKey any) bool {
 	fromCert, err := jwk.Import(certKey)
@@ -150,11 +177,18 @@ func sameKey(key jwk.Key, certKey any) bool {
 
 // auditRevocation records it under the same action as a revocation made in the
 // console, so one search finds every revocation however it was asked for.
-func (s *Server) auditRevocation(c *gin.Context, tpl *store.CertificateTemplate, cert *store.Certificate, reason int, actor, accountID string) {
-	raw, _ := json.Marshal(gin.H{
+//
+// extra overrides or adds details: a replaced certificate is recorded with its
+// own fingerprint and the fingerprint of the one that replaced it.
+func (s *Server) auditRevocation(c *gin.Context, tpl *store.CertificateTemplate, cert *store.Certificate, reason int, actor, accountID string, extra gin.H) {
+	details := gin.H{
 		"common_name": cert.CommonName, "reason": store.RevocationReasons[reason], "reason_code": reason,
 		"fingerprint": cert.FingerprintSHA256, "via": "acme", "template": tpl.Slug, "acme_account": accountID,
-	})
+	}
+	for k, v := range extra {
+		details[k] = v
+	}
+	raw, _ := json.Marshal(details)
 	ip := c.ClientIP()
 	_ = s.cfg.Store.CreateAuditLog(c.Request.Context(), &store.AuditLog{
 		Action:     "certificate.revoked",

@@ -33,6 +33,7 @@ type fakeGateway struct {
 	// revoked counts the revocations the CA was asked for.
 	revoked    atomic.Int32
 	lastReason atomic.Int32
+	lastPEM    atomic.Value // string
 }
 
 func startGateway(t *testing.T) *fakeGateway {
@@ -105,5 +106,6 @@ func (g *fakeGateway) IssueCertificate(_ context.Context, req *providerv1.IssueC
 func (g *fakeGateway) RevokeCertificate(_ context.Context, req *providerv1.RevokeCertificateRequest) (*providerv1.RevokeCertificateResponse, error) {
 	g.revoked.Add(1)
 	g.lastReason.Store(req.Reason)
+	g.lastPEM.Store(string(req.CertificatePem))
 	return &providerv1.RevokeCertificateResponse{Success: true}, nil
 }
