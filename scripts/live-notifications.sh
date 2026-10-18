@@ -293,6 +293,11 @@ class Receiver(BaseHTTPRequestHandler):
         self.send_response(204)
         self.end_headers()
 
+    # Answers the readiness check, and records nothing.
+    def do_GET(self):
+        self.send_response(204)
+        self.end_headers()
+
     def log_message(self, *args):
         pass
 
@@ -300,6 +305,10 @@ HTTPServer(("127.0.0.1", port), Receiver).serve_forever()
 PY
 python3 "$WORK/receiver.py" "$HOOK_PORT" "$HOOK_SECRET" "$HOOK_LOG" 2>"$WORK/receiver.log" &
 live_on_exit "kill $!"
+
+# Started in the background, so it may not be listening yet. The first test
+# delivery used to beat it on a cold runner and fail as "connection refused".
+live_wait_http "http://127.0.0.1:$HOOK_PORT/ready" "the webhook receiver"
 
 # delivery topic — the newest delivery to the receiver for that topic, waiting.
 delivery() {
