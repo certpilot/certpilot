@@ -1,11 +1,13 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 
@@ -37,6 +39,8 @@ type mintACMECredentialRequest struct {
 	Name string `json:"name"`
 	// Template is a slug or an id.
 	Template string `json:"template"`
+	// RequireChallenge makes the client prove each name by HTTP-01 or DNS-01.
+	RequireChallenge bool `json:"require_challenge"`
 }
 
 // acmeCredentialView is a credential as the console lists it. The key is not
@@ -92,11 +96,12 @@ func (h *ACMECredentialHandler) Create(c *gin.Context) {
 
 	actor, _ := actorOf(c)
 	cred := &store.ACMEEABCredential{
-		KID:           base64.RawURLEncoding.EncodeToString(kidBytes),
-		Name:          req.Name,
-		TemplateID:    tpl.ID,
-		HMACKeySealed: sealed,
-		CreatedBy:     actor,
+		KID:              base64.RawURLEncoding.EncodeToString(kidBytes),
+		Name:             req.Name,
+		TemplateID:       tpl.ID,
+		HMACKeySealed:    sealed,
+		CreatedBy:        actor,
+		RequireChallenge: req.RequireChallenge,
 	}
 	if err := h.store.CreateACMEEABCredential(ctx, cred); err != nil {
 		slog.Error("could not store an ACME credential", "path", c.FullPath(), "error", err)
@@ -104,7 +109,7 @@ func (h *ACMECredentialHandler) Create(c *gin.Context) {
 		return
 	}
 	h.audit(c, "acme_credential.created", cred.ID,
-		fmt.Sprintf(`{"name":%q,"template":%q,"kid":%q}`, cred.Name, tpl.Slug, cred.KID))
+		fmt.Sprintf(`{"name":%q,"template":%q,"kid":%q,"require_challenge":%t}`, cred.Name, tpl.Slug, cred.KID, cred.RequireChallenge))
 
 	c.JSON(http.StatusCreated, gin.H{
 		"data": acmeCredentialView{cred, tpl.Slug, ""},
@@ -191,4 +196,26 @@ func (h *ACMECredentialHandler) audit(c *gin.Context, action, entityID, details 
 		ActorEmail: email,
 		Details:    details,
 	})
+}
+
+// acmeValidation is how the ACME server checks challenges, from configuration.
+func acmeValidation(c config.ACMEChallengeConfig) acmeserver.Validation {
+	v := acmeserver.Validation{HTTPPort: c.Port()}
+	if c.DNSResolver != "" {
+		// Every lookup, both challenges', goes to the configured resolver.
+		// "tcp://" forces TCP, for a resolver UDP cannot reach; Go's resolver
+		// speaks whichever the connection it is handed is.
+		addr, forceTCP := strings.CutPrefix(c.DNSResolver, "tcp://")
+		v.Resolver = &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				if forceTCP {
+					network = "tcp"
+				}
+				var d net.Dialer
+				return d.DialContext(ctx, network, addr)
+			},
+		}
+	}
+	return v
 }

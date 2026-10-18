@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -492,6 +493,75 @@ func TestAnACMEAccountCannotBeMadeWithARevokedCredential(t *testing.T) {
 		err := s.CreateACMEAccount(ctx, &ACMEAccount{TemplateID: tpl, EABID: cred.ID, JWKThumbprint: "t2", JWK: "{}"})
 		if !errors.Is(err, ErrRevoked) {
 			t.Fatalf("got %v, want ErrRevoked", err)
+		}
+	})
+}
+
+// A credential can say its client has to prove it controls each name.
+func TestAnACMECredentialKeepsWhetherItRequiresChallenges(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		tpl := acmeTemplate(t, s)
+		cred := &ACMEEABCredential{KID: "challenged", Name: "n", TemplateID: tpl, HMACKeySealed: "x", RequireChallenge: true}
+		if err := s.CreateACMEEABCredential(ctx, cred); err != nil {
+			t.Fatal(err)
+		}
+		byKID, err := s.GetACMEEABCredentialByKID(ctx, "challenged")
+		if err != nil || byKID == nil || !byKID.RequireChallenge {
+			t.Fatalf("by key id: %+v, %v", byKID, err)
+		}
+		byID, err := s.GetACMEEABCredential(ctx, cred.ID)
+		if err != nil || !byID.RequireChallenge || byID.KID != "challenged" {
+			t.Fatalf("by id: %+v, %v", byID, err)
+		}
+		if _, err := s.GetACMEEABCredential(ctx, missingID); !errors.Is(err, ErrNotFound) {
+			t.Errorf("a missing credential: %v, want ErrNotFound", err)
+		}
+	})
+}
+
+func TestACMEAuthorizationsKeepTheirChallengeState(t *testing.T) {
+	forEachStore(t, func(t *testing.T, s Store) {
+		ctx := context.Background()
+		acct := acmeAccountFor(t, s)
+		order := &ACMEOrder{AccountID: acct.ID, Status: ACMEOrderPending, ExpiresAt: time.Now().Add(time.Hour),
+			Identifiers: []ACMEIdentifier{{Type: "dns", Value: "a.example.com"}, {Type: "dns", Value: "*.example.com"}}}
+		if err := s.CreateACMEOrder(ctx, order); err != nil {
+			t.Fatal(err)
+		}
+		expires := time.Now().Add(time.Hour).Truncate(time.Second)
+		for i, v := range []string{"a.example.com", "example.com"} {
+			if err := s.CreateACMEAuthorization(ctx, &ACMEAuthorization{OrderID: order.ID, Index: i,
+				Value: v, Wildcard: i == 1, Status: ACMEAuthzPending, Token: fmt.Sprintf("token-%d", i), ExpiresAt: expires}); err != nil {
+				t.Fatalf("create authz %d: %v", i, err)
+			}
+		}
+		list, err := s.ListACMEAuthorizations(ctx, order.ID)
+		if err != nil || len(list) != 2 || list[0].Index != 0 || list[1].Value != "example.com" || !list[1].Wildcard ||
+			list[1].Token != "token-1" || !list[1].ExpiresAt.Equal(expires) {
+			t.Fatalf("list: %+v, %v", list, err)
+		}
+
+		authz := list[0]
+		now := time.Now().Truncate(time.Second)
+		authz.Status, authz.ValidatedWith, authz.ValidatedAt = ACMEAuthzValid, "http-01", &now
+		if err := s.UpdateACMEAuthorization(ctx, authz); err != nil {
+			t.Fatal(err)
+		}
+		bad := list[1]
+		bad.Status, bad.Error = ACMEAuthzInvalid, `{"type":"urn:ietf:params:acme:error:unauthorized"}`
+		if err := s.UpdateACMEAuthorization(ctx, bad); err != nil {
+			t.Fatal(err)
+		}
+		list, _ = s.ListACMEAuthorizations(ctx, order.ID)
+		if list[0].Status != ACMEAuthzValid || list[0].ValidatedWith != "http-01" || list[0].ValidatedAt == nil {
+			t.Errorf("a validated authorization lost its state: %+v", list[0])
+		}
+		if list[1].Status != ACMEAuthzInvalid || list[1].Error == "" {
+			t.Errorf("a failed authorization lost its error: %+v", list[1])
+		}
+		if none, err := s.ListACMEAuthorizations(ctx, missingID); err != nil || len(none) != 0 {
+			t.Errorf("an order with none: %v, %v", none, err)
 		}
 	})
 }

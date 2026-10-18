@@ -14,14 +14,14 @@ import (
 // been used" is one query rather than a second one that can disagree.
 const acmeCredentialColumns = `c.id, c.kid, c.name, c.template_id, c.hmac_key_sealed,
 		(SELECT a.id FROM public.acme_accounts a WHERE a.eab_id = c.id),
-		c.created_by, c.created_at, c.revoked_at, c.revoked_by`
+		c.require_challenge, c.created_by, c.created_at, c.revoked_at, c.revoked_by`
 
 const acmeAccountColumns = `id, template_id, eab_id, jwk_thumbprint, jwk, status, contacts, created_at, updated_at`
 
 func scanACMECredential(row pgx.Row) (*ACMEEABCredential, error) {
 	c := &ACMEEABCredential{}
 	err := row.Scan(&c.ID, &c.KID, &c.Name, &c.TemplateID, &c.HMACKeySealed, &c.AccountID,
-		&c.CreatedBy, &c.CreatedAt, &c.RevokedAt, &c.RevokedBy)
+		&c.RequireChallenge, &c.CreatedBy, &c.CreatedAt, &c.RevokedAt, &c.RevokedBy)
 	return c, err
 }
 
@@ -40,10 +40,10 @@ func scanACMEAccount(row pgx.Row) (*ACMEAccount, error) {
 
 func (s *PostgresStore) CreateACMEEABCredential(ctx context.Context, c *ACMEEABCredential) error {
 	return s.pool.QueryRow(ctx, `
-		INSERT INTO public.acme_eab_credentials (kid, name, template_id, hmac_key_sealed, created_by)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO public.acme_eab_credentials (kid, name, template_id, hmac_key_sealed, created_by, require_challenge)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, created_at`,
-		c.KID, c.Name, c.TemplateID, c.HMACKeySealed, c.CreatedBy,
+		c.KID, c.Name, c.TemplateID, c.HMACKeySealed, c.CreatedBy, c.RequireChallenge,
 	).Scan(&c.ID, &c.CreatedAt)
 }
 
@@ -320,6 +320,61 @@ func (s *PostgresStore) UpdateACMEOrder(ctx context.Context, o *ACMEOrder) error
 		WHERE id = $1 RETURNING updated_at`, o.ID, o.Status, o.CertificateID, problem).Scan(&o.UpdatedAt)
 	if noSuchRow(err) {
 		return fmt.Errorf("ACME order %s %w", o.ID, ErrNotFound)
+	}
+	return err
+}
+
+func (s *PostgresStore) GetACMEEABCredential(ctx context.Context, id string) (*ACMEEABCredential, error) {
+	c, err := scanACMECredential(s.pool.QueryRow(ctx,
+		"SELECT "+acmeCredentialColumns+" FROM public.acme_eab_credentials c WHERE c.id = $1", id))
+	if noSuchRow(err) {
+		return nil, fmt.Errorf("ACME credential %s %w", id, ErrNotFound)
+	}
+	return c, err
+}
+
+const acmeAuthzColumns = `id, order_id, idx, value, wildcard, status, token, expires_at,
+	coalesce(error, ''), coalesce(validated_with, ''), validated_at`
+
+func (s *PostgresStore) CreateACMEAuthorization(ctx context.Context, a *ACMEAuthorization) error {
+	return s.pool.QueryRow(ctx, `
+		INSERT INTO public.acme_authorizations (order_id, idx, value, wildcard, status, token, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+		a.OrderID, a.Index, a.Value, a.Wildcard, a.Status, a.Token, a.ExpiresAt).Scan(&a.ID)
+}
+
+func (s *PostgresStore) ListACMEAuthorizations(ctx context.Context, orderID string) ([]*ACMEAuthorization, error) {
+	rows, err := s.pool.Query(ctx,
+		"SELECT "+acmeAuthzColumns+" FROM public.acme_authorizations WHERE order_id = $1 ORDER BY idx", orderID)
+	if err != nil {
+		if noSuchRow(err) {
+			return []*ACMEAuthorization{}, nil
+		}
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*ACMEAuthorization{}
+	for rows.Next() {
+		a := &ACMEAuthorization{}
+		if err := rows.Scan(&a.ID, &a.OrderID, &a.Index, &a.Value, &a.Wildcard, &a.Status, &a.Token,
+			&a.ExpiresAt, &a.Error, &a.ValidatedWith, &a.ValidatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil && !noSuchRow(err) {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *PostgresStore) UpdateACMEAuthorization(ctx context.Context, a *ACMEAuthorization) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE public.acme_authorizations
+		SET status = $2, error = NULLIF($3, ''), validated_with = NULLIF($4, ''), validated_at = $5
+		WHERE id = $1`, a.ID, a.Status, a.Error, a.ValidatedWith, a.ValidatedAt)
+	if noSuchRow(err) || (err == nil && tag.RowsAffected() == 0) {
+		return fmt.Errorf("ACME authorization %s %w", a.ID, ErrNotFound)
 	}
 	return err
 }

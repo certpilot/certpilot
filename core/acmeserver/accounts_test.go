@@ -43,7 +43,10 @@ type fixture struct {
 	gw       *fakeGateway
 }
 
-func newFixture(t *testing.T) *fixture {
+func newFixture(t *testing.T) *fixture { return newFixtureWith(t, nil) }
+
+// newFixtureWith lets a test change the server's configuration before it starts.
+func newFixtureWith(t *testing.T, tweak func(*acmeserver.Config)) *fixture {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	ctx := context.Background()
@@ -76,12 +79,16 @@ func newFixture(t *testing.T) *fixture {
 	}
 
 	engine := gin.New()
-	acmeserver.New(acmeserver.Config{
+	cfg := acmeserver.Config{
 		Store: st, Keyring: kr,
 		Resolver: issuance.NewResolver(st, policy.NewEngine(st)),
 		Signer:   issuance.NewSigner(pm, kr),
 		Revoker:  issuance.NewRevoker(st, pm, kr),
-	}).Register(engine)
+	}
+	if tweak != nil {
+		tweak(&cfg)
+	}
+	acmeserver.New(cfg).Register(engine)
 	srv := httptest.NewServer(engine)
 	t.Cleanup(srv.Close)
 	return &fixture{t: t, st: st, kr: kr, srv: srv, template: tpl, gw: gw}

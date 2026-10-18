@@ -7,10 +7,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/certpilot/certpilot/core/store"
 	"github.com/certpilot/certpilot/pkg/config"
@@ -250,5 +252,70 @@ func TestADirectoryURLIsNeverTakenFromTheRequestInProduction(t *testing.T) {
 	w := do(r, http.MethodGet, "/api/v1/acme/credentials", nil, map[string]string{"X-Forwarded-Proto": "https"})
 	if strings.Contains(w.Body.String(), "example.com/acme") {
 		t.Errorf("the list carries a directory URL taken from the request: %s", w.Body.String())
+	}
+}
+
+func TestACredentialCanRequireProofOfControl(t *testing.T) {
+	r, st, _ := realRouterConfigured(t, store.NewMemoryStore(), acmeEnabled)
+	acmeTemplate(t, st)
+	w := do(r, http.MethodPost, "/api/v1/acme/credentials",
+		gin.H{"name": "outside team", "template": "web", "require_challenge": true}, nil)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("mint: %d %s", w.Code, w.Body.String())
+	}
+	var out mintedCredential
+	_ = json.Unmarshal(w.Body.Bytes(), &out)
+	cred, err := st.GetACMEEABCredential(context.Background(), out.Data.ID)
+	if err != nil || !cred.RequireChallenge {
+		t.Fatalf("stored %+v, %v; want it to require challenges", cred, err)
+	}
+	if list := do(r, http.MethodGet, "/api/v1/acme/credentials", nil, nil); !strings.Contains(list.Body.String(), `"require_challenge":true`) {
+		t.Errorf("the list does not say so: %s", list.Body.String())
+	}
+}
+
+// dns_resolver is dialled for every validation lookup, over TCP when it says
+// tcp://. Checked against a listener, because a resolver setting that is
+// silently not used would validate against the system's DNS instead.
+func TestTheConfiguredResolverIsTheOneAsked(t *testing.T) {
+	for _, tc := range []struct{ prefix, network string }{{"", "udp"}, {"tcp://", "tcp"}} {
+		var addr string
+		seen := make(chan struct{}, 1)
+		if tc.network == "tcp" {
+			l, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer l.Close()
+			addr = l.Addr().String()
+			go func() {
+				if conn, err := l.Accept(); err == nil {
+					seen <- struct{}{}
+					conn.Close()
+				}
+			}()
+		} else {
+			pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer pc.Close()
+			addr = pc.LocalAddr().String()
+			go func() {
+				buf := make([]byte, 512)
+				if _, _, err := pc.ReadFrom(buf); err == nil {
+					seen <- struct{}{}
+				}
+			}()
+		}
+		v := acmeValidation(config.ACMEChallengeConfig{DNSResolver: tc.prefix + addr})
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		_, _ = v.Resolver.LookupTXT(ctx, "_acme-challenge.example.com")
+		cancel()
+		select {
+		case <-seen:
+		default:
+			t.Errorf("%s%s: the configured resolver was not asked over %s", tc.prefix, addr, tc.network)
+		}
 	}
 }

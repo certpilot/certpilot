@@ -11,6 +11,12 @@
 #   lego      the same through renewalInfo and replaces, which it sends
 #   acme.sh   registers, is issued, renews in place
 #
+# and, with a credential that requires proof of control, certbot proving a
+# name by HTTP-01 from its webroot and another by DNS-01 through a manual
+# hook, and a DNS-01 answer that is wrong being refused. Names are looked up
+# in pebble-challtestsrv, which answers every name with this machine and serves
+# whatever TXT record the hook sets.
+#
 # and the refusals that matter: no credential, and a name the template does not
 # allow. lego and acme.sh refuse a plain-HTTP directory, so the core is put
 # behind a TLS proxy with a CA made for the run, and all three are handed that
@@ -28,6 +34,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/live.sh"
 CERTBOT_IMAGE="${CERTBOT_IMAGE:-certbot/certbot:v5.8.0}"
 LEGO_IMAGE="${LEGO_IMAGE:-goacme/lego:v4.28.1}"
 ACMESH_IMAGE="${ACMESH_IMAGE:-neilpang/acme.sh:3.1.1}"
+CHALLTESTSRV_IMAGE="${CHALLTESTSRV_IMAGE:-ghcr.io/letsencrypt/pebble-challtestsrv:2.10.1}"
+WEB_PORT=18497
+DNS_PORT=18053
+MGMT_PORT=18055
 GW_VERSION="${GW_VERSION:-$(awk '/^GW_VERSION/ {print $3; exit}' Makefile)}"
 GW_PORT=19095
 TLS_PORT=18496
@@ -37,10 +47,15 @@ TLS_PORT=18496
 if [[ "$(uname -s)" == Linux ]]; then
   HOST=localhost
   DOCKER_NET=(--network host)
+  CHALLTEST_NET=(--network host)
+  RESOLVER="127.0.0.1:$DNS_PORT"
 else
   HOST=host.docker.internal
   # Never empty: macOS's bash 3.2 calls an empty array unbound under set -u.
   DOCKER_NET=(--add-host host.docker.internal:host-gateway)
+  CHALLTEST_NET=(-p "$DNS_PORT:$DNS_PORT/tcp" -p "$MGMT_PORT:$MGMT_PORT")
+  # Docker Desktop does not carry this UDP mapping; the core asks over TCP.
+  RESOLVER="tcp://127.0.0.1:$DNS_PORT"
 fi
 ORIGIN="https://$HOST:$TLS_PORT"
 DIRECTORY="$ORIGIN/acme/live-web/directory"
@@ -61,9 +76,20 @@ LIVE_GATEWAYS="
     - name: selfsigned
       addr: 127.0.0.1:$GW_PORT
       type: selfsigned"
+# The DNS the core validates against, answering every name with this machine,
+# and the web server that answers for those names: certbot's webroot.
+live_docker_run certpilot-live-challtestsrv "${CHALLTEST_NET[@]}" "$CHALLTESTSRV_IMAGE" \
+  -dnsserver ":$DNS_PORT" -management ":$MGMT_PORT" -http01 "" -https01 "" -tlsalpn01 "" -doh "" -defaultIPv6 ""
+mkdir -p "$WORK/www"
+python3 -m http.server "$WEB_PORT" --bind 127.0.0.1 --directory "$WORK/www" >"$WORK/web.log" 2>&1 &
+live_on_exit "kill $!"
+
 live_start_core "acme:
   enabled: true
-  external_url: $ORIGIN"
+  external_url: $ORIGIN
+  challenges:
+    http_port: $WEB_PORT
+    dns_resolver: $RESOLVER"
 tries=600
 until grep -q "gateway registered successfully" "$WORK/core.log"; do
   (( tries-- )) || die "the core never registered the gateway; see $WORK/core.log"
@@ -125,10 +151,10 @@ api -X POST "$API/api/v1/certificate-templates" -H 'Content-Type: application/js
   \"is_enabled\":true,\"san_rules\":{\"suffixes\":[\".example.com\"]}}" >/dev/null \
   || die "could not create the template"
 
-# credential name — prints "KID HMAC".
+# credential name [require_challenge] — prints "KID HMAC".
 credential() {
   api -X POST "$API/api/v1/acme/credentials" -H 'Content-Type: application/json' \
-    -d "{\"name\":\"$1\",\"template\":\"live-web\"}" \
+    -d "{\"name\":\"$1\",\"template\":\"live-web\",\"require_challenge\":${2:-false}}" \
     | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["data"]["kid"], d["hmac_key"])'
 }
 
@@ -158,8 +184,6 @@ ok = {
 sys.exit(0 if ok else 1)
 PY
 }
-
-mkdir -p "$WORK/www"
 
 # ── certbot ──────────────────────────────────────────────────────────────────
 
@@ -239,4 +263,49 @@ expect "renewed in place" "$r" \
   || die "acme.sh's renewal did not renew the record in place: $r"
 pass "acme.sh: registered, issued, and renewed in place"
 
-say "acme: every check passed — $CERTBOT_IMAGE, $LEGO_IMAGE and $ACMESH_IMAGE against the core's ACME server"
+# ── Proof of control ─────────────────────────────────────────────────────────
+
+if [[ "$(uname -s)" == Linux ]]; then MGMT="http://localhost:$MGMT_PORT"; else MGMT="http://host.docker.internal:$MGMT_PORT"; fi
+# certbot's manual hook: set the TXT record it is asked for in challtestsrv,
+# or, with WRONG set, a value that is not it.
+mkdir -p "$WORK/hooks"
+cat >"$WORK/hooks/dns.py" <<'PY'
+#!/usr/bin/env python3
+import json, os, urllib.request
+value = "not-the-answer" if os.environ.get("WRONG") else os.environ["CERTBOT_VALIDATION"]
+body = json.dumps({"host": "_acme-challenge." + os.environ["CERTBOT_DOMAIN"] + ".", "value": value}).encode()
+urllib.request.urlopen(urllib.request.Request(os.environ["MGMT"] + "/set-txt", body, method="POST"))
+PY
+chmod +x "$WORK/hooks/dns.py"
+
+mkdir -p "$WORK/certbot-proof"
+read -r kid hmac < <(credential "certbot with proof" true)
+proof() {
+  docker run --rm "${DOCKER_NET[@]}" -e REQUESTS_CA_BUNDLE=/ca/ca.pem -e MGMT="$MGMT" ${WRONG:+-e WRONG=1} \
+    -v "$WORK/tls:/ca:ro" -v "$WORK/certbot-proof:/etc/letsencrypt" -v "$WORK/www:/www" -v "$WORK/hooks:/hooks:ro" \
+    "$CERTBOT_IMAGE" --server "$DIRECTORY" --non-interactive "$@" 2>&1
+}
+out="$(proof register --agree-tos -m ops@example.com --eab-kid "$kid" --eab-hmac-key "$hmac")" \
+  || die "certbot could not register with a credential that requires proof: $out"
+
+out="$(proof certonly --webroot -w /www -d http01.example.com --key-type ecdsa)" \
+  || die "certbot could not prove a name by HTTP-01: $out"
+grep -q "/chall/" "$WORK/core.log" || die "certbot was issued without answering a challenge"
+r="$(record http01.example.com)"
+expect "one held by the client" "$r" || die "the HTTP-01 certificate was not recorded: $r"
+pass "proof: certbot proved a name by HTTP-01 from its webroot, and was issued"
+
+out="$(proof certonly --manual --preferred-challenges dns --manual-auth-hook /hooks/dns.py -d dns01.example.com --key-type ecdsa)" \
+  || die "certbot could not prove a name by DNS-01: $out"
+r="$(record dns01.example.com)"
+expect "one held by the client" "$r" || die "the DNS-01 certificate was not recorded: $r"
+pass "proof: certbot proved a name by DNS-01 through its hook, and was issued"
+
+out="$(WRONG=1 proof certonly --manual --preferred-challenges dns --manual-auth-hook /hooks/dns.py -d wrong.example.com --key-type ecdsa)" \
+  && die "certbot was issued with a wrong DNS-01 answer: $out"
+grep -q "holds this account's key authorization" <<<"$out" || die "a wrong DNS-01 answer was refused without saying why: $out"
+r="$(record wrong.example.com)"
+[[ "$r" == *'"count": 0'* ]] || die "a certificate was recorded for a name that was not proved: $r"
+pass "proof: a wrong DNS-01 answer is refused, and says why"
+
+say "acme: every check passed — $CERTBOT_IMAGE, $LEGO_IMAGE and $ACMESH_IMAGE against the core's ACME server, challenges through $CHALLTESTSRV_IMAGE"

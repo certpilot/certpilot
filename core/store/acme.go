@@ -24,6 +24,11 @@ type ACMEEABCredential struct {
 	// AccountID is the account made with this credential, once there is one.
 	AccountID *string `json:"account_id,omitempty"`
 
+	// RequireChallenge makes the client prove it controls each name, by
+	// HTTP-01 or DNS-01, before an order is ready. Off, the credential and the
+	// template's name rules are the authorisation.
+	RequireChallenge bool `json:"require_challenge"`
+
 	CreatedBy *string    `json:"created_by,omitempty"`
 	CreatedAt time.Time  `json:"created_at"`
 	RevokedAt *time.Time `json:"revoked_at,omitempty"`
@@ -94,3 +99,32 @@ type ACMEOrder struct {
 	CreatedAt             time.Time `json:"created_at"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }
+
+// ACMEAuthorization is one name of an order whose credential requires proof
+// of control. Orders from other credentials have none stored: theirs are valid
+// from the start and derived from the order.
+type ACMEAuthorization struct {
+	ID      string `json:"id"`
+	OrderID string `json:"order_id"`
+	// Index is the identifier's position in the order, which is how its URL
+	// names it.
+	Index int `json:"index"`
+	// Value is the name to prove, without a wildcard's "*.".
+	Value    string `json:"value"`
+	Wildcard bool   `json:"wildcard"`
+	Status   string `json:"status"`
+	// Token is the challenge token, the same for both challenge types.
+	Token     string    `json:"-"`
+	ExpiresAt time.Time `json:"expires_at"`
+	// Error is the problem document of the failed validation, as JSON.
+	Error         string     `json:"error,omitempty"`
+	ValidatedWith string     `json:"validated_with,omitempty"`
+	ValidatedAt   *time.Time `json:"validated_at,omitempty"`
+}
+
+// ACME authorization statuses.
+const (
+	ACMEAuthzPending = "pending"
+	ACMEAuthzValid   = "valid"
+	ACMEAuthzInvalid = "invalid"
+)

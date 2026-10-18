@@ -49,6 +49,9 @@ type Config struct {
 	Signer *issuance.Signer
 	// Revoker has the CA revoke a certificate and records it once it has.
 	Revoker *issuance.Revoker
+	// Validation is how HTTP-01 and DNS-01 are checked, for credentials that
+	// require them.
+	Validation Validation
 	// Broker, when set, is told about every certificate issued.
 	Broker *events.Broker
 	// Now is replaceable so tests can move the clock.
@@ -89,6 +92,7 @@ func (s *Server) Register(engine *gin.Engine) {
 	g.POST("/order/:id", s.order)
 	g.POST("/order/:id/finalize", s.finalize)
 	g.POST("/authz/:order/:index", s.authorization)
+	g.POST("/chall/:order/:index/:type", s.respondToChallenge)
 	g.POST("/cert/:order", s.certificate)
 	g.POST("/revoke-cert", s.revokeCert)
 	g.POST("/key-change", s.keyChange)

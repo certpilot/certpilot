@@ -133,6 +133,7 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 			Resolver:    issuance.NewResolver(deps.Store, deps.PolicyEngine),
 			Signer:      issuance.NewSigner(deps.PluginMgr, deps.Keyring),
 			Revoker:     issuance.NewRevoker(deps.Store, deps.PluginMgr, deps.Keyring),
+			Validation:  acmeValidation(deps.Config.ACME.Challenges),
 			Broker:      deps.Broker,
 		}).Register(engine)
 	}

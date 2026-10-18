@@ -598,6 +598,13 @@ type Store interface {
 	CreateACMEOrder(ctx context.Context, o *ACMEOrder) error
 	GetACMEOrder(ctx context.Context, id string) (*ACMEOrder, error)
 	ListACMEOrdersByAccount(ctx context.Context, accountID string) ([]*ACMEOrder, error)
+	// GetACMEEABCredential returns a credential by id, ErrNotFound when missing.
+	GetACMEEABCredential(ctx context.Context, id string) (*ACMEEABCredential, error)
+	CreateACMEAuthorization(ctx context.Context, a *ACMEAuthorization) error
+	// ListACMEAuthorizations returns an order's authorizations in index order.
+	ListACMEAuthorizations(ctx context.Context, orderID string) ([]*ACMEAuthorization, error)
+	// UpdateACMEAuthorization writes the status, error and how it was validated.
+	UpdateACMEAuthorization(ctx context.Context, a *ACMEAuthorization) error
 	// UpdateACMEAccountKey replaces an account's key. ErrConflict when another
 	// account on the template already has it.
 	UpdateACMEAccountKey(ctx context.Context, id, jwk, thumbprint string) error
