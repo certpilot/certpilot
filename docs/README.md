@@ -55,6 +55,7 @@ run rather than written from memory.
 | [monitoring.md](monitoring.md) | CA health, expiry thresholds, alerting, acknowledgement, wall displays |
 | [deployment.md](deployment.md) | Getting a renewed certificate to the thing that serves it |
 | [agent.md](https://github.com/certpilot/certpilot-agent/blob/main/docs/agent.md) | The host agent, and the private keys CertPilot never sees. In `certpilot-agent`, with the agent |
+| [acme-server.md](acme-server.md) | certbot, acme.sh and lego getting certificates from CertPilot, with no agent |
 | [discovery.md](discovery.md) | Network scans, Certificate Transparency, cloud inventory |
 | [posture.md](posture.md) | Cryptographic posture, CNSA 2.0, CBOM export |
 

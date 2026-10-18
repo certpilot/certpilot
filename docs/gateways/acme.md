@@ -8,6 +8,9 @@ Implemented by
 against the `provider.v1` contract in
 [`certpilot-gateway-sdk`](https://github.com/certpilot/certpilot-gateway-sdk).
 
+This page is CertPilot as an ACME client of a CA. For ACME clients getting
+certificates from CertPilot, see [the ACME server](../acme-server.md).
+
 Two things shape how this gateway is used, and both are properties of ACME
 rather than of CertPilot.
 
