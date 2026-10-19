@@ -20,7 +20,10 @@ COPY frontend/ ./
 # rather than shipping a console that compiles to nothing.
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM nginx:1.30-alpine
+
+# The base image is rebuilt less often than its packages are patched.
+RUN apk --no-cache upgrade
 
 # Reachable now that the context starts at the repository root.
 COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
