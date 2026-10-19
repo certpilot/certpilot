@@ -1,6 +1,11 @@
 package api
 
 import (
+	"context"
+	"log/slog"
+	"net/http"
+	"time"
+
 	"github.com/certpilot/certpilot/core/acmeserver"
 	"github.com/certpilot/certpilot/core/engine/cloudsync"
 	"github.com/certpilot/certpilot/core/engine/ctlog"
@@ -74,6 +79,22 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 	// Public, and deliberately says nothing about internals.
 	engine.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok", "service": "certpilot-core"})
+	})
+
+	// Readiness: whether this replica can serve, which it cannot without its
+	// database. /healthz stays a liveness probe and keeps answering, so an
+	// orchestrator does not restart a process whose only fault is the
+	// network; a load balancer probing this stops sending it traffic instead.
+	// The cause is logged, not returned: the caller is unauthenticated.
+	engine.GET("/readyz", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		if err := deps.Store.Ping(ctx); err != nil {
+			slog.Warn("not ready: the database did not answer", "error", err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not ready", "service": "certpilot-core"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready", "service": "certpilot-core"})
 	})
 
 	certHandler := NewCertificateHandler(deps.Store, deps.PluginMgr, deps.RenewalExec, deps.RenewalSched, deps.PolicyEngine, deps.Keyring, deps.Broker)

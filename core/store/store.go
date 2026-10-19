@@ -652,6 +652,8 @@ type Store interface {
 
 	// Lifecycle
 	Close()
+	// Ping reports whether the store can still answer. It backs /readyz.
+	Ping(ctx context.Context) error
 }
 
 // CertificateFilter defines query filtering options for certificates.
