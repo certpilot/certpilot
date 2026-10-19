@@ -20,6 +20,18 @@ export interface ChartTheme {
   tooltipText: string
 }
 
+/**
+ * The console's own font stacks, the same as --font-sans and --font-mono in
+ * main.css. Charts used to name Inter and JetBrains Mono, which only Google
+ * Fonts supplied: a request to a third party from an internal PKI console, and
+ * one an air-gapped network cannot make. A canvas cannot read a CSS variable,
+ * hence the copy.
+ */
+export const CHART_FONT_SANS =
+  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+export const CHART_FONT_MONO =
+  'ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", "Roboto Mono", Consolas, monospace'
+
 const LIGHT: ChartTheme = {
   text: 'rgba(15,23,42,0.75)',
   grid: 'rgba(15,23,42,0.08)',
