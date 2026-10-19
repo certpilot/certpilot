@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"strings"
 
@@ -126,6 +127,15 @@ type ServerConfig struct {
 	// A wildcard is rejected when credentials are in play, so this must name
 	// the frontend explicitly.
 	AllowedOrigins []string `yaml:"allowed_origins"`
+	// TrustedProxies lists the addresses or CIDR ranges of the reverse proxies
+	// in front of the core. X-Forwarded-For is believed only when it arrives
+	// from one of them, and only for the entries they appended. Empty means
+	// no proxy is trusted and a client is the address it connected from.
+	//
+	// gin trusts every address unless told otherwise, so before this existed
+	// any client could name the address its rate limit was counted against
+	// and the one written into the audit log.
+	TrustedProxies []string `yaml:"trusted_proxies"`
 }
 
 // IsProduction reports whether the server is running in production mode.
@@ -358,6 +368,19 @@ func (c *CoreConfig) Validate() error {
 		}
 	}
 
+	for _, entry := range c.Server.TrustedProxies {
+		prefix, err := parseAddressOrRange(entry)
+		if err != nil {
+			return fmt.Errorf("config: server.trusted_proxies entry %q is neither an IP address nor a CIDR range "+
+				"(a host name or a port is not accepted: the check is made against the connecting address)", entry)
+		}
+		if c.Server.IsProduction() && prefix.Bits() == 0 {
+			return fmt.Errorf("config: server.trusted_proxies contains %q, which trusts every address; in production "+
+				"that lets any client choose the address its rate limit and audit entries are recorded under. "+
+				"Name the proxy's own address or network", entry)
+		}
+	}
+
 	if c.Server.IsProduction() {
 		if c.Plugins.TLS.Insecure {
 			return fmt.Errorf("config: plugins.tls.insecure cannot be enabled in production mode; " +
@@ -371,4 +394,17 @@ func (c *CoreConfig) Validate() error {
 	}
 
 	return nil
+}
+
+// parseAddressOrRange accepts what gin's SetTrustedProxies accepts, and turns
+// a bare address into the single-address range it stands for.
+func parseAddressOrRange(entry string) (netip.Prefix, error) {
+	if strings.Contains(entry, "/") {
+		return netip.ParsePrefix(entry)
+	}
+	addr, err := netip.ParseAddr(entry)
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	return netip.PrefixFrom(addr, addr.BitLen()), nil
 }
