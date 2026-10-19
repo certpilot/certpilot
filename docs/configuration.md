@@ -246,6 +246,10 @@ logging:
   format: "text"    # text | json
 ```
 
+Both default to the values shown. `json` writes one object per line for a log
+pipeline. Any other value is refused at start-up. Before v0.3.1 both settings
+were read and then ignored, so the core always logged text at `debug`.
+
 ---
 
 ## Gateways

@@ -97,11 +97,9 @@ func main() {
 		return
 	}
 
-	// Setup logging
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
-	slog.SetDefault(logger)
+	// Until the configuration says otherwise: text, at info. Replaced below
+	// once logging.level and logging.format have been read.
+	slog.SetDefault(newLogger(config.LoggingConfig{}, os.Stdout))
 
 	slog.Info("initializing CertPilot Core", "config_file", *configPath)
 
@@ -142,6 +140,8 @@ func main() {
 			},
 		}
 	}
+
+	slog.SetDefault(newLogger(cfg.Logging, os.Stdout))
 
 	// Determine Database URL
 	dbConnStr := resolveDBURL(*dbURLFlag)
