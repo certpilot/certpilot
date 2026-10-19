@@ -238,6 +238,17 @@ lead stops making sense well before the end of that. Where a CA publishes RFC
 which is both better timed and what lets a CA drain a mass-revocation event
 gradually instead of every client renewing at once.
 
+### `metrics`
+
+```yaml
+metrics:
+  listen: "127.0.0.1:9464"
+```
+
+| Key | Default | |
+|:---|:---|:---|
+| `listen` | none | A `host:port` on which to serve Prometheus metrics at `/metrics`, on a listener of its own. Empty serves none. The endpoint is unauthenticated, as Prometheus expects, so bind it where only the scraper reaches it and do not publish it through the console's proxy. An address already in use stops the core from starting. See [operations.md](operations.md#metrics) |
+
 ### `logging`
 
 ```yaml

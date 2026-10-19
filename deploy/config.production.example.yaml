@@ -59,3 +59,9 @@ logging:
   level: "info"
   # Structured, for anything that ingests logs.
   format: "json"
+
+# Prometheus metrics on a listener of their own. Unauthenticated, so the port
+# is not published by docker-compose.yml: scrape it from inside the compose
+# network, or bind it where only your Prometheus reaches it.
+# metrics:
+#   listen: ":9464"

@@ -3,7 +3,9 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -17,6 +19,7 @@ type CoreConfig struct {
 	PKI     PKIConfig     `yaml:"pki"`
 	Renewal RenewalConfig `yaml:"renewal"`
 	Logging LoggingConfig `yaml:"logging"`
+	Metrics MetricsConfig `yaml:"metrics"`
 	Secrets SecretsConfig `yaml:"secrets"`
 	ACME    ACMEConfig    `yaml:"acme"`
 }
@@ -242,6 +245,14 @@ type RenewalConfig struct {
 	RetryBackoff    []int `yaml:"retry_backoff"` // minutes
 }
 
+// MetricsConfig says where to serve Prometheus metrics.
+type MetricsConfig struct {
+	// Listen is a host:port for a listener of its own, separate from the API,
+	// serving /metrics. Empty, the default, serves no metrics. Unauthenticated
+	// by Prometheus convention, so bind it where only the scraper reaches it.
+	Listen string `yaml:"listen"`
+}
+
 // LoggingConfig holds logging settings.
 type LoggingConfig struct {
 	Level  string `yaml:"level"`  // debug | info | warn | error
@@ -355,6 +366,15 @@ func (c *CoreConfig) Validate() error {
 		if c.ACME.Challenges.TLSALPNPort() != 443 {
 			return fmt.Errorf("config: acme.challenges.tls_port is %d; in production TLS-ALPN-01 is checked on port 443, "+
 				"as RFC 8737 says", c.ACME.Challenges.TLSPort)
+		}
+	}
+
+	if c.Metrics.Listen != "" {
+		_, port, err := net.SplitHostPort(c.Metrics.Listen)
+		n, perr := strconv.Atoi(port)
+		if err != nil || perr != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("config: metrics.listen %q is not a host:port such as \"127.0.0.1:9464\" or \":9464\"",
+				c.Metrics.Listen)
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/certpilot/certpilot/core/engine/posture"
 	"github.com/certpilot/certpilot/core/engine/renewal"
 	"github.com/certpilot/certpilot/core/events"
+	"github.com/certpilot/certpilot/core/metrics"
 	"github.com/certpilot/certpilot/core/pluginmgr"
 	"github.com/certpilot/certpilot/core/server/middleware"
 	"github.com/certpilot/certpilot/core/store"
@@ -34,26 +36,29 @@ import (
 
 // Server encapsulates the HTTP API server and background engines.
 type Server struct {
-	httpServer   *http.Server
-	store        store.Store
-	pluginMgr    *pluginmgr.Manager
-	caMonitor    *pki.CAMonitor
-	caImporter   *pki.Importer
-	dispatcher   *notifications.Dispatcher
-	broker       *events.Broker
-	renewalSched *renewal.Scheduler
-	renewalQueue *renewal.Queue
-	ariPoller    *renewal.ARIPoller
-	verifier     *renewal.Verifier
-	scanner      *discovery.Scanner
-	discoverySch *discovery.Scheduler
-	ctMonitor    *ctlog.Monitor
-	cloudEngine  *cloudsync.Engine
-	deployQueue  *deploy.Queue
-	assessor     *posture.Assessor
-	fleetMonitor *fleet.Monitor
-	rateLimiter  *middleware.RateLimiter
-	cfg          *config.CoreConfig
+	httpServer *http.Server
+	// metricsServer serves /metrics on its own listener; nil when
+	// metrics.listen is unset.
+	metricsServer *http.Server
+	store         store.Store
+	pluginMgr     *pluginmgr.Manager
+	caMonitor     *pki.CAMonitor
+	caImporter    *pki.Importer
+	dispatcher    *notifications.Dispatcher
+	broker        *events.Broker
+	renewalSched  *renewal.Scheduler
+	renewalQueue  *renewal.Queue
+	ariPoller     *renewal.ARIPoller
+	verifier      *renewal.Verifier
+	scanner       *discovery.Scanner
+	discoverySch  *discovery.Scheduler
+	ctMonitor     *ctlog.Monitor
+	cloudEngine   *cloudsync.Engine
+	deployQueue   *deploy.Queue
+	assessor      *posture.Assessor
+	fleetMonitor  *fleet.Monitor
+	rateLimiter   *middleware.RateLimiter
+	cfg           *config.CoreConfig
 }
 
 // NewServer initializes the store, keyring, plugin manager, background engines,
@@ -231,6 +236,26 @@ func NewServer(ctx context.Context, cfg *config.CoreConfig, dbConnStr string) (*
 	// travel in the query string because EventSource cannot set a header.
 	engine.Use(middleware.RequestLogger())
 
+	// Metrics, when asked for, on a listener of their own. The middleware is
+	// only installed then: an instance nobody scrapes does not count requests.
+	var metricsSrv *http.Server
+	if cfg.Metrics.Listen != "" {
+		configured := make([]string, 0, len(cfg.Plugins.Gateways))
+		for _, gw := range cfg.Plugins.Gateways {
+			configured = append(configured, gw.Name)
+		}
+		m := metrics.New(st, metrics.WithConfigured(configured, pm.ConnectionStates))
+		engine.Use(m.Middleware())
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", m.Handler())
+		metricsSrv = &http.Server{
+			Addr:              cfg.Metrics.Listen,
+			Handler:           mux,
+			ReadHeaderTimeout: 10 * time.Second,
+			WriteTimeout:      30 * time.Second,
+		}
+	}
+
 	api.SetupRouter(engine, api.RouterDeps{
 		Store:         st,
 		PluginMgr:     pm,
@@ -266,26 +291,27 @@ func NewServer(ctx context.Context, cfg *config.CoreConfig, dbConnStr string) (*
 	}
 
 	return &Server{
-		httpServer:   httpSrv,
-		store:        st,
-		pluginMgr:    pm,
-		caMonitor:    caMonitor,
-		caImporter:   caImporter,
-		dispatcher:   dispatcher,
-		broker:       broker,
-		renewalSched: renewalSched,
-		renewalQueue: renewalQueue,
-		ariPoller:    ariPoller,
-		verifier:     verifier,
-		scanner:      scanner,
-		discoverySch: discoverySch,
-		ctMonitor:    ctMonitor,
-		cloudEngine:  cloudEngine,
-		deployQueue:  deployQueue,
-		assessor:     assessor,
-		fleetMonitor: fleetMonitor,
-		rateLimiter:  limiter,
-		cfg:          cfg,
+		httpServer:    httpSrv,
+		metricsServer: metricsSrv,
+		store:         st,
+		pluginMgr:     pm,
+		caMonitor:     caMonitor,
+		caImporter:    caImporter,
+		dispatcher:    dispatcher,
+		broker:        broker,
+		renewalSched:  renewalSched,
+		renewalQueue:  renewalQueue,
+		ariPoller:     ariPoller,
+		verifier:      verifier,
+		scanner:       scanner,
+		discoverySch:  discoverySch,
+		ctMonitor:     ctMonitor,
+		cloudEngine:   cloudEngine,
+		deployQueue:   deployQueue,
+		assessor:      assessor,
+		fleetMonitor:  fleetMonitor,
+		rateLimiter:   limiter,
+		cfg:           cfg,
 	}, nil
 }
 
@@ -446,6 +472,21 @@ func (s *Server) Start() error {
 	// subscribed to deliver it.
 	s.dispatcher.Start()
 
+	// Bound before the API, so a metrics address already in use stops the
+	// start rather than leaving a core nobody can tell is unmonitored.
+	if s.metricsServer != nil {
+		lis, err := net.Listen("tcp", s.metricsServer.Addr)
+		if err != nil {
+			return fmt.Errorf("metrics.listen %s: %w", s.metricsServer.Addr, err)
+		}
+		slog.Info("serving Prometheus metrics", "addr", lis.Addr().String(), "path", "/metrics")
+		go func() {
+			if err := s.metricsServer.Serve(lis); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				slog.Error("the metrics listener stopped", "error", err)
+			}
+		}()
+	}
+
 	slog.Info("CertPilot Core HTTP API listening", "addr", s.httpServer.Addr, "mode", s.cfg.Server.Mode)
 	return s.httpServer.ListenAndServe()
 }
@@ -488,6 +529,9 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	// Before the HTTP shutdown, so in-flight event-stream handlers wake and
 	// return rather than holding the grace period open for its full duration.
 	s.broker.Stop()
+	if s.metricsServer != nil {
+		_ = s.metricsServer.Shutdown(ctx)
+	}
 	s.pluginMgr.Close()
 	s.store.Close()
 	return s.httpServer.Shutdown(ctx)
