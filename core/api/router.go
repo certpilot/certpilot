@@ -68,6 +68,9 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 		engine.Use(limiter.Middleware())
 	}
 
+	// After the rate limit, so a flood is refused before its bodies are read.
+	engine.Use(middleware.LimitRequestBody(maxRequestBody))
+
 	engine.Use(middleware.CORS(deps.Config.Server.AllowedOrigins))
 
 	// ── Health ──
@@ -476,3 +479,8 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 		v1.DELETE("/certificate-templates/:id", middleware.RequireRole(middleware.RoleAdmin), templateHandler.Delete)
 	}
 }
+
+// maxRequestBody is the largest body the API accepts. The largest legitimate
+// request is a signed agent report, which the agent middleware already bounds
+// at the same 1 MiB; nothing a person sends comes near it.
+const maxRequestBody = 1 << 20
