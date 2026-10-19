@@ -30,9 +30,11 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     go build -trimpath -ldflags="-s -w ${VERSION:+-X main.version=$VERSION}" \
       -o /out/certpilot-core ./core/cmd/
 
-FROM alpine:3.20
+FROM alpine:3.24
 
-RUN apk --no-cache add ca-certificates tzdata
+# Upgraded as well as added: the base image is rebuilt less often than its
+# packages are patched.
+RUN apk --no-cache upgrade && apk --no-cache add ca-certificates tzdata
 
 RUN addgroup -S certpilot && adduser -S -G certpilot -h /app certpilot
 

@@ -61,7 +61,7 @@ carrying Go types and a signing scheme — and both are meant to be depended on
 the way any other module is:
 
 ```
-require github.com/certpilot/certpilot-gateway-sdk v0.4.0
+require github.com/certpilot/certpilot-gateway-sdk v0.4.1
 ```
 
 A `replace` directive pointing at a sibling checkout is for editing the contract

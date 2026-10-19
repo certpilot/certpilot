@@ -439,7 +439,7 @@ def main() -> int:
     ap.add_argument("--from", dest="from_", default="0.1.1", help="the released core to upgrade from")
     ap.add_argument("--from-gateway", default="0.3.0", help="the self-signed gateway that release ran with")
     ap.add_argument("--to", default="tree", help='"tree" builds this checkout; or a released version')
-    ap.add_argument("--gateway", default="0.4.0", help="the self-signed gateway to upgrade to")
+    ap.add_argument("--gateway", default="0.4.1", help="the self-signed gateway to upgrade to")
     ap.add_argument("--workdir", type=pathlib.Path, help="somewhere Docker can bind-mount")
     ap.add_argument("--keep", action="store_true", help="leave the stack running afterwards")
     args = ap.parse_args()

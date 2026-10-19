@@ -18,13 +18,13 @@ dialling it over mutual TLS.
 
 | Gateway | Version | Contract | Issuance | Core | Probe, all checks |
 |:---|:---|:---|:---|:---|:---|
-| `certpilot-gateway-selfsigned` | v0.3.0 | pass | pass | pass | 6 passed, 0 failed, 3 skipped, 0 advisory |
-| `certpilot-gateway-acme` | v0.3.0 | pass | not exercised | pass | 4 passed, 2 failed, 1 skipped, 1 advisory |
-| `certpilot-gateway-vault` | v0.3.0 | pass | not exercised | pass | 4 passed, 2 failed, 2 skipped, 0 advisory |
+| `certpilot-gateway-selfsigned` | v0.4.1 | pass | pass | pass | 6 passed, 0 failed, 3 skipped, 0 advisory |
+| `certpilot-gateway-acme` | v0.4.1 | pass | not exercised | pass | 4 passed, 2 failed, 1 skipped, 1 advisory |
+| `certpilot-gateway-vault` | v0.4.1 | pass | not exercised | pass | 4 passed, 2 failed, 2 skipped, 0 advisory |
 
 **Contract** is every check in `cmd/conformance` from
 [certpilot-gateway-sdk](https://github.com/certpilot/certpilot-gateway-sdk)
-except issuance, run at v0.4.0 — the version this core builds against,
+except issuance, run at v0.4.1 — the version this core builds against,
 rather than the newest, because the question is whether this pair works.
 
 **Issuance** is separate because only the self-signed gateway can issue with
@@ -41,7 +41,7 @@ The last column is the probe's own totals across every check including
 issuance, so a row can read "contract: pass" beside a non-zero failure count.
 That is the distinction above, not a contradiction.
 
-Generated 2026-09-26 from core `52edefc`.
+Generated 2026-10-19 from core `7d3e3a1`.
 
 ## The host agent
 
@@ -55,5 +55,5 @@ SHA-256 the core recorded against the SHA-256 of the file actually on the host.
 |:---|:---|:---|:---|
 | `certpilot-agent` | latest | pass | enrolled, requested, installed; the core's fingerprint matches the file on disk |
 
-Generated 2026-09-26 from core `52edefc`.
+Generated 2026-10-19 from core `7d3e3a1`.
 <!-- END agent-compatibility -->
