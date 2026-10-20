@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"os"
 	"strings"
@@ -258,6 +259,19 @@ type LoggingConfig struct {
 	Format string `yaml:"format"` // text | json
 }
 
+// SlogLevel is Level as slog reads it. Empty means info.
+func (l LoggingConfig) SlogLevel() (slog.Level, error) {
+	if l.Level == "" {
+		return slog.LevelInfo, nil
+	}
+	var level slog.Level
+	err := level.UnmarshalText([]byte(l.Level))
+	return level, err
+}
+
+// JSON reports whether entries are written as JSON rather than text.
+func (l LoggingConfig) JSON() bool { return strings.EqualFold(l.Format, "json") }
+
 // GatewayPluginConfig is the configuration for a gateway plugin process.
 type GatewayPluginConfig struct {
 	Port     int    `yaml:"port"`
@@ -366,6 +380,15 @@ func (c *CoreConfig) Validate() error {
 			return fmt.Errorf("config: acme.challenges.tls_port is %d; in production TLS-ALPN-01 is checked on port 443, "+
 				"as RFC 8737 says", c.ACME.Challenges.TLSPort)
 		}
+	}
+
+	if _, err := c.Logging.SlogLevel(); err != nil {
+		return fmt.Errorf("config: logging.level %q is not one of debug, info, warn, error", c.Logging.Level)
+	}
+	switch strings.ToLower(c.Logging.Format) {
+	case "", "text", "json":
+	default:
+		return fmt.Errorf("config: logging.format %q is not one of text, json", c.Logging.Format)
 	}
 
 	for _, entry := range c.Server.TrustedProxies {
