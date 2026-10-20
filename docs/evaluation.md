@@ -47,9 +47,9 @@ Ports `3000` and `8080` need to be free on the host.
 
 ```bash
 mkdir certpilot-eval && cd certpilot-eval
-base=https://raw.githubusercontent.com/certpilot/certpilot/v0.3.0/deploy
+base=https://raw.githubusercontent.com/certpilot/certpilot/v0.4.0/deploy
 curl -O $base/docker-compose.quickstart.yml -O $base/config.quickstart.yaml
-CERTPILOT_VERSION=0.3.0 GATEWAY_VERSION=0.4.1 \
+CERTPILOT_VERSION=0.4.0 GATEWAY_VERSION=0.4.2 \
   docker compose -f docker-compose.quickstart.yml up -d
 ```
 
@@ -66,9 +66,9 @@ These are the versions this page was written and measured against:
 
 | Component | Version |
 |:--|:--|
-| `ghcr.io/certpilot/core` | 0.3.0 |
-| `ghcr.io/certpilot/frontend` | 0.3.0 |
-| `ghcr.io/certpilot/gateway-selfsigned` | 0.4.1 |
+| `ghcr.io/certpilot/core` | 0.4.0 |
+| `ghcr.io/certpilot/frontend` | 0.4.0 |
+| `ghcr.io/certpilot/gateway-selfsigned` | 0.4.2 |
 | `postgres` | 17-alpine |
 
 ## 2. Sign in
