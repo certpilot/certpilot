@@ -6,7 +6,7 @@
 # of this file used `COPY ../deploy/docker/nginx.conf`, which cannot work: COPY
 # resolves inside the build context and refuses to climb out of it. That one
 # line is why this image had never been built.
-FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ COPY frontend/ ./
 # rather than shipping a console that compiles to nothing.
 RUN npm run build
 
-FROM nginx:1.30-alpine
+FROM nginx:1.31-alpine
 
 # The base image is rebuilt less often than its packages are patched.
 RUN apk --no-cache upgrade
