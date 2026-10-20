@@ -447,3 +447,16 @@ func (m *Manager) Close() {
 	}
 	m.gateways = make(map[string]*GatewayClient)
 }
+
+// ConnectionStates reports, by name, whether each registered gateway is
+// connected. A copy taken under the lock: the health sweep writes IsConnected
+// from its own goroutine, and the metrics scrape reads it from another.
+func (m *Manager) ConnectionStates() map[string]bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make(map[string]bool, len(m.gateways))
+	for name, gw := range m.gateways {
+		out[name] = gw.IsConnected
+	}
+	return out
+}
