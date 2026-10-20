@@ -190,6 +190,15 @@ it must come *before* the generic `/api/` one.
 The core also sends `X-Accel-Buffering: no` on that route as a second line of
 defence.
 
+The shipped nginx also sends the console's security headers: a Content
+Security Policy that allows scripts and styles only from its own origin and
+refuses framing, `X-Content-Type-Options: nosniff`, `Referrer-Policy:
+no-referrer` (a wall display's token is in its URL), and HSTS. HSTS is sent
+only when the request arrived with `X-Forwarded-Proto: https`, so the proxy
+that ends TLS in front of it has to set that header. A proxy of your own in
+place of the shipped one should send the same set;
+`scripts/check-console-headers.sh <console URL>` checks them.
+
 ---
 
 ## Running more than one replica
