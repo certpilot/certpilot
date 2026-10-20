@@ -5392,3 +5392,6 @@ func (s *PostgresStore) LatestAuditKey(ctx context.Context) (int64, string, erro
 	}
 	return seq, keyID, nil
 }
+
+// Ping reports whether the database answers, for the readiness probe.
+func (s *PostgresStore) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
