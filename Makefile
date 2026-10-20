@@ -17,7 +17,7 @@ CORE_BIN := $(BIN)/certpilot-core
 # The gateways live in their own repositories now and are run from a release
 # rather than built from this tree. Pinned, so `make dev` is reproducible and
 # does not silently follow whatever is on somebody's main branch.
-GW_VERSION    := v0.4.1
+GW_VERSION    := v0.4.2
 GW_SELFSIGNED := github.com/certpilot/certpilot-gateway-selfsigned/cmd@$(GW_VERSION)
 GW_ACME       := github.com/certpilot/certpilot-gateway-acme/cmd@$(GW_VERSION)
 GW_VAULT      := github.com/certpilot/certpilot-gateway-vault/cmd@$(GW_VERSION)
