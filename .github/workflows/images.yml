@@ -15,6 +15,7 @@ on:
       - 'deploy/docker/**'
       - 'deploy/docker-compose*.yml'
       - 'deploy/config.quickstart.yaml'
+      - 'scripts/check-console-headers.sh'
       - '.github/workflows/images.yml'
       - 'go.work'
       - '**/go.mod'
@@ -197,6 +198,9 @@ jobs:
         run: |
           curl -fsS --retry 20 --retry-delay 3 --retry-all-errors \
             http://localhost:3000/ | grep -q '<div id="app"'
+
+      - name: The console sends its security headers
+        run: scripts/check-console-headers.sh http://localhost:3000
 
       # The roadmap bullet this job exists for. A failed gateway connection is
       # only a warning in the core — it starts anyway — so a healthy core proves

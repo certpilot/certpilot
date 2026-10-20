@@ -12,6 +12,12 @@ server:
   mode: "production"
   allowed_origins:
     - "https://certpilot.example.com"
+  # The console's nginx, at the address docker-compose.yml gives it. Only
+  # this proxy is believed about a client's address. See docs/configuration.md.
+  trusted_proxies:
+    - "172.31.249.10"
+  # Behind a load balancer as well, add its address: each hop that appends to
+  # X-Forwarded-For has to be listed for the entry before it to be believed.
 
 auth:
   # Verifies asymmetric signatures against published keys, so the core holds
