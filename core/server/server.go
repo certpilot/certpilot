@@ -231,7 +231,11 @@ func NewServer(ctx context.Context, cfg *config.CoreConfig, dbConnStr string) (*
 	}
 
 	// 6. HTTP router.
-	engine := gin.New()
+	engine, err := newEngine(cfg.Server)
+	if err != nil {
+		st.Close()
+		return nil, err
+	}
 	// Not gin.Logger(): it writes the full request target, and display tokens
 	// travel in the query string because EventSource cannot set a header.
 	engine.Use(middleware.RequestLogger())
@@ -585,4 +589,20 @@ func connectGateways(ctx context.Context, configured []config.GatewayConfig, st 
 		pm.ConnectAll(context.Background(), fromAccounts)
 	}()
 	return done
+}
+
+// newEngine builds the router with the client address taken from the
+// connection, unless one of the configured proxies reports it.
+//
+// gin trusts every proxy by default, so ClientIP() returned whatever the first
+// entry of X-Forwarded-For said. That is the key an unauthenticated caller's
+// rate limit is counted against, the address recorded on a session and in the
+// audit log, and the one the ACME server limits by; a client could pick a new
+// one on every request.
+func newEngine(cfg config.ServerConfig) (*gin.Engine, error) {
+	engine := gin.New()
+	if err := engine.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		return nil, fmt.Errorf("server.trusted_proxies: %w", err)
+	}
+	return engine, nil
 }

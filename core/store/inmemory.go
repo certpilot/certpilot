@@ -285,6 +285,9 @@ func NewMemoryStore() *MemoryStore {
 
 func (m *MemoryStore) Close() {}
 
+// Ping always succeeds: there is no database to lose.
+func (m *MemoryStore) Ping(context.Context) error { return nil }
+
 func (m *MemoryStore) ListCertificates(ctx context.Context, filter CertificateFilter) ([]*Certificate, int64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

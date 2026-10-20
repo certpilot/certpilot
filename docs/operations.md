@@ -190,6 +190,15 @@ it must come *before* the generic `/api/` one.
 The core also sends `X-Accel-Buffering: no` on that route as a second line of
 defence.
 
+The shipped nginx also sends the console's security headers: a Content
+Security Policy that allows scripts and styles only from its own origin and
+refuses framing, `X-Content-Type-Options: nosniff`, `Referrer-Policy:
+no-referrer` (a wall display's token is in its URL), and HSTS. HSTS is sent
+only when the request arrived with `X-Forwarded-Proto: https`, so the proxy
+that ends TLS in front of it has to set that header. A proxy of your own in
+place of the shipped one should send the same set;
+`scripts/check-console-headers.sh <console URL>` checks them.
+
 ---
 
 ## Running more than one replica
@@ -386,6 +395,7 @@ store, the server's startup or the key handling.
 
 ```
 GET /healthz                      the core is up. Says nothing about internals
+GET /readyz                       the core can reach its database: 200 ready, 503 not ready
 GET /api/v1/gateways              per-gateway connection state and capabilities
 POST /api/v1/ca-accounts/:id/health   ask one CA account's gateway to check its CA
 GET /api/v1/dashboard/stats       counts, by status
@@ -394,6 +404,16 @@ GET /api/v1/events                the live stream (SSE)
 
 `/healthz` is deliberately uninformative — it is a liveness probe, and a
 liveness probe that reports internals is an unauthenticated information leak.
+
+`/readyz` is the readiness probe: point a load balancer at it, and Kubernetes'
+`readinessProbe`. It answers 503 while the database does not respond within
+two seconds, and 200 again once it does, so a replica that has lost its
+database stops getting traffic without being restarted. The cause is logged as
+`not ready: the database did not answer`, not returned. A gateway being down
+does not make the core unready: the API still answers, and the gateway's state
+is in `GET /api/v1/gateways`. The console's nginx proxies it. The compose
+files' health checks stay on `/healthz`, because the same files start older
+releases in the upgrade drill, and those have no `/readyz`.
 
 ### What to watch
 

@@ -9,7 +9,7 @@ import { Doughnut } from 'vue-chartjs'
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useThemeStore } from '@/stores/theme'
-import { chartTheme } from '@/lib/chartTheme'
+import { chartTheme, CHART_FONT_MONO, CHART_FONT_SANS } from '@/lib/chartTheme'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -62,15 +62,15 @@ const chartOptions = computed(() => {
           usePointStyle: true,
           pointStyleWidth: 8,
           color: t.text,
-          font: { size: 11, family: 'Inter' },
+          font: { size: 11, family: CHART_FONT_SANS },
         },
       },
       tooltip: {
         backgroundColor: t.tooltipBg,
         titleColor: t.tooltipText,
         bodyColor: t.tooltipText,
-        titleFont: { family: 'Inter', size: 12 },
-        bodyFont: { family: 'JetBrains Mono', size: 11 },
+        titleFont: { family: CHART_FONT_SANS, size: 12 },
+        bodyFont: { family: CHART_FONT_MONO, size: 11 },
         padding: 10,
         cornerRadius: 8,
       },
