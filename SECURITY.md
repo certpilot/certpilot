@@ -236,6 +236,37 @@ Stated here rather than discovered later.
     it when the screen is decommissioned. One token shared across screens cannot
     be revoked without going dark everywhere, and `last_seen_ip` stops telling
     you which screen is calling
+12. Verify the images you deploy (below), and pin them by digest
+
+## Verifying images
+
+From the release after v0.3.0, every image CertPilot publishes, the core,
+console, agent and three gateways, is signed with cosign. The signature is
+keyless: it binds the image's digest to the release workflow, repository and
+tag that built it, through GitHub's OIDC token, and is recorded in the public
+Rekor log. There is no key to obtain or trust beyond that identity.
+
+```bash
+cosign verify ghcr.io/certpilot/core:<version> \
+  --certificate-identity-regexp '^https://github.com/certpilot/certpilot/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+For the agent and gateways, the repository in the identity is their own:
+`certpilot-agent`, `certpilot-gateway-acme`, `certpilot-gateway-selfsigned`,
+`certpilot-gateway-vault`.
+
+Each image also carries a provenance attestation, recording what built it and
+from which commit, and an SBOM listing what is inside:
+
+```bash
+docker buildx imagetools inspect ghcr.io/certpilot/core:<version> --format '{{ json .Provenance }}'
+docker buildx imagetools inspect ghcr.io/certpilot/core:<version> --format '{{ json .SBOM }}'
+```
+
+Every repository also scans itself weekly and on every pull request:
+govulncheck for Go, `npm audit` for the console and the documentation site,
+and Trivy for each image. Dependabot proposes updates weekly.
 
 ## Cryptography
 

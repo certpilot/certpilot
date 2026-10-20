@@ -1,0 +1,89 @@
+name: Vulnerabilities
+
+# Known vulnerabilities in what this is built from: the Go modules and the
+# standard library it calls, its npm dependencies, and the image it ships.
+#
+# On every pull request and push to main, and weekly: an advisory published
+# in a quiet week is still a vulnerability in what people are running, and
+# nothing else here would say so until somebody happened to look. That is
+# how nine standard-library advisories and an end-of-life base image reached
+# a release unnoticed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  go-core:
+    name: govulncheck, core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+      # Fails on a vulnerability in code this calls. One in a package it
+      # imports but never reaches is listed and does not fail the job.
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+        working-directory: core
+
+  go-pkg:
+    name: govulncheck, pkg
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+      # Fails on a vulnerability in code this calls. One in a package it
+      # imports but never reaches is listed and does not fail the job.
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+        working-directory: pkg
+
+  npm-frontend:
+    name: npm audit, frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # High and critical only: a moderate advisory in a dev-server dependency
+      # is worth an update, not a red build.
+      - run: npm audit --audit-level=high
+        working-directory: frontend
+
+  image-core:
+    name: image, core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f deploy/docker/core.Dockerfile -t scan/core:ci .
+      # Fixed vulnerabilities only. One with no fix yet cannot be acted on
+      # here, and failing the build for it would only teach people to
+      # ignore this job.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: scan/core:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+  image-frontend:
+    name: image, frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f deploy/docker/frontend.Dockerfile -t scan/frontend:ci .
+      # Fixed vulnerabilities only. One with no fix yet cannot be acted on
+      # here, and failing the build for it would only teach people to
+      # ignore this job.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: scan/frontend:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
