@@ -12,6 +12,10 @@ server:
   mode: "development"
   allowed_origins:
     - "http://localhost:3000"
+  # The console's nginx, at the address docker-compose.quickstart.yml gives it. Only
+  # this proxy is believed about a client's address. See docs/configuration.md.
+  trusted_proxies:
+    - "172.31.249.10"
 
 auth:
   role_claim: "certpilot_role"

@@ -11,7 +11,7 @@ import { Bar } from 'vue-chartjs'
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useThemeStore } from '@/stores/theme'
-import { chartTheme } from '@/lib/chartTheme'
+import { chartTheme, CHART_FONT_MONO, CHART_FONT_SANS } from '@/lib/chartTheme'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
@@ -52,12 +52,12 @@ const chartOptions = computed(() => {
     scales: {
       x: {
         grid: { display: false },
-        ticks: { color: t.text, font: { size: 10, family: 'Inter' } },
+        ticks: { color: t.text, font: { size: 10, family: CHART_FONT_SANS } },
       },
       y: {
         beginAtZero: true,
         grid: { color: t.grid },
-        ticks: { color: t.text, font: { size: 10, family: 'JetBrains Mono' }, stepSize: 1 },
+        ticks: { color: t.text, font: { size: 10, family: CHART_FONT_MONO }, stepSize: 1 },
       },
     },
     plugins: {
@@ -69,15 +69,15 @@ const chartOptions = computed(() => {
           usePointStyle: true,
           pointStyleWidth: 8,
           color: t.text,
-          font: { size: 11, family: 'Inter' },
+          font: { size: 11, family: CHART_FONT_SANS },
         },
       },
       tooltip: {
         backgroundColor: t.tooltipBg,
         titleColor: t.tooltipText,
         bodyColor: t.tooltipText,
-        titleFont: { family: 'Inter', size: 12 },
-        bodyFont: { family: 'JetBrains Mono', size: 11 },
+        titleFont: { family: CHART_FONT_SANS, size: 12 },
+        bodyFont: { family: CHART_FONT_MONO, size: 11 },
         padding: 10,
         cornerRadius: 8,
       },
