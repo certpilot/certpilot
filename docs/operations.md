@@ -402,8 +402,9 @@ two seconds, and 200 again once it does, so a replica that has lost its
 database stops getting traffic without being restarted. The cause is logged as
 `not ready: the database did not answer`, not returned. A gateway being down
 does not make the core unready: the API still answers, and the gateway's state
-is in `GET /api/v1/gateways`. The compose files' health checks use `/readyz`,
-and the console's nginx proxies it.
+is in `GET /api/v1/gateways`. The console's nginx proxies it. The compose
+files' health checks stay on `/healthz`, because the same files start older
+releases in the upgrade drill, and those have no `/readyz`.
 
 ### What to watch
 

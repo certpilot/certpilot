@@ -125,7 +125,7 @@ services:
       - pki:/app/pki:ro
     command: ["--config=/app/config.yaml"]
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 5s
       timeout: 3s
       retries: 20
