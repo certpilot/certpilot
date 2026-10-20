@@ -55,8 +55,8 @@ jobs:
     name: documented examples still run
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -68,7 +68,7 @@ jobs:
       # A core page linking to ../platforms/nginx.md is correct for a reader and
       # unresolvable to anything looking only at this repository. The link check
       # fails, rather than skipping, if this step is ever removed.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: certpilot/certpilot-agent
           path: certpilot-agent-checkout
@@ -89,11 +89,11 @@ jobs:
     name: documented examples answer
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
           cache-dependency-path: '**/go.sum'
@@ -108,8 +108,8 @@ jobs:
     name: evaluation guide still works
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -123,10 +123,10 @@ jobs:
     name: comparison still quotes its sources
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 

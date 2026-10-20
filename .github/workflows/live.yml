@@ -26,8 +26,8 @@ jobs:
     name: alerts, to Mailpit and a webhook receiver
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
           cache-dependency-path: "**/go.sum"
@@ -41,8 +41,8 @@ jobs:
     name: sign-in, against Keycloak
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
           cache-dependency-path: "**/go.sum"
@@ -54,8 +54,8 @@ jobs:
     name: Kubernetes inventory, against kind
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
           cache-dependency-path: "**/go.sum"
@@ -69,8 +69,8 @@ jobs:
     name: External Account Binding, against Pebble
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
           cache-dependency-path: "**/go.sum"
@@ -82,8 +82,8 @@ jobs:
     name: ACME server, against certbot, lego and acme.sh
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
           cache-dependency-path: "**/go.sum"
@@ -95,8 +95,8 @@ jobs:
     name: ACME server, against win-acme on Windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
           cache-dependency-path: "**/go.sum"
@@ -113,8 +113,8 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
           cache-dependency-path: "**/go.sum"

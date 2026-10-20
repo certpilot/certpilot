@@ -24,8 +24,8 @@ jobs:
     name: govulncheck, core
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
       # Fails on a vulnerability in code this calls. One in a package it
@@ -37,8 +37,8 @@ jobs:
     name: govulncheck, pkg
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.work
       # Fails on a vulnerability in code this calls. One in a package it
@@ -50,7 +50,7 @@ jobs:
     name: npm audit, frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # High and critical only: a moderate advisory in a dev-server dependency
       # is worth an update, not a red build.
       - run: npm audit --audit-level=high
@@ -60,7 +60,7 @@ jobs:
     name: image, core
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -f deploy/docker/core.Dockerfile -t scan/core:ci .
       # Fixed vulnerabilities only. One with no fix yet cannot be acted on
       # here, and failing the build for it would only teach people to
@@ -76,7 +76,7 @@ jobs:
     name: image, frontend
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -f deploy/docker/frontend.Dockerfile -t scan/frontend:ci .
       # Fixed vulnerabilities only. One with no fix yet cannot be acted on
       # here, and failing the build for it would only teach people to
