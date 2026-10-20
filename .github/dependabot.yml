@@ -1,0 +1,47 @@
+# Weekly, and grouped, so the updates arrive as one pull request per
+# ecosystem rather than one per module. Security updates are not
+# held for the schedule: GitHub opens those as soon as an advisory
+# lands, when Dependabot security updates are on for the repository.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/core"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      gomod:
+        patterns: ["*"]
+  - package-ecosystem: gomod
+    directory: "/pkg"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      gomod:
+        patterns: ["*"]
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      npm:
+        patterns: ["*"]
+  # Base images: the runtime stage is what ships.
+  - package-ecosystem: docker
+    directory: "/deploy/docker"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      docker:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      github_actions:
+        patterns: ["*"]

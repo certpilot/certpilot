@@ -25,6 +25,11 @@ jobs:
   image:
     name: publish ${{ matrix.name }}
     runs-on: ubuntu-latest
+    # id-token for keyless signing; packages to push. Only this job.
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     # images.yml builds these on every pull request and pushes none of them,
     # which was the right shape while a gateway sat in the same tree and the
     # compose files built everything from source. It is not any more: the
@@ -69,8 +74,13 @@ jobs:
             type=ref,event=branch
             type=sha,format=short
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
+          # A provenance attestation (what built it, from which commit) and an
+          # SBOM (what is inside), pushed beside the image.
+          provenance: mode=max
+          sbom: true
           # The core replaces ../pkg and so needs the workspace root; the
           # frontend needs it for deploy/docker/nginx.conf. Kept as a matrix
           # field rather than hard-coded, because the next image to need
@@ -99,6 +109,21 @@ jobs:
             VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      # Keyless: the signature binds the image digest to this workflow, this
+      # repository and this tag through GitHub's OIDC token, recorded in the
+      # public Rekor log. Nothing to keep secret, nothing to rotate. Every
+      # architecture's manifest is signed as well as the index (--recursive).
+      #
+      #   cosign verify ghcr.io/certpilot/<image>:<version> \
+      #     --certificate-identity-regexp '^https://github.com/certpilot/certpilot/\.github/workflows/release\.yml@refs/tags/v' \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+      - name: Sign the image
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes --recursive "ghcr.io/certpilot/${{ matrix.name }}@${DIGEST}"
 
   release:
     name: publish release
