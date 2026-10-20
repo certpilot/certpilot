@@ -3,7 +3,11 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
+	"net"
+	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -17,6 +21,7 @@ type CoreConfig struct {
 	PKI     PKIConfig     `yaml:"pki"`
 	Renewal RenewalConfig `yaml:"renewal"`
 	Logging LoggingConfig `yaml:"logging"`
+	Metrics MetricsConfig `yaml:"metrics"`
 	Secrets SecretsConfig `yaml:"secrets"`
 	ACME    ACMEConfig    `yaml:"acme"`
 }
@@ -126,6 +131,15 @@ type ServerConfig struct {
 	// A wildcard is rejected when credentials are in play, so this must name
 	// the frontend explicitly.
 	AllowedOrigins []string `yaml:"allowed_origins"`
+	// TrustedProxies lists the addresses or CIDR ranges of the reverse proxies
+	// in front of the core. X-Forwarded-For is believed only when it arrives
+	// from one of them, and only for the entries they appended. Empty means
+	// no proxy is trusted and a client is the address it connected from.
+	//
+	// gin trusts every address unless told otherwise, so before this existed
+	// any client could name the address its rate limit was counted against
+	// and the one written into the audit log.
+	TrustedProxies []string `yaml:"trusted_proxies"`
 }
 
 // IsProduction reports whether the server is running in production mode.
@@ -242,11 +256,37 @@ type RenewalConfig struct {
 	RetryBackoff    []int `yaml:"retry_backoff"` // minutes
 }
 
+// MetricsConfig says where to serve Prometheus metrics.
+type MetricsConfig struct {
+	// Listen is a host:port for a listener of its own, separate from the API,
+	// serving /metrics. Empty, the default, serves no metrics. Unauthenticated
+	// by Prometheus convention, so bind it where only the scraper reaches it.
+	Listen string `yaml:"listen"`
+	// BearerToken, when set, is required of every scrape as "Authorization:
+	// Bearer <token>". Use ${VAR} to keep it out of the file. Production
+	// refuses a listener off loopback without one: the estate's shape — which
+	// CAs are critical, which gateways are down — is not for the whole network.
+	BearerToken string `yaml:"bearer_token"`
+}
+
 // LoggingConfig holds logging settings.
 type LoggingConfig struct {
 	Level  string `yaml:"level"`  // debug | info | warn | error
 	Format string `yaml:"format"` // text | json
 }
+
+// SlogLevel is Level as slog reads it. Empty means info.
+func (l LoggingConfig) SlogLevel() (slog.Level, error) {
+	if l.Level == "" {
+		return slog.LevelInfo, nil
+	}
+	var level slog.Level
+	err := level.UnmarshalText([]byte(l.Level))
+	return level, err
+}
+
+// JSON reports whether entries are written as JSON rather than text.
+func (l LoggingConfig) JSON() bool { return strings.EqualFold(l.Format, "json") }
 
 // GatewayPluginConfig is the configuration for a gateway plugin process.
 type GatewayPluginConfig struct {
@@ -358,6 +398,44 @@ func (c *CoreConfig) Validate() error {
 		}
 	}
 
+	if c.Metrics.Listen != "" {
+		_, port, err := net.SplitHostPort(c.Metrics.Listen)
+		n, perr := strconv.Atoi(port)
+		if err != nil || perr != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("config: metrics.listen %q is not a host:port such as \"127.0.0.1:9464\" or \":9464\"",
+				c.Metrics.Listen)
+		}
+		host, _, _ := net.SplitHostPort(c.Metrics.Listen)
+		ip := net.ParseIP(host)
+		loopback := host == "localhost" || (ip != nil && ip.IsLoopback())
+		if c.Server.IsProduction() && !loopback && c.Metrics.BearerToken == "" {
+			return fmt.Errorf("config: metrics.listen %q is reachable off this host, and production needs "+
+				"metrics.bearer_token set for that; or bind it to 127.0.0.1", c.Metrics.Listen)
+		}
+	}
+
+	if _, err := c.Logging.SlogLevel(); err != nil {
+		return fmt.Errorf("config: logging.level %q is not one of debug, info, warn, error", c.Logging.Level)
+	}
+	switch strings.ToLower(c.Logging.Format) {
+	case "", "text", "json":
+	default:
+		return fmt.Errorf("config: logging.format %q is not one of text, json", c.Logging.Format)
+	}
+
+	for _, entry := range c.Server.TrustedProxies {
+		prefix, err := parseAddressOrRange(entry)
+		if err != nil {
+			return fmt.Errorf("config: server.trusted_proxies entry %q is neither an IP address nor a CIDR range "+
+				"(a host name or a port is not accepted: the check is made against the connecting address)", entry)
+		}
+		if c.Server.IsProduction() && prefix.Bits() == 0 {
+			return fmt.Errorf("config: server.trusted_proxies contains %q, which trusts every address; in production "+
+				"that lets any client choose the address its rate limit and audit entries are recorded under. "+
+				"Name the proxy's own address or network", entry)
+		}
+	}
+
 	if c.Server.IsProduction() {
 		if c.Plugins.TLS.Insecure {
 			return fmt.Errorf("config: plugins.tls.insecure cannot be enabled in production mode; " +
@@ -371,4 +449,17 @@ func (c *CoreConfig) Validate() error {
 	}
 
 	return nil
+}
+
+// parseAddressOrRange accepts what gin's SetTrustedProxies accepts, and turns
+// a bare address into the single-address range it stands for.
+func parseAddressOrRange(entry string) (netip.Prefix, error) {
+	if strings.Contains(entry, "/") {
+		return netip.ParsePrefix(entry)
+	}
+	addr, err := netip.ParseAddr(entry)
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	return netip.PrefixFrom(addr, addr.BitLen()), nil
 }

@@ -156,6 +156,8 @@ all — supply a replacement configuration instead.
 | 401 | Missing, malformed, invalid, or expired token |
 | 403 | Role not permitted, or the request was blocked by a policy |
 | 404 | The record does not exist. Only that: a failure to read it is 500 |
+| 413 | The request body is larger than 1 MiB. Nothing the API accepts comes near that; the limit is there so that an unauthenticated request cannot make the core hold an arbitrary amount of memory |
+| 429 | Too many requests from one caller. `Retry-After` says when to try again. Counted per signed-in identity, or per client address before sign-in, and per replica |
 | 500 | Internal failure — including a record that could not be read (the cause is logged, not returned) and "the policy engine could not be consulted", which fails closed |
 | 502 | The gateway is unreachable, failed, or returned something invalid |
 | 503 | Gateway health check failed |

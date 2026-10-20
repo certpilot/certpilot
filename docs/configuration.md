@@ -101,6 +101,7 @@ server:
 | `port` | `8080` | HTTP port |
 | `mode` | `development` | See [production mode](#production-mode) |
 | `allowed_origins` | — | Browser origins permitted to call the API. Must name the frontend explicitly — a wildcard is not accepted alongside credentials |
+| `trusted_proxies` | none | Addresses or CIDR ranges of the reverse proxies in front of the core. `X-Forwarded-For` is believed only when it comes from one of them, and only for the entries they added, so a client cannot choose the address its rate limit and its audit entries are recorded under. Empty means a client is the address it connected from. The compose files give the console's nginx a fixed address, `172.31.249.10`, and trust that. Add a load balancer's address if there is one in front. `0.0.0.0/0` and `::/0` are refused in production |
 
 ### `acme`
 
@@ -238,6 +239,19 @@ lead stops making sense well before the end of that. Where a CA publishes RFC
 which is both better timed and what lets a CA drain a mass-revocation event
 gradually instead of every client renewing at once.
 
+### `metrics`
+
+```yaml
+metrics:
+  listen: ":9464"
+  bearer_token: "${CERTPILOT_METRICS_TOKEN}"
+```
+
+| Key | Default | |
+|:---|:---|:---|
+| `listen` | none | A `host:port` on which to serve Prometheus metrics at `/metrics`, on a listener of its own. Empty serves none. The endpoint is unauthenticated, as Prometheus expects, so bind it where only the scraper reaches it and do not publish it through the console's proxy. An address already in use stops the core from starting. See [operations.md](operations.md#metrics) |
+| `bearer_token` | none | Required of every scrape as `Authorization: Bearer <token>` when set. Production refuses a `listen` address off loopback without one, because the estate's shape (which CAs are critical, which gateways are down) is not for the whole network |
+
 ### `logging`
 
 ```yaml
@@ -245,6 +259,10 @@ logging:
   level: "info"     # debug | info | warn | error
   format: "text"    # text | json
 ```
+
+Both default to the values shown. `json` writes one object per line for a log
+pipeline. Any other value is refused at start-up. Before v0.3.1 both settings
+were read and then ignored, so the core always logged text at `debug`.
 
 ---
 
@@ -337,6 +355,7 @@ locally and dangerous deployed:
 | Neither `auth.jwks_url` nor `auth.jwt_secret` | Nothing would verify anything |
 | `plugins.tls.insecure: true` | The gateway channel carries CSRs, private keys and CA credentials |
 | `"*"` in `server.allowed_origins` | A wildcard with credentials is not a CORS configuration, it is an open door |
+| `0.0.0.0/0` or `::/0` in `server.trusted_proxies` | Any client could choose the address it is rate-limited and audited under |
 | No database connection string | An in-memory store would come up healthy and lose every certificate it issued |
 
 The core **refuses to start**, rather than warning. A warning in a log nobody

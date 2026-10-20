@@ -137,6 +137,21 @@ services:
     depends_on:
       core:
         condition: service_healthy
+    networks:
+      default:
+        ipv4_address: 172.31.249.10
+
+networks:
+  # Fixed so the core can trust exactly one proxy: the console's nginx, at the
+  # address given to the frontend above. The core believes X-Forwarded-For
+  # only from that address (server.trusted_proxies in the config file); a
+  # client reaching the core's published port directly cannot name its own
+  # address. If this range is already in use here, change it, the frontend's
+  # address and server.trusted_proxies together.
+  default:
+    ipam:
+      config:
+        - subnet: 172.31.249.0/24
 
 volumes:
   pgdata:
