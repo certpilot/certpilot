@@ -244,7 +244,8 @@ func NewServer(ctx context.Context, cfg *config.CoreConfig, dbConnStr string) (*
 		for _, gw := range cfg.Plugins.Gateways {
 			configured = append(configured, gw.Name)
 		}
-		m := metrics.New(st, metrics.WithConfigured(configured, pm.ConnectionStates))
+		m := metrics.New(st, metrics.WithConfigured(configured, pm.ConnectionStates),
+			metrics.WithBearerToken(cfg.Metrics.BearerToken))
 		engine.Use(m.Middleware())
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", m.Handler())

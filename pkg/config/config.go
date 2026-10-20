@@ -251,6 +251,11 @@ type MetricsConfig struct {
 	// serving /metrics. Empty, the default, serves no metrics. Unauthenticated
 	// by Prometheus convention, so bind it where only the scraper reaches it.
 	Listen string `yaml:"listen"`
+	// BearerToken, when set, is required of every scrape as "Authorization:
+	// Bearer <token>". Use ${VAR} to keep it out of the file. Production
+	// refuses a listener off loopback without one: the estate's shape — which
+	// CAs are critical, which gateways are down — is not for the whole network.
+	BearerToken string `yaml:"bearer_token"`
 }
 
 // LoggingConfig holds logging settings.
@@ -375,6 +380,13 @@ func (c *CoreConfig) Validate() error {
 		if err != nil || perr != nil || n < 1 || n > 65535 {
 			return fmt.Errorf("config: metrics.listen %q is not a host:port such as \"127.0.0.1:9464\" or \":9464\"",
 				c.Metrics.Listen)
+		}
+		host, _, _ := net.SplitHostPort(c.Metrics.Listen)
+		ip := net.ParseIP(host)
+		loopback := host == "localhost" || (ip != nil && ip.IsLoopback())
+		if c.Server.IsProduction() && !loopback && c.Metrics.BearerToken == "" {
+			return fmt.Errorf("config: metrics.listen %q is reachable off this host, and production needs "+
+				"metrics.bearer_token set for that; or bind it to 127.0.0.1", c.Metrics.Listen)
 		}
 	}
 

@@ -242,12 +242,14 @@ gradually instead of every client renewing at once.
 
 ```yaml
 metrics:
-  listen: "127.0.0.1:9464"
+  listen: ":9464"
+  bearer_token: "${CERTPILOT_METRICS_TOKEN}"
 ```
 
 | Key | Default | |
 |:---|:---|:---|
 | `listen` | none | A `host:port` on which to serve Prometheus metrics at `/metrics`, on a listener of its own. Empty serves none. The endpoint is unauthenticated, as Prometheus expects, so bind it where only the scraper reaches it and do not publish it through the console's proxy. An address already in use stops the core from starting. See [operations.md](operations.md#metrics) |
+| `bearer_token` | none | Required of every scrape as `Authorization: Bearer <token>` when set. Production refuses a `listen` address off loopback without one, because the estate's shape (which CAs are critical, which gateways are down) is not for the whole network |
 
 ### `logging`
 

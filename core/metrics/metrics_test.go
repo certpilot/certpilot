@@ -147,3 +147,66 @@ func TestAConfiguredGatewayThatNeverConnectedReadsZero(t *testing.T) {
 		t.Fatal("a connected gateway was reported as disconnected")
 	}
 }
+
+// The method is the client's to choose, so it cannot be a label as sent: a
+// scanner inventing methods would mint a series per invention.
+func TestAnInventedMethodDoesNotMintASeries(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	m := New(store.NewMemoryStore(), noGateways)
+	r := gin.New()
+	r.Use(m.Middleware())
+	for _, method := range []string{"FOO1", "FOO2", "BREW", "GET"} {
+		r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(method, "/nowhere", nil))
+	}
+	if got := testutil.ToFloat64(m.requests.WithLabelValues("OTHER", "unmatched", "404")); got != 3 {
+		t.Errorf("invented methods = %v, want 3 under OTHER", got)
+	}
+	if n := testutil.CollectAndCount(m.requests); n != 2 {
+		t.Errorf("request series = %d, want 2 (OTHER and GET)", n)
+	}
+}
+
+type countingStore struct {
+	store.Store
+	calls int
+}
+
+func (c *countingStore) GetDashboardStats(ctx context.Context) (*store.DashboardStats, error) {
+	c.calls++
+	return c.Store.GetDashboardStats(ctx)
+}
+
+// Each scrape costs several queries. Whoever can reach the port should not be
+// able to turn scrape requests into database load one for one.
+func TestScrapesInQuickSuccessionReadTheStoreOnce(t *testing.T) {
+	st := &countingStore{Store: store.NewMemoryStore()}
+	m := New(st, noGateways)
+	for range 5 {
+		scrape(t, m)
+	}
+	if st.calls != 1 {
+		t.Fatalf("five scrapes read the store %d times, want 1", st.calls)
+	}
+}
+
+func TestATokenIsRequiredWhenOneIsSet(t *testing.T) {
+	m := New(store.NewMemoryStore(), noGateways, WithBearerToken("s3cret-token"))
+	for name, header := range map[string]string{"none": "", "wrong": "Bearer nope", "basic": "Basic czNjcmV0LXRva2Vu"} {
+		req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+		if header != "" {
+			req.Header.Set("Authorization", header)
+		}
+		rec := httptest.NewRecorder()
+		m.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s: /metrics = %d, want 401", name, rec.Code)
+		}
+	}
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.Header.Set("Authorization", "Bearer s3cret-token")
+	rec := httptest.NewRecorder()
+	m.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("with the token, /metrics = %d, want 200", rec.Code)
+	}
+}

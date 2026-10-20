@@ -426,7 +426,21 @@ that address, separate from the API.
 | `certpilot_http_requests_total{method,route,code}` | Requests, by route template, so one series per route rather than per id |
 | `certpilot_http_request_duration_seconds{method,route}` | Latency. The event stream is excluded |
 
-Plus the standard `go_*` and `process_*` series.
+Plus the standard `go_*` and `process_*` series. A request with a method other
+than the standard seven is counted as `OTHER`, so a client cannot create series.
+
+The estate is read from the database at most once every ten seconds, however
+often it is scraped; concurrent scrapes share that read. With
+`metrics.bearer_token` set, Prometheus scrapes it like this:
+
+```yaml
+scrape_configs:
+  - job_name: certpilot
+    authorization:
+      credentials_file: /etc/prometheus/certpilot-token
+    static_configs:
+      - targets: ["core:9464"]
+```
 
 The estate series are read from the database at scrape time, so every replica
 reports the same values: aggregate them with `max`, not `sum`. Request series

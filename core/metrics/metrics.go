@@ -14,9 +14,11 @@ package metrics
 
 import (
 	"context"
+	"crypto/subtle"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/certpilot/certpilot/core/store"
@@ -31,8 +33,15 @@ import (
 // longer than this reports the store as down instead.
 const scrapeTimeout = 5 * time.Second
 
+// estateTTL is how long one read of the estate answers scrapes. A scrape costs
+// several queries, and whoever can reach the port could otherwise turn scrape
+// requests into database load one for one. Prometheus scrapes every 15 to 60
+// seconds, so ten costs it nothing.
+const estateTTL = 10 * time.Second
+
 // Metrics owns the registry and the request instruments.
 type Metrics struct {
+	token    string
 	registry *prometheus.Registry
 	requests *prometheus.CounterVec
 	duration *prometheus.HistogramVec
@@ -40,7 +49,15 @@ type Metrics struct {
 
 // New builds the registry. gateways reports each gateway's connection state by
 // name; it is called on every scrape.
-func New(st store.Store, gateways func() map[string]bool) *Metrics {
+// Option configures New.
+type Option func(*Metrics)
+
+// WithBearerToken requires every scrape to present this token as
+// "Authorization: Bearer <token>", which is what Prometheus sends from a
+// scrape config's authorization.credentials_file.
+func WithBearerToken(token string) Option { return func(m *Metrics) { m.token = token } }
+
+func New(st store.Store, gateways func() map[string]bool, opts ...Option) *Metrics {
 	m := &Metrics{
 		registry: prometheus.NewRegistry(),
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -53,19 +70,49 @@ func New(st store.Store, gateways func() map[string]bool) *Metrics {
 			Buckets: prometheus.DefBuckets,
 		}, []string{"method", "route"}),
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
 	m.registry.MustRegister(
 		m.requests,
 		m.duration,
-		&estate{store: st, gateways: gateways},
+		&estate{store: st, gateways: gateways, ttl: estateTTL},
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 	return m
 }
 
-// Handler serves the exposition.
+// Handler serves the exposition, behind the bearer token when one is set.
 func (m *Metrics) Handler() http.Handler {
-	return promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
+	h := promhttp.HandlerFor(m.registry, promhttp.HandlerOpts{})
+	if m.token == "" {
+		return h
+	}
+	want := []byte("Bearer " + m.token)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="certpilot-metrics"`)
+			http.Error(w, "a bearer token is required", http.StatusUnauthorized)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+// knownMethods are the methods kept as label values. Anything else is OTHER:
+// the method is chosen by the client, and one series per invented method is
+// memory a scanner could make the core spend.
+var knownMethods = map[string]bool{
+	http.MethodGet: true, http.MethodHead: true, http.MethodPost: true, http.MethodPut: true,
+	http.MethodPatch: true, http.MethodDelete: true, http.MethodOptions: true,
+}
+
+func methodLabel(method string) string {
+	if knownMethods[method] {
+		return method
+	}
+	return "OTHER"
 }
 
 // Middleware counts and times requests.
@@ -83,7 +130,7 @@ func (m *Metrics) Middleware() gin.HandlerFunc {
 		if route == "" {
 			route = "unmatched"
 		}
-		method := c.Request.Method
+		method := methodLabel(c.Request.Method)
 		m.requests.WithLabelValues(method, route, strconv.Itoa(c.Writer.Status())).Inc()
 		// The event stream is held open for hours; its duration would swamp
 		// every bucket and say nothing.
@@ -118,6 +165,14 @@ var (
 type estate struct {
 	store    store.Store
 	gateways func() map[string]bool
+	ttl      time.Duration
+
+	// mu serialises reads, so concurrent scrapes share one rather than each
+	// querying the store; read and readAt are the last result, failure
+	// included, so a database that is down is not asked again on every scrape.
+	mu     sync.Mutex
+	read   []prometheus.Metric
+	readAt time.Time
 }
 
 func (e *estate) Describe(ch chan<- *prometheus.Desc) {
@@ -132,6 +187,26 @@ func (e *estate) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(gatewayDesc, prometheus.GaugeValue, boolValue(connected), name)
 	}
 
+	for _, metric := range e.cached() {
+		ch <- metric
+	}
+}
+
+// cached returns the store's part of the scrape, reading it at most once per
+// ttl.
+func (e *estate) cached() []prometheus.Metric {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.read != nil && time.Since(e.readAt) < e.ttl {
+		return e.read
+	}
+	e.read = e.readStore()
+	e.readAt = time.Now()
+	return e.read
+}
+
+// readStore reads the estate, and ends with certpilot_store_up.
+func (e *estate) readStore() []prometheus.Metric {
 	ctx, cancel := context.WithTimeout(context.Background(), scrapeTimeout)
 	defer cancel()
 
@@ -180,13 +255,9 @@ func (e *estate) Collect(ch chan<- prometheus.Metric) {
 	}()
 	if err != nil {
 		slog.Warn("metrics: could not read the estate from the store", "error", err)
-		ch <- prometheus.MustNewConstMetric(storeUpDesc, prometheus.GaugeValue, 0)
-		return
+		return []prometheus.Metric{prometheus.MustNewConstMetric(storeUpDesc, prometheus.GaugeValue, 0)}
 	}
-	for _, metric := range out {
-		ch <- metric
-	}
-	ch <- prometheus.MustNewConstMetric(storeUpDesc, prometheus.GaugeValue, 1)
+	return append(out, prometheus.MustNewConstMetric(storeUpDesc, prometheus.GaugeValue, 1))
 }
 
 func boolValue(b bool) float64 {
