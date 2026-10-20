@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -78,13 +79,13 @@ func (h *ACMECredentialHandler) Create(c *gin.Context) {
 		return
 	}
 
-	key := make([]byte, 32)
-	kidBytes := make([]byte, 16)
-	if _, err := rand.Read(key); err != nil {
+	key, keyB64, err := eabToken(rand.Reader, 32)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate a key"})
 		return
 	}
-	if _, err := rand.Read(kidBytes); err != nil {
+	_, kid, err := eabToken(rand.Reader, 16)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not generate a key id"})
 		return
 	}
@@ -96,7 +97,7 @@ func (h *ACMECredentialHandler) Create(c *gin.Context) {
 
 	actor, _ := actorOf(c)
 	cred := &store.ACMEEABCredential{
-		KID:              base64.RawURLEncoding.EncodeToString(kidBytes),
+		KID:              kid,
 		Name:             req.Name,
 		TemplateID:       tpl.ID,
 		HMACKeySealed:    sealed,
@@ -115,7 +116,7 @@ func (h *ACMECredentialHandler) Create(c *gin.Context) {
 		"data": acmeCredentialView{cred, tpl.Slug, ""},
 		// base64url, which is what certbot's --eab-hmac-key and acme.sh's
 		// --eab-hmac-key take. Shown here and nowhere else.
-		"hmac_key":      base64.RawURLEncoding.EncodeToString(key),
+		"hmac_key":      keyB64,
 		"directory_url": h.directoryURL(c, tpl.Slug),
 		"message":       "Copy the hmac_key now. It is not kept in a form that can be shown again.",
 	})
@@ -218,4 +219,24 @@ func acmeValidation(c config.ACMEChallengeConfig) acmeserver.Validation {
 		}
 	}
 	return v
+}
+
+// eabToken draws n random bytes and returns them with their base64url form,
+// drawing again until that form does not begin with "-".
+//
+// A key or key id is pasted into a command line — the console shows a certbot
+// command filled in — and an argument that begins with "-" is read as the next
+// flag: certbot answered "argument --eab-hmac-key: expected one argument" for
+// about one credential in 64. Redrawing costs one bit of the key's 256, and
+// keeps every value a valid argument however it is quoted.
+func eabToken(src io.Reader, n int) ([]byte, string, error) {
+	for {
+		b := make([]byte, n)
+		if _, err := io.ReadFull(src, b); err != nil {
+			return nil, "", err
+		}
+		if encoded := base64.RawURLEncoding.EncodeToString(b); encoded[0] != '-' {
+			return b, encoded, nil
+		}
+	}
 }
