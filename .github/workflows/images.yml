@@ -57,7 +57,7 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       - name: Build ${{ matrix.name }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           # Still per image, though both remaining ones use the root: the core
           # replaces ../pkg, so a context rooted at its module cannot resolve
