@@ -226,9 +226,10 @@ worth configuring if you run several.
 
 ## Rotating the KEK
 
-Rotation changes which key seals new data, without downtime, because each
-envelope and each audit entry records the key that wrote it. It does not let
-you retire the old key: keep that for as long as you keep the audit log.
+Rotation has three steps: make a new key primary, move what the old key sealed
+onto it, and then decide whether the old key can go. None of them needs
+downtime, because each envelope and each audit entry records the key that wrote
+it.
 
 **1. Make the new key primary and keep the old one as retired.**
 
@@ -238,38 +239,76 @@ export CERTPILOT_KEK_RETIRED='<old key>'
 ```
 
 Restart the core. From this point new writes are sealed under the new key, and
-everything sealed under the old one still reads.
+everything sealed under the old one still reads. Nothing has moved yet: a
+record is re-sealed on its own only when it is written again, and a CA account
+never is.
 
-**2. Know what moves to the new key, and when.** A record is re-sealed only when
-it is written again:
+**2. Re-seal.** With the same two keys in the environment:
 
-| Record | Re-sealed under the new key |
-|:--|:--|
-| Private keys of certificates CertPilot holds | When the certificate renews, which generates a new key |
-| Deployment targets, notification channels, cloud connections | When updated with `config` sent again. An update without it keeps the stored ciphertext as it is |
-| CA accounts | Never. There is no update route, so the only way is to recreate the account |
-| Audit entries | Never. Each is signed once, by the key in use when it was written |
+```bash
+certpilot-core --reseal --config /etc/certpilot/config.yaml
+```
 
-Nothing reports which records still depend on the retired key, and there is no
-bulk re-seal command.
+```
+re-sealed 214 record(s) under key 9b55c932e68da55b
+  ca_account             3
+  certificate            198
+  deployment_target      9
+  notification_channel   2
+  cloud_connection       1
+  acme_credential        1
 
-**3. Keep the retired key.** Checking the audit chain needs every key that ever
-signed an entry. Drop one, and `/api/v1/audit/verify` reports the chain
-unverifiable from the first entry that key signed; anything still sealed under
-it becomes unreadable too. Measured on v0.2.1: after a rotation, dropping the
-retired key broke the chain at entry 1, private-key export answered 500, and
-issuing through a CA account created before the rotation failed to decrypt
-its configuration.
+key 9b55c932e68da55b (primary): 214 sealed record(s), signed audit entries 1841 to 1852 (12)
+key 42cf32fe0f5b0be6 (retired): 0 sealed record(s), signed audit entries 1 to 1840 (1840)
+```
+
+It re-encrypts every sealed value under the primary key: certificate private
+keys, and the credentials in CA accounts, deployment targets, notification
+channels, cloud connections and ACME credentials.
+
+- **It is safe beside a running core.** Each record is replaced in one write,
+  and only if it still holds what was read. A record the core rewrote in the
+  meantime is left as the core wrote it.
+- **It is safe to interrupt.** Run again, it does what is left; with nothing
+  left it changes nothing.
+- **It exits non-zero while anything is still sealed by another key**, so a
+  script that goes on to drop the retired key stops there.
+- **It writes one audit entry**, `secrets.resealed`, with the counts.
+
+With Docker Compose: `docker compose exec core /app/certpilot-core --reseal --config /app/config.yaml`.
+
+**3. Read the report before dropping anything.** The same report is available
+from the API, to an administrator:
+
+```bash
+curl -sS -b "$JAR" localhost:8080/api/v1/secrets/keys
+```
+
+For each key it gives the records it seals, by kind, and the audit entries it
+signed. A key the core does not hold reads `missing`. A retired key may be
+dropped from `CERTPILOT_KEK_RETIRED` when its `sealed_total` is zero, with one
+cost that remains:
+
+**Audit entries are signed once, by the key in use when they were written, and
+are never re-signed.** Without that key, `/api/v1/audit/verify` reports the
+chain as unverifiable from the first entry the key signed. The report names
+that range. So keep a retired key for as long as you need to check the entries
+it signed, and drop it when being unable to check them is the lesser risk, as
+it is after a compromise.
+
+`make live-rekey` runs the whole procedure against PostgreSQL on every pull
+request: rotate, re-seal beside a running core, drop the old key, then export a
+private key, issue, renew, alert and deploy with what the old key sealed.
 
 `CERTPILOT_KEK_RETIRED` accepts a comma-separated list, so more than one
 generation can be kept.
 
-> **After a suspected compromise of the old key,** rotation protects only what
-> is written from then on. Everything still sealed under the old key, and every
-> audit entry it signed, is as exposed as the key is: reissue the certificates
-> CertPilot holds keys for, and replace the credentials in CA accounts,
-> deployment targets, notification channels and cloud connections at their
-> source.
+> **After a suspected compromise of the old key,** re-sealing stops the
+> database depending on that key. It does not un-expose what the key already
+> protected: anybody who holds the old key and an old copy of the database can
+> still read it. Reissue the certificates CertPilot holds keys for, and replace
+> the credentials in CA accounts, deployment targets, notification channels and
+> cloud connections at their source.
 
 ---
 

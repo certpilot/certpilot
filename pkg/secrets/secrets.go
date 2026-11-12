@@ -274,6 +274,52 @@ func (kr *Keyring) NeedsRotation(envelope string) bool {
 	return id != kr.primaryID
 }
 
+// EnvelopeKeyID reports which key sealed an envelope, without opening it. It
+// answers false for a value that is not an envelope.
+//
+// This is what lets an operator see how much still depends on a retired key
+// before dropping it, including on a core that was never given that key.
+func EnvelopeKeyID(envelope string) (string, bool) {
+	if !IsEnvelope(envelope) {
+		return "", false
+	}
+	buf, _ := base64.StdEncoding.DecodeString(envelope)
+	return hex.EncodeToString(buf[magicSize : magicSize+keyIDSize]), true
+}
+
+// Reseal returns an envelope under the primary key for one sealed under a
+// retired key. An envelope the primary key already sealed comes back unchanged,
+// with changed false, so re-sealing twice rewrites nothing.
+//
+// The payload gets a fresh data key too. Re-wrapping the existing one would be
+// enough to stop needing the retired key, but anybody who held that key could
+// have unwrapped the old data key, and it would go on protecting the record.
+//
+// On any error the result is empty: there is nothing here a caller could store
+// in place of what it had.
+func (kr *Keyring) Reseal(envelope, context string) (resealed string, changed bool, err error) {
+	if kr == nil {
+		return "", false, ErrNoKey
+	}
+	id, ok := EnvelopeKeyID(envelope)
+	if !ok {
+		return "", false, ErrMalformed
+	}
+	plaintext, err := kr.Decrypt(envelope, context)
+	if err != nil {
+		return "", false, err
+	}
+	defer zero(plaintext)
+	if id == kr.PrimaryKeyID() {
+		return envelope, false, nil
+	}
+	resealed, err = kr.Encrypt(plaintext, context)
+	if err != nil {
+		return "", false, err
+	}
+	return resealed, true, nil
+}
+
 // IsEnvelope reports whether a stored value is already sealed. It lets callers
 // migrate rows written before encryption existed without a separate flag column.
 func IsEnvelope(value string) bool {

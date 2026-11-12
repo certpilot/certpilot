@@ -251,6 +251,42 @@ they are looking at a narrowed view.
 > "alice@example.com deleted a certificate" does not belong on a corridor
 > screen. Signed-in `viewer` accounts are not restricted.
 
+
+## Key encryption keys
+
+```
+GET /api/v1/secrets/keys   What still depends on each key   (admin)
+```
+
+What to read before dropping a retired key, and after
+[`certpilot-core --reseal`](operations.md#rotating-the-kek) to see that nothing
+is left on one.
+
+```json
+200 OK
+{ "primary_key_id": "9b55c932e68da55b",
+  "keys": [
+    { "key_id": "9b55c932e68da55b", "status": "primary",
+      "sealed": { "ca_account": 3, "certificate": 198, "deployment_target": 9 },
+      "sealed_total": 210,
+      "audit": { "key_id": "9b55c932e68da55b", "entries": 12, "first_seq": 1841, "last_seq": 1852 } },
+    { "key_id": "42cf32fe0f5b0be6", "status": "retired",
+      "sealed": { "notification_channel": 2 }, "sealed_total": 2,
+      "audit": { "key_id": "42cf32fe0f5b0be6", "entries": 1840, "first_seq": 1, "last_seq": 1840 } }
+  ] }
+```
+
+| Field | |
+|:---|:---|
+| `status` | `primary` seals new data. `retired` is held for reading only. `missing` is a key the database names and this core was not given: what it sealed cannot be read, and what it signed cannot be checked |
+| `sealed` | Records this key seals, by kind: `ca_account`, `certificate` (a private key), `deployment_target`, `notification_channel`, `cloud_connection`, `acme_credential` |
+| `audit` | The audit entries this key signed. They can be checked only while the core holds it. Absent when it signed none |
+| `not_sealed` | Stored values that are not envelopes, by kind: rows from before sealing existed. Absent when there are none |
+
+Nothing is opened to produce this; each envelope and each audit entry names
+its key. That is why it can describe a key the core does not hold. Admin only,
+because which keys exist and how much each protects is a map of what to steal.
+
 ## Certificates
 
 ```

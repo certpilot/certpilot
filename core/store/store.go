@@ -647,6 +647,19 @@ type Store interface {
 	// was sealed with.
 	LatestAuditKey(ctx context.Context) (seq int64, keyID string, err error)
 
+	// AuditKeyUsage reports how much of the audit chain each key signed,
+	// oldest first: the entries that can only be checked with that key.
+	AuditKeyUsage(ctx context.Context) ([]AuditKeyUsage, error)
+
+	// ── Sealed values ───────────────────────────────────────
+	// ListSealed pages through the records of one SealedKind that hold a
+	// sealed value, in id order, starting after an id ("" for the first page).
+	ListSealed(ctx context.Context, kind, after string, limit int) ([]SealedValue, error)
+	// SwapSealed replaces one record's sealed value only if it still holds
+	// old, and reports whether it did. That is what lets a re-seal run beside
+	// a core that is serving: a record written in between is left alone.
+	SwapSealed(ctx context.Context, kind, id, old, next string) (bool, error)
+
 	// ── Dashboard ───────────────────────────────────────────
 	GetDashboardStats(ctx context.Context) (*DashboardStats, error)
 

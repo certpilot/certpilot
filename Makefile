@@ -1,4 +1,4 @@
-.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation test-recovery compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct live-kubernetes live-eab live-acme live-winacme all build build-core test test-frontend test-coverage lint routes \
+.PHONY: test-store test-routes test-docs test-doc-links test-doc-versions test-doc-checks test-comparison-sources test-docs-live test-evaluation test-recovery compatibility agent-lifecycle agent-compatibility live-notifications live-oidc live-ct live-rekey live-kubernetes live-eab live-acme live-winacme all build build-core test test-frontend test-coverage lint routes \
         dev dev-certs generate-kek run-core run-gateway-selfsigned run-gateway-acme run-gateway-vault run-frontend \
         clean help
 
@@ -205,6 +205,13 @@ CT_DOMAIN ?= example.org
 
 live-ct:
 	CT_DOMAIN="$(CT_DOMAIN)" ./scripts/live-ct.sh
+
+## Can the key encryption key be rotated and the old one dropped? A core fills
+## a PostgreSQL database under one key, restarts with a second, re-seals beside
+## the running core, drops the first, and then exports, issues, renews, alerts
+## and deploys with what the first key sealed. Needs Docker.
+live-rekey:
+	./scripts/live-rekey.sh
 
 ## Does the Kubernetes inventory work against a real cluster? A kind cluster
 ## with cert-manager, a token scoped as documented, an Ingress, and more TLS
