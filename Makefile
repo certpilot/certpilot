@@ -200,8 +200,8 @@ live-oidc:
 ## to the inventory. Needs the internet, so CI runs it daily, not per pull request.
 ##
 ##   make live-ct
-##   make live-ct CT_DOMAIN=example.org
-CT_DOMAIN ?= badssl.com
+##   make live-ct CT_DOMAIN=example.com
+CT_DOMAIN ?= example.org
 
 live-ct:
 	CT_DOMAIN="$(CT_DOMAIN)" ./scripts/live-ct.sh

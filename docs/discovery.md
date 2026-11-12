@@ -118,8 +118,13 @@ The monitor polls every minute for monitors that are due, matches what it finds
 against the inventory by serial number, and raises `ct.unmanaged` for anything
 it does not recognise. Serials are compared in one normalised form, because the
 index pads them and changes their case and the inventory does neither. A
-certificate's precertificate is recorded and marked, not counted as a second
-certificate.
+certificate is counted once, whether the CA logged it once or as a
+precertificate and a final certificate; a precertificate is recorded and marked.
+
+The monitor sees what crt.sh has indexed, and crt.sh does not index every
+certificate. In November 2026 it had no record of the Let's Encrypt certificate
+`badssl.com` was serving. A clean check means crt.sh reported nothing unknown,
+not that nothing was issued.
 
 `make live-ct` runs this daily against crt.sh.
 
