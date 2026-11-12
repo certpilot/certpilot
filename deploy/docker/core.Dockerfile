@@ -6,7 +6,7 @@
 # carries `replace github.com/certpilot/certpilot/pkg => ../pkg`, which a
 # context rooted at core/ cannot resolve. .dockerignore keeps the context to
 # source — and keeps .env and .certpilot/ out of the builder layer.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 
 WORKDIR /src
 COPY . .
