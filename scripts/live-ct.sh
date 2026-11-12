@@ -13,7 +13,8 @@
 #   3. watch CT_DOMAIN in CT, check it now, and require that
 #        - the served certificate is found, once, and reads MANAGED, matched to
 #          the certificate that was imported
-#        - its precertificate is recorded and marked as one, not counted twice
+#        - it is counted once, whether it was logged once or as a precertificate
+#          and a final certificate, and a precertificate is marked as one
 #        - everything else crt.sh reports reads UNMANAGED
 #        - a second check adds nothing
 #
@@ -37,19 +38,29 @@ CORE_PORT=18085
 # shellcheck source=scripts/lib/live.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/live.sh"
 
-# badssl.com: run by the Chromium project for exactly this kind of testing, and
-# a handful of current certificates rather than thousands.
-CT_DOMAIN="${CT_DOMAIN:-badssl.com}"
+# example.org: reserved by IANA, a handful of current certificates rather than
+# thousands, and crt.sh holds the one it serves. That last part is not a given.
+# This used to be badssl.com, until crt.sh stopped indexing the certificate it
+# serves and the check went red for three weeks with nothing wrong in the core.
+CT_DOMAIN="${CT_DOMAIN:-example.org}"
 
 # ── What the domain is serving, read without the core ─────────────────────────
 
 served="$(python3 - "$CT_DOMAIN" <<'PY'
-import json, socket, ssl, sys
+import json, socket, ssl, sys, time
 host = sys.argv[1]
 ctx = ssl.create_default_context()
-with socket.create_connection((host, 443), timeout=15) as raw:
-    with ctx.wrap_socket(raw, server_hostname=host) as tls:
-        cert = tls.getpeercert()
+# Retried: a reset connection from a shared runner says nothing about the core.
+for attempt in range(4):
+    try:
+        with socket.create_connection((host, 443), timeout=15) as raw:
+            with ctx.wrap_socket(raw, server_hostname=host) as tls:
+                cert = tls.getpeercert()
+        break
+    except OSError as err:
+        if attempt == 3:
+            sys.exit("%s: %s" % (host, err))
+        time.sleep(5 * (attempt + 1))
 print(json.dumps({"serial": cert["serialNumber"], "not_after": cert["notAfter"]}))
 PY
 )" || die "could not read the certificate $CT_DOMAIN serves"
@@ -128,6 +139,12 @@ if not final:
     sys.exit("CT: the check succeeded and reported no certificates at all for a domain that is serving one")
 
 mine = [c for c in final if norm(c["serial_number"]) == served]
+if not [c for c in everything if norm(c["serial_number"]) == served]:
+    # Not a verdict on the core: the index does not hold the certificate, so
+    # there was nothing to match. Say so, rather than "appears 0 times".
+    sys.exit("CT: crt.sh's answer does not include the certificate the domain is serving (serial %s). "
+             "See https://crt.sh/?serial=%s — if crt.sh has no record of it, run this against a domain "
+             "it does index; if it has, the serial comparison is broken" % (sys.argv[3], sys.argv[3]))
 if len(mine) != 1:
     sys.exit("CT: the served certificate appears %d times among final certificates, expected once" % len(mine))
 if mine[0]["management_state"] != "MANAGED":
@@ -137,9 +154,12 @@ if mine[0].get("matched_certificate_id") != cert_id:
     sys.exit("CT: the served certificate is matched to %r, not to the imported certificate"
              % mine[0].get("matched_certificate_id"))
 
+# A certificate is logged as a precertificate, and its final form may be logged
+# too: CAs are no longer required to, and some have stopped. Either way it is
+# one certificate, so exactly one entry may read as final.
 pair = [c for c in everything if norm(c["serial_number"]) == served]
-if sorted(c["is_precertificate"] for c in pair) != [False, True]:
-    sys.exit("CT: expected the served certificate once as a precertificate and once as the final "
+if sorted(c["is_precertificate"] for c in pair) not in ([False], [False, True]):
+    sys.exit("CT: expected the served certificate as one entry, or as a precertificate and a final "
              "certificate, found %s" % [c["is_precertificate"] for c in pair])
 
 others = [c for c in final if norm(c["serial_number"]) != served]
@@ -151,12 +171,13 @@ serials = [norm(c["serial_number"]) for c in final]
 if len(serials) != len(set(serials)):
     sys.exit("CT: a certificate is counted more than once among final certificates")
 
-print("%d certificates, %d of them unmanaged" % (len(final), len(others)))
+print("%d certificates, %d of them unmanaged; the served one has %d log %s"
+      % (len(final), len(others), len(pair), "entry" if len(pair) == 1 else "entries"))
 PY
 )" || exit 1
 pass "crt.sh reports $counts for $CT_DOMAIN"
 pass "crt.sh's record of the served certificate reads MANAGED, matched to the imported one, across three spellings of its serial"
-pass "its precertificate is recorded and marked, and counted once, not twice"
+pass "it is counted once, however many log entries it has, and any precertificate is marked"
 
 total_before="$(field '["total"]' <"$WORK/final.json")"
 check
