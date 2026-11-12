@@ -38,7 +38,7 @@ literal — `grep foo *.go` fails when there are no `.go` files in the cwd.
 
 ## Layout
 
-Two Go modules in a workspace (`go.work`, Go 1.26.6) plus a Vue frontend. The
+Two Go modules in a workspace (`go.work`, Go 1.26.11) plus a Vue frontend. The
 host agent, the gateways and both SDKs are separate repositories, resolved as
 dependencies.
 
