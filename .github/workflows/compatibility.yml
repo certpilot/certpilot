@@ -111,10 +111,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if git diff --quiet -- docs/compatibility.md; then
-            echo "No change."
+          # Rows only, as on a pull request. The footer's date and commit differ
+          # on every run, so comparing the whole file opened a pull request
+          # every week for a table that had not changed.
+          changed="$(git diff -U0 -- docs/compatibility.md | grep -E '^[+-]\|' || true)"
+          if [ -z "$changed" ]; then
+            echo "No change in the measured rows."
             exit 0
           fi
+          printf '%s\n' "$changed"
 
           branch="compat/$(date -u +%Y-%m-%d)"
           git config user.name  "certpilot-ci"
@@ -138,7 +143,13 @@ jobs:
           A row that changed to a failure means the pair stopped working — the other side released something this core cannot use, or this core changed under something that has not. The logs for each are attached to the workflow run as \`compatibility-logs\`.
 
           Verified by the job that produced it; the table below is its output, not a summary of it." \
-            --base main
+            --base main || {
+              # Creating a pull request needs the repository setting "Allow
+              # GitHub Actions to create and approve pull requests". Without
+              # it the branch is still there, and the job says so.
+              echo "::error::The compatibility rows changed and are on branch $branch, but this workflow may not open a pull request. Open one from that branch."
+              exit 1
+            }
 
       # Last, so that the table and the logs are published even when a pair is
       # broken. A red job with no evidence in it is a job people learn to
