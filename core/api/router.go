@@ -107,6 +107,7 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 	caAccHandler := NewCAAccountHandler(deps.Store, deps.PluginMgr, deps.Keyring, deps.CAImporter)
 	dashHandler := NewDashboardHandler(deps.Store)
 	auditHandler := NewAuditHandler(deps.Store)
+	secretsHandler := NewSecretsHandler(deps.Store, deps.Keyring)
 	discHandler := NewDiscoveryHandler(deps.Store, deps.Scanner)
 	policyHandler := NewPolicyHandler(deps.Store)
 	templateHandler := NewTemplateHandler(deps.Store, deps.PolicyEngine, deps.PluginMgr, deps.Keyring)
@@ -240,6 +241,11 @@ func SetupRouter(engine *gin.Engine, deps RouterDeps) {
 		// this answer would implicate, and telling them whether the check
 		// passes is telling them whether a rewrite worked.
 		v1.GET("/audit/verify", middleware.RequireRole(middleware.RoleAdmin), auditHandler.Verify)
+
+		// ── Key encryption keys ──
+		// What still depends on each key. Admin only: which keys exist and how
+		// much each one protects is a map of what to steal.
+		v1.GET("/secrets/keys", middleware.RequireRole(middleware.RoleAdmin), secretsHandler.Keys)
 
 		// ── Certificates ──
 		v1.GET("/certificates", certHandler.List)

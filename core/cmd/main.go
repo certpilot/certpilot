@@ -51,6 +51,8 @@ func main() {
 		"apply outstanding database migrations and exit")
 	migrationsDir := flag.String("migrations", "migrations",
 		"directory holding the numbered .sql migration files")
+	reseal := flag.Bool("reseal", false,
+		"re-seal everything a retired key encryption key seals under the primary key, report what depends on each key, and exit")
 	flag.Parse()
 
 	// Before everything, including the setup subcommands: asking a binary what
@@ -146,12 +148,20 @@ func main() {
 	// Determine Database URL
 	dbConnStr := resolveDBURL(*dbURLFlag)
 
-	if dbConnStr == "" {
+	if dbConnStr == "" && !*reseal {
 		slog.Info("no database connection string provided; using in-memory store with sample seed data")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if *reseal {
+		if err := runReseal(ctx, cfg, dbConnStr); err != nil {
+			slog.Error("re-seal failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	srv, err := server.NewServer(ctx, cfg, dbConnStr)
 	if err != nil {

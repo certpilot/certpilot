@@ -36,6 +36,9 @@ What CI does exercise, on every pull request:
   released, and win-acme on a Windows runner:
   registration with a credential, issuance, renewal in place, renewalInfo,
   revocation, HTTP-01 and DNS-01, and the refusals — `make live-acme`
+- rotating the key encryption key on PostgreSQL: re-sealing beside a running
+  core, dropping the old key, and then using everything it sealed —
+  `make live-rekey`
 
 Daily, and on demand: Certificate Transparency against crt.sh, for a public
 site's real certificates — `make live-ct`. It is kept off pull requests because

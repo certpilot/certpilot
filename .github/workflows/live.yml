@@ -78,6 +78,19 @@ jobs:
       - name: A binding that opens an account, and three that must not
         run: make live-eab
 
+  rekey:
+    name: KEK rotation, against PostgreSQL
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+
+      - name: Rotate, re-seal beside a running core, drop the old key, use what it sealed
+        run: make live-rekey
+
   acme:
     name: ACME server, against certbot, lego and acme.sh
     runs-on: ubuntu-latest
