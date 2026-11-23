@@ -20,7 +20,7 @@ COPY frontend/ ./
 # rather than shipping a console that compiles to nothing.
 RUN npm run build
 
-FROM nginx:1.30-alpine
+FROM nginx:1.31-alpine
 
 # The base image is rebuilt less often than its packages are patched.
 RUN apk --no-cache upgrade
